@@ -4,6 +4,7 @@ import {
   Typography,
   Button,
   Paper,
+  Stack,
   TextField,
   Dialog,
   DialogTitle,
@@ -144,7 +145,7 @@ export default function SettingsPage() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={700} sx={{ mb: 3 }}>
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
         Settings
       </Typography>
 

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import {
-  Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
@@ -10,7 +9,10 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  IconButton,
 } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
+import { Dialog } from '@mui/material'
 import type { EntryFeeling, FeelingType } from '../types/database'
 
 const FEELING_TYPES: FeelingType[] = ['idea', 'market']
@@ -60,8 +62,11 @@ export default function FeelingFormDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{initial?.id ? 'Edit feeling' : 'Add feeling'}</DialogTitle>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1.5 }}>
+        {initial?.id ? 'Edit feeling' : 'Add feeling'}
+        <IconButton size="small" onClick={onClose} edge="end"><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           <TextField

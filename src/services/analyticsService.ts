@@ -93,7 +93,7 @@ export async function fetchOutcomesWithContext(): Promise<OutcomeAnalytics[]> {
     // - If we have price + shares: use realized_pnl / (shares * price * multiplier)
     // - If we only have realized_pnl (IBKR-seeded without cost basis): returnPercent stays null
     const returnPercent = hasFullData && outcome.realized_pnl != null
-      ? (outcome.realized_pnl / (action.shares! * decisionPrice * optionMultiplier)) * 100
+      ? Math.max(-100, (outcome.realized_pnl / (action.shares! * decisionPrice * optionMultiplier)) * 100)
       : null
 
     // finalPrice is a pseudo "exit equity price". For equities we derive it from
@@ -652,7 +652,7 @@ export async function calculatePredictionCalibration(): Promise<PredictionCalibr
       // Has a resolved outcome — evaluate directional accuracy
       const decisionPrice = action ? parsePrice(action.price) : 0
       const actualReturn = (outcome.realized_pnl !== null && action?.shares && decisionPrice > 0)
-        ? (outcome.realized_pnl / (action.shares * decisionPrice)) * 100
+        ? Math.max(-100, (outcome.realized_pnl / (action.shares * decisionPrice)) * 100)
         : null
 
       if (actualReturn !== null) {
@@ -775,7 +775,7 @@ function parsePrice(priceStr: string | null): number {
 }
 
 // ============================================================================
-// PER-SUB-SKILL BRIER (R7 / R16)
+// PER-SUB-SKILL BRIER
 // ============================================================================
 
 import type { SubSkill } from '../types/subSkills'

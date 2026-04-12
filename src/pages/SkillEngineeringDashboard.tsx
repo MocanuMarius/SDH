@@ -51,7 +51,7 @@ export default function SkillEngineeringDashboard() {
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
         Practice
       </Typography>
 

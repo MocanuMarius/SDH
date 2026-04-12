@@ -35,7 +35,7 @@ export function computeCagrFromChart(
   const years = (endMs - startMs) / (365.25 * 24 * 60 * 60 * 1000)
   if (years <= 0) return null
   const cagr = (endPrice / startPrice) ** (1 / years) - 1
-  return cagr
+  return Math.max(-1, cagr) // clamp to -100% annualized
 }
 
 /** Format CAGR as percentage string, e.g. "+12.5%" or "-3.2%" */

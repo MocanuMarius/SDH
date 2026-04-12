@@ -29,9 +29,9 @@ const CHART_LINE_WIDTH = 2
 const FONT_SIZE_AXIS = 13
 const FONT_SIZE_TOOLTIP = 12
 const DECISION_COLORS = DECISION_CHART_COLORS
-const CLUSTER_GAP = 10
-const SINGLE_DOT_R = 9
-const SINGLE_DOT_R_PASS = 10
+const CLUSTER_GAP = 20
+const SINGLE_DOT_R = 5
+const SINGLE_DOT_R_PASS = 6
 const GRID_OPACITY = 0.12
 
 const BENCHMARK_LINE_COLOR = '#94a3b8'
@@ -143,13 +143,13 @@ function enrichChartDataWithClusters(data: ChartPointWithDecisions[]): ChartPoin
 }
 
 const RANGES: { value: ChartRange; label: string }[] = [
-  { value: '1d', label: '1D' },
-  { value: '5d', label: '5D' },
   { value: '1m', label: '1M' },
   { value: '3m', label: '3M' },
   { value: '6m', label: '6M' },
   { value: 'ytd', label: 'YTD' },
   { value: '1y', label: '1Y' },
+  { value: '2y', label: '2Y' },
+  { value: '3y', label: '3Y' },
   { value: '5y', label: '5Y' },
   { value: 'max', label: 'MAX' },
 ]
@@ -320,13 +320,13 @@ const ChartDot = memo(function ChartDot(props: {
   payload?: ChartPointEnriched
 }) {
   const { cx, cy, payload: pt } = props
-  if (cx == null || cy == null) return null
-  if (pt?._clusterRep === false) return null
+  if (cx == null || cy == null) return <g />
+  if (pt?._clusterRep === false) return <g />
   const clusterDecisions = pt?._clusterDecisions
   const clusterCounts = pt?._clusterCounts
   const isCluster = pt?._clusterRep === true && clusterCounts && clusterDecisions?.length
   const decisions = isCluster ? clusterDecisions! : pt?.decisions
-  if (!decisions?.length) return null
+  if (!decisions?.length) return <g />
   const counts = isCluster ? clusterCounts! : getDecisionCountsByType(decisions)
   const first = decisions[0]
   const totalCount = counts.buy + counts.sell + counts.other
@@ -446,7 +446,7 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
   }, [chartData, compareDataList])
 
   const minDate = chartData[0]?.date ?? ''
-  const maxDate = chartData[chartData.length - 1]?.date ?? ''
+  const maxDate = chartData.length > 0 ? new Date().toISOString().slice(0, 10) : ''
   const actionsInRange = useMemo(
     () =>
       companyKey
@@ -768,7 +768,7 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           variant="scrollable"
           scrollButtons="auto"
           allowScrollButtonsMobile
-          sx={{ minHeight: 36, flex: 1, '& .MuiTab-root': { minHeight: 36, py: 0.5, px: 1 } }}
+          sx={{ minHeight: 30, flex: 1, '& .MuiTab-root': { minHeight: 30, py: 0.25, px: 0.75, fontSize: '0.75rem' } }}
         >
           {RANGES.map((r) => (
             <Tab key={r.value} value={r.value} label={r.label} />
@@ -910,7 +910,12 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
                 stroke={CHART_LINE_COLOR}
                 strokeWidth={CHART_LINE_WIDTH}
                 connectNulls
-                dot={ChartDot}
+                dot={(dotProps: Record<string, unknown>) => {
+                  const pt = dotProps.payload as ChartPointEnriched | undefined
+                  if (!pt?.decisions?.length && pt?._clusterRep !== true) return <circle key={dotProps.key as string} r={0} />
+                  return <ChartDot cx={dotProps.cx as number} cy={dotProps.cy as number} payload={pt} />
+                }}
+                activeDot={false}
               />
           </ComposedChart>
         </ResponsiveContainer>
@@ -1014,11 +1019,6 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           )
         })()}
       </Box>
-      {actionsInRange.length > 0 && (
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-          {actionsInRange.length} decision(s) on chart.
-        </Typography>
-      )}
     </Paper>
   )
 }

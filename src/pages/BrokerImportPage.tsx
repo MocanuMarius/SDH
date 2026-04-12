@@ -629,9 +629,6 @@ export default function BrokerImportPage() {
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 2, sm: 4 }, px: { xs: 1.5, sm: 3 } }}>
-      <Typography variant="h5" fontWeight={700} gutterBottom sx={{ px: { xs: 0.5, sm: 0 } }}>
-        Import Broker Statement
-      </Typography>
 
       {/* On mobile: show only the active step label + a small "Step X of N"
           counter (full 4-step horizontal row doesn't fit in 375px). On sm+:

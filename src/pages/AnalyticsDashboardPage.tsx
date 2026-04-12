@@ -20,14 +20,11 @@ import { useTheme } from '@mui/material/styles'
 import FilterListIcon from '@mui/icons-material/FilterList'
 import CloseIcon from '@mui/icons-material/Close'
 import Grid from '@mui/material/Grid2'
-import { generateAnalyticsSnapshot, fetchOutcomesWithContext, type AnalyticsFilter, type AnalyticsSnapshot } from '../services/analyticsService'
-import type { OutcomeAnalytics } from '../types/analytics'
+import { generateAnalyticsSnapshot, type AnalyticsFilter, type AnalyticsSnapshot } from '../services/analyticsService'
 import MetricCard from '../components/MetricCard'
-import ProcessOutcomeScatter from '../components/ProcessOutcomeScatter'
 
 export default function AnalyticsDashboardPage() {
   const [snapshot, setSnapshot] = useState<AnalyticsSnapshot | null>(null)
-  const [allOutcomes, setAllOutcomes] = useState<OutcomeAnalytics[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [startDate, setStartDate] = useState('')
@@ -51,12 +48,8 @@ export default function AnalyticsDashboardPage() {
       const filter: AnalyticsFilter = {}
       if (startDate) filter.startDate = startDate
       if (endDate) filter.endDate = endDate
-      const [data, outcomes] = await Promise.all([
-        generateAnalyticsSnapshot(filter),
-        fetchOutcomesWithContext(),
-      ])
+      const data = await generateAnalyticsSnapshot(filter)
       setSnapshot(data)
-      setAllOutcomes(outcomes)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load analytics')
     } finally {
@@ -96,10 +89,6 @@ export default function AnalyticsDashboardPage() {
 
   return (
     <Box>
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
-        Analytics
-      </Typography>
-
       {/* Filters — collapsed into a button on mobile */}
       <Paper sx={{ p: { xs: 1, sm: 2 }, mb: 2 }}>
         <Box display="flex" alignItems="center" justifyContent="space-between" gap={1}>
@@ -159,11 +148,6 @@ export default function AnalyticsDashboardPage() {
           </Box>
         </Collapse>
       </Paper>
-
-      {/* Process × Outcome 2×2 — deliberate practice R15/R19/R20 */}
-      <Box sx={{ mb: 3 }}>
-        <ProcessOutcomeScatter outcomes={allOutcomes} />
-      </Box>
 
       {/* Key Metrics Grid — count-based only, no dollar amounts */}
       <Grid container spacing={2} sx={{ mb: 3 }}>

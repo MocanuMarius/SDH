@@ -26,7 +26,6 @@ import {
   motion,
   useMotionValue,
   useTransform,
-  useSpring,
   animate,
   type PanInfo,
 } from 'motion/react'
@@ -50,8 +49,8 @@ interface SwipeableCardProps {
   sx?: Record<string, unknown>
 }
 
-const VELOCITY_THRESHOLD = 300
-const SPRING_CONFIG = { stiffness: 400, damping: 35 }
+const VELOCITY_THRESHOLD = 200
+const SNAP_SPRING = { stiffness: 500, damping: 40, mass: 0.8 }
 
 export default function SwipeableCard({
   children,
@@ -64,7 +63,6 @@ export default function SwipeableCard({
 
   const totalActionsWidth = actions.length * actionWidth
   const x = useMotionValue(0)
-  const springX = useSpring(x, SPRING_CONFIG)
 
   // Actions row opacity: fade in as the card slides
   const actionsOpacity = useTransform(x, [-totalActionsWidth, -20, 0], [1, 0.5, 0])
@@ -73,26 +71,23 @@ export default function SwipeableCard({
     const offset = info.offset.x
     const velocity = info.velocity.x
 
-    // Swipe left fast enough → open
-    if (velocity < -VELOCITY_THRESHOLD || offset < -totalActionsWidth / 2) {
-      animate(x, -totalActionsWidth, { type: 'spring', ...SPRING_CONFIG })
+    if (velocity < -VELOCITY_THRESHOLD || offset < -totalActionsWidth / 3) {
+      animate(x, -totalActionsWidth, { type: 'spring', ...SNAP_SPRING })
       setIsOpen(true)
     } else {
-      // Snap back closed
-      animate(x, 0, { type: 'spring', ...SPRING_CONFIG })
+      animate(x, 0, { type: 'spring', ...SNAP_SPRING })
       setIsOpen(false)
     }
   }
 
   const close = () => {
-    animate(x, 0, { type: 'spring', ...SPRING_CONFIG })
+    animate(x, 0, { type: 'spring', ...SNAP_SPRING })
     setIsOpen(false)
   }
 
   const handleActionClick = (action: SwipeAction) => {
     close()
-    // Small delay so the close animation starts before the action fires
-    setTimeout(action.onClick, 150)
+    setTimeout(action.onClick, 80)
   }
 
   return (
@@ -154,15 +149,14 @@ export default function SwipeableCard({
         drag="x"
         dragDirectionLock
         dragConstraints={{ left: -totalActionsWidth, right: 0 }}
-        dragElastic={0.1}
+        dragElastic={0.15}
         onDragEnd={handleDragEnd}
         onTap={() => { if (isOpen) close() }}
         style={{
-          x: springX,
+          x,
           position: 'relative',
           zIndex: 1,
           backgroundColor: 'var(--mui-palette-background-paper, #fff)',
-          cursor: 'grab',
         }}
       >
         {children}

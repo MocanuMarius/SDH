@@ -70,16 +70,10 @@ export default function CalibrationDashboardPage() {
   if (!snapshot) return null
 
   const biasColor = snapshot.biasSummary === 'overconfident' ? 'error' : snapshot.biasSummary === 'underconfident' ? 'warning' : 'success'
-  const biasEmoji = snapshot.biasSummary === 'overconfident' ? '⚠️' : snapshot.biasSummary === 'underconfident' ? '📊' : '✅'
+  const biasEmoji = snapshot.biasSummary === 'overconfident' ? '' : snapshot.biasSummary === 'underconfident' ? '' : ''
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={600} sx={{ mb: 0.5 }}>
-        Calibration · how right are you, really?
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Are your directional calls (bullish/bearish) correct when you say 70% vs 90%? Grouped by how bold your prediction was.
-      </Typography>
 
       {/* Overall Accuracy Card */}
       <Card sx={{ mb: 3, bgcolor: 'action.hover' }}>
@@ -111,7 +105,7 @@ export default function CalibrationDashboardPage() {
                 fontSize: '2rem',
               }}
             >
-              {snapshot.totalPredictions === 0 ? '📊' : snapshot.overallAccuracy > 60 ? '✅' : snapshot.overallAccuracy > 50 ? '⚠️' : '❌'}
+              {snapshot.totalPredictions === 0 ? '' : snapshot.overallAccuracy > 60 ? '' : snapshot.overallAccuracy > 50 ? '' : ''}
             </Box>
           </Box>
         </CardContent>
@@ -185,7 +179,7 @@ export default function CalibrationDashboardPage() {
               snapshot.bins.map((bin) => {
                 const isEmpty = bin.totalPredictions === 0
                 const isNeutral = Math.abs(bin.calibration) < 5
-                const emoji = isEmpty ? '—' : isNeutral ? '✅' : bin.calibration > 5 ? '📊 Skill' : '⚠️ Anti'
+                const emoji = isEmpty ? '—' : isNeutral ? '' : bin.calibration > 5 ? 'Skill' : 'Anti'
 
                 return (
                   <TableRow key={bin.confidenceRange} sx={{ opacity: isEmpty ? 0.4 : 1 }}>
@@ -232,7 +226,7 @@ export default function CalibrationDashboardPage() {
       {snapshot.recommendations.length > 0 && (
         <>
           <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 2 }}>
-            💡 Recommendations
+            Recommendations
           </Typography>
           <Paper sx={{ p: 2, mb: 3 }}>
             {snapshot.recommendations.map((rec, idx) => (
@@ -257,13 +251,13 @@ export default function CalibrationDashboardPage() {
           <strong>Calibration vs 50%:</strong> How much better (or worse) than a coin flip are you?
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          • <strong>Positive (📊):</strong> You have skill — your predictions beat random chance in this range
+          • <strong>Positive:</strong> You have skill — your predictions beat random chance in this range
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          • <strong>Negative (⚠️):</strong> Your predictions in this range are contrarian — the opposite direction has been more accurate
+          • <strong>Negative:</strong> Your predictions in this range are contrarian — the opposite direction has been more accurate
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          • <strong>Near zero (✅):</strong> No edge detected yet — keep adding predictions to build a larger sample
+          • <strong>Near zero:</strong> No edge detected yet — keep adding predictions to build a larger sample
         </Typography>
       </Paper>
     </Box>

@@ -14,6 +14,7 @@ import {
   TextField,
   Link,
   Skeleton,
+  Chip,
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams, GridColumnVisibilityModel } from '@mui/x-data-grid'
@@ -23,7 +24,7 @@ import { fetchChartData } from '../services/chartApiService'
 import MarkdownRender from '../components/MarkdownRender'
 import TickerLinks from '../components/TickerLinks'
 import RelativeDate from '../components/RelativeDate'
-import { getEntryDisplayTitle } from '../utils/entryTitle'
+import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
 import { getTickerDisplayLabel, isOptionSymbol } from '../utils/tickerCompany'
 import { normalizeTicker } from '../utils/tickerNormalization'
 import OptionTypeChip from '../components/OptionTypeChip'
@@ -47,6 +48,7 @@ export default function ActionsPage() {
   const [currentPriceByTicker, setCurrentPriceByTicker] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hideAutomated, setHideAutomated] = useState(true)
   const [searchParams, setSearchParams] = useSearchParams()
   const typeFilter = searchParams.get('type') || ''
   const tickerFilter = searchParams.get('ticker') || ''
@@ -131,10 +133,15 @@ export default function ActionsPage() {
     [actions]
   )
 
-  // Enrich rows with computed fields for DataGrid
+  // Filter automated entries, then enrich with computed fields
+  const filteredActions = useMemo(
+    () => hideAutomated ? actions.filter((a) => !a.entry || !isAutomatedEntry(a.entry as { tags: string[]; author: string })) : actions,
+    [actions, hideAutomated]
+  )
+
   const rows = useMemo(
     () =>
-      actions.map((row) => {
+      filteredActions.map((row) => {
         const outcome = outcomesByActionId[row.id]
         const tickerKey = normalizeTicker(row.ticker || '')
         const currentPrice = tickerKey ? currentPriceByTicker[tickerKey] ?? null : null
@@ -146,7 +153,7 @@ export default function ActionsPage() {
             : null
         return { ...row, currentPrice, decisionPrice, oppReturnPct, outcome }
       }),
-    [actions, outcomesByActionId, currentPriceByTicker]
+    [filteredActions, outcomesByActionId, currentPriceByTicker]
   )
 
   type Row = (typeof rows)[number]
@@ -277,12 +284,12 @@ export default function ActionsPage() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
         Actions
       </Typography>
 
-      <Box display="flex" gap={2} flexWrap="wrap" sx={{ mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 140 }} variant="outlined">
+      <Box display="flex" gap={1} flexWrap="wrap" sx={{ mb: 1.5 }}>
+        <FormControl size="small" sx={{ minWidth: 120 }} variant="outlined">
           <InputLabel>Type</InputLabel>
           <Select value={typeFilter} label="Type" onChange={(e) => setTypeFilter(e.target.value)}>
             <MenuItem value="">All</MenuItem>
@@ -298,8 +305,15 @@ export default function ActionsPage() {
           options={allTickers}
           value={tickerFilter || null}
           onChange={(_, v) => setTickerFilter(v ?? '')}
-          renderInput={(params) => <TextField {...params} label="Ticker" sx={{ minWidth: 160 }} />}
+          renderInput={(params) => <TextField {...params} label="Ticker" sx={{ minWidth: 130 }} />}
           clearOnEscape
+        />
+        <Chip
+          size="small"
+          label={hideAutomated ? 'Auto off' : 'Auto on'}
+          onClick={() => setHideAutomated((v) => !v)}
+          variant={hideAutomated ? 'filled' : 'outlined'}
+          sx={{ height: 32, fontSize: '0.7rem' }}
         />
       </Box>
 

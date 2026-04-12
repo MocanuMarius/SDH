@@ -1,7 +1,7 @@
 /**
  * Session focus card — top of the Journal page.
  *
- * Implements framework R3 ("name the sub-skill before each session") + R16
+ * Implements deliberate-practice focus ("name the sub-skill before each session")
  * ("systematically attack your weakest sub-skill"). Two modes:
  *
  * 1. **No focus set** — shows the weakest sub-skill surfaced by the
@@ -162,7 +162,7 @@ export default function SessionFocusCard() {
               {weakest ? (
                 <Alert severity="warning" icon={false} sx={{ mt: 0.5, py: 0.25, fontSize: '0.8rem' }}>
                   <strong>Your weakest sub-skill right now:</strong> {SUB_SKILL_LABELS[weakest]} —{' '}
-                  {SUB_SKILL_DESCRIPTIONS[weakest]}. The framework says to target it this quarter (R16).
+                  {SUB_SKILL_DESCRIPTIONS[weakest]}. The framework says to target it this quarter.
                 </Alert>
               ) : (
                 !loading && (

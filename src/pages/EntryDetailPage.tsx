@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom'
-import { Box, Button, Chip, Typography, Alert, Card, CardHeader, CardContent, Stack, Skeleton, Paper, Breadcrumbs, Link, useMediaQuery, IconButton, Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material'
+import { Box, Button, Chip, Typography, Alert, Card, CardHeader, CardContent, Stack, Skeleton, Paper, Breadcrumbs, Link, useMediaQuery, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Tabs, Tab, TextField, InputAdornment } from '@mui/material'
+import SendIcon from '@mui/icons-material/Send'
 import { useTheme } from '@mui/material/styles'
 import EditIcon from '@mui/icons-material/Edit'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
-import { getEntry, deleteEntry } from '../services/entriesService'
+import { getEntry, deleteEntry, updateEntry } from '../services/entriesService'
 import { createReminder } from '../services/remindersService'
 import { fetchChartData } from '../services/chartApiService'
 import { useAuth } from '../contexts/AuthContext'
@@ -35,14 +36,13 @@ import {
   deleteFeeling,
 } from '../services/feelingsService'
 import ActionFormDialog from '../components/ActionFormDialog'
-import PreCommitmentWizard from '../components/PreCommitmentWizard'
 import OutcomeFormDialog from '../components/OutcomeFormDialog'
 import PredictionFormDialog from '../components/PredictionFormDialog'
 import FeelingFormDialog from '../components/FeelingFormDialog'
 import ConfirmDialog from '../components/ConfirmDialog'
 import DecisionCard from '../components/DecisionCard'
-import PredictionCard from '../components/PredictionCard'
 import ValuationWidget from '../components/ValuationWidget'
+import PredictionCard from '../components/PredictionCard'
 import FeelingCard from '../components/FeelingCard'
 import MarkdownRender from '../components/MarkdownRender'
 import AddReminderDialog from '../components/AddReminderDialog'
@@ -68,8 +68,10 @@ export default function EntryDetailPage() {
   const [outcomesByActionId, setOutcomesByActionId] = useState<Record<string, Outcome>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [detailTab, setDetailTab] = useState(0)
+  const [quickNote, setQuickNote] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
   const [actionDialogOpen, setActionDialogOpen] = useState(false)
-  const [preCommitmentOpen, setPreCommitmentOpen] = useState(false)
   const [overflowAnchor, setOverflowAnchor] = useState<null | HTMLElement>(null)
   const [outcomeDialogActionId, setOutcomeDialogActionId] = useState<string | null>(null)
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false)
@@ -117,31 +119,49 @@ export default function EntryDetailPage() {
     return () => { cancelled = true }
   }, [openActionTickers.join(',')])
 
-  const loadActions = useCallback(() => {
+  const handleAddNote = async () => {
+    if (!quickNote.trim() || !id || !entry) return
+    setSavingNote(true)
+    try {
+      const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
+      const noteBlock = `\n\n> **Note ${date}:** ${quickNote.trim()}`
+      const updated = (entry.body_markdown || '') + noteBlock
+      await updateEntry(id, { body_markdown: updated })
+      setEntry((prev) => prev ? { ...prev, body_markdown: updated } : prev)
+      setQuickNote('')
+      showSuccess('Note added')
+    } catch {
+      // silently fail
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
+  const loadActions = useCallback(async () => {
     if (!id) return
-    listActionsByEntryId(id).then((list) => {
+    try {
+      const list = await listActionsByEntryId(id)
       setActions(list)
       if (list.length > 0) {
-        getOutcomesForActionIds(list.map((a) => a.id)).then((outcomes) => {
-          const map: Record<string, Outcome> = {}
-          outcomes.forEach((o) => { map[o.action_id] = o })
-          setOutcomesByActionId(map)
-        }).catch(() => {})
+        const outcomes = await getOutcomesForActionIds(list.map((a) => a.id))
+        const map: Record<string, Outcome> = {}
+        outcomes.forEach((o) => { map[o.action_id] = o })
+        setOutcomesByActionId(map)
       } else {
         setOutcomesByActionId({})
       }
-    }).catch(() => {})
+    } catch { /* ignore */ }
   }, [id])
 
 
-  const loadPredictions = useCallback(() => {
+  const loadPredictions = useCallback(async () => {
     if (!id) return
-    listPredictionsByEntryId(id).then(setPredictions).catch(() => {})
+    try { setPredictions(await listPredictionsByEntryId(id)) } catch { /* ignore */ }
   }, [id])
 
-  const loadFeelings = useCallback(() => {
+  const loadFeelings = useCallback(async () => {
     if (!id) return
-    listFeelingsByEntryId(id).then(setFeelings).catch(() => {})
+    try { setFeelings(await listFeelingsByEntryId(id)) } catch { /* ignore */ }
   }, [id])
 
   useEffect(() => {
@@ -311,6 +331,27 @@ export default function EntryDetailPage() {
         <MarkdownRender source={entry.body_markdown} dense />
       </Box>
 
+      {/* Quick note — append a timestamped note without editing the full entry */}
+      <TextField
+        size="small"
+        placeholder="Add a note..."
+        value={quickNote}
+        onChange={(e) => setQuickNote(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddNote() } }}
+        disabled={savingNote}
+        fullWidth
+        sx={{ mt: 1.5, '& .MuiInputBase-root': { fontSize: '0.85rem' } }}
+        InputProps={{
+          endAdornment: quickNote.trim() ? (
+            <InputAdornment position="end">
+              <IconButton size="small" onClick={handleAddNote} disabled={savingNote} edge="end">
+                <SendIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </InputAdornment>
+          ) : null,
+        }}
+      />
+
       {/* Market Context Display */}
       {(entry.market_feeling || entry.market_context || entry.trading_plan || entry.decision_horizon) && (
         <Paper variant="outlined" sx={{ mt: 3, p: 2 }}>
@@ -355,150 +396,153 @@ export default function EntryDetailPage() {
         </Paper>
       )}
 
-      <Card variant="outlined" sx={{ mt: 3 }}>
-        <CardHeader
-          title="Actions"
-          titleTypographyProps={{ variant: 'h6' }}
-          action={
-            <Box display="flex" gap={1}>
-              <Button
-                size="small"
-                variant="contained"
-                color="success"
-                onClick={() => setPreCommitmentOpen(true)}
-              >
-                Structured buy
-              </Button>
-              <Button size="small" startIcon={<AddIcon />} onClick={() => setActionDialogOpen(true)}>
-                Add action
-              </Button>
-            </Box>
-          }
-          sx={{ pb: 0 }}
-        />
-        <CardContent>
-          {actions.length === 0 ? (
-            <Typography color="text.secondary" variant="body2">
-              No actions yet. Add a Buy/Sell (or other) decision.
-            </Typography>
-          ) : (
-            <Stack spacing={1}>
-              {actions.map((a) => (
-                <DecisionCard
-                  key={a.id}
-                  action={a}
-                  outcome={outcomesByActionId[a.id]}
-                  currentPrice={a.ticker ? currentPriceByTicker[(a.ticker || '').trim().toUpperCase()] : undefined}
-                  onAddOrEditOutcome={() => setOutcomeDialogActionId(a.id)}
-                  onDelete={() => setConfirmDelete({ type: 'action', id: a.id })}
-                />
-              ))}
-            </Stack>
-          )}
-        </CardContent>
-      </Card>
+      {/* Quick actions row — visible on mobile */}
+      {isMobile && (
+        <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<NotificationsActiveIcon sx={{ fontSize: 16 }} />}
+            onClick={() => setReminderDialogOpen(true)}
+            sx={{ textTransform: 'none', fontSize: '0.75rem', flex: 1 }}
+          >
+            Remind me
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<EditIcon sx={{ fontSize: 16 }} />}
+            component={RouterLink}
+            to={`/entries/${entry.id}/edit`}
+            sx={{ textTransform: 'none', fontSize: '0.75rem', flex: 1 }}
+          >
+            Edit
+          </Button>
+        </Box>
+      )}
 
-      {/* John Huber 3 Engines of Value sketchpad — independent valuation toy */}
-      {id && <ValuationWidget entryId={id} />}
-
-      <Card variant="outlined" sx={{ mt: 2 }}>
-        <CardHeader
-          title="Predictions"
-          titleTypographyProps={{ variant: 'h6' }}
-          action={
-            <Button size="small" startIcon={<AddIcon />} onClick={() => { setEditingPrediction(null); setPredictionDialogOpen(true); }}>
-              Add prediction
+      {/* ── Tabbed sections: Actions / Predictions / Feelings ── */}
+      <Box sx={{ mt: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
+          <Tabs
+            value={detailTab}
+            onChange={(_, v) => setDetailTab(v)}
+            variant="scrollable"
+            scrollButtons={false}
+            sx={{ flex: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.5, textTransform: 'none', fontSize: '0.8rem', minWidth: 0, px: 1.5 } }}
+          >
+            <Tab label={`Actions (${actions.length})`} />
+            <Tab label={`Predictions (${predictions.length})`} />
+            <Tab label={`Feelings (${feelings.length})`} />
+            <Tab label="Valuation" />
+          </Tabs>
+          {detailTab === 0 && (
+            <Button size="small" startIcon={<AddIcon />} onClick={() => setActionDialogOpen(true)} sx={{ flexShrink: 0, mr: 0.5, fontSize: '0.75rem' }}>
+              Add
             </Button>
-          }
-          sx={{ pb: 0 }}
-        />
-        <CardContent>
-          {predictions.length === 0 ? (
-            <Typography color="text.secondary" variant="body2">
-              Optional. Add a time-bound prediction (probability, end date, type).
-            </Typography>
-          ) : (
-            <Stack spacing={1}>
-              {predictions.map((p) => (
-                <PredictionCard
-                  key={p.id}
-                  prediction={p}
-                  onEdit={() => { setEditingPrediction(p); setPredictionDialogOpen(true); }}
-                  onDelete={() => setConfirmDelete({ type: 'prediction', id: p.id })}
-                />
-              ))}
-            </Stack>
           )}
-        </CardContent>
-      </Card>
-
-      <Card variant="outlined" sx={{ mt: 2 }}>
-        <CardHeader
-          title="Feelings"
-          titleTypographyProps={{ variant: 'h6' }}
-          action={
-            <Button size="small" startIcon={<AddIcon />} onClick={() => { setEditingFeeling(null); setFeelingDialogOpen(true); }}>
-              Add feeling
+          {detailTab === 1 && (
+            <Button size="small" startIcon={<AddIcon />} onClick={() => { setEditingPrediction(null); setPredictionDialogOpen(true); }} sx={{ flexShrink: 0, mr: 0.5, fontSize: '0.75rem' }}>
+              Add
             </Button>
-          }
-          sx={{ pb: 0 }}
-        />
-        <CardContent>
-          {feelings.length === 0 ? (
-            <Typography color="text.secondary" variant="body2">
-              Optional. Log how you feel about this idea or the market (score 1–10, type).
-            </Typography>
-          ) : (
-            <Stack spacing={1}>
-              {feelings.map((f) => (
-                <FeelingCard
-                  key={f.id}
-                  feeling={f}
-                  onEdit={() => { setEditingFeeling(f); setFeelingDialogOpen(true); }}
-                  onDelete={() => setConfirmDelete({ type: 'feeling', id: f.id })}
-                />
-              ))}
-            </Stack>
           )}
-        </CardContent>
-      </Card>
+          {detailTab === 2 && (
+            <Button size="small" startIcon={<AddIcon />} onClick={() => { setEditingFeeling(null); setFeelingDialogOpen(true); }} sx={{ flexShrink: 0, mr: 0.5, fontSize: '0.75rem' }}>
+              Add
+            </Button>
+          )}
+        </Box>
 
-      <PreCommitmentWizard
-        open={preCommitmentOpen}
-        onClose={() => setPreCommitmentOpen(false)}
-        onSubmit={async ({ action, prediction }) => {
-          if (!id) return
-          await createAction({
-            entry_id: id,
-            type: action.type,
-            ticker: action.ticker,
-            company_name: action.company_name || null,
-            action_date: action.action_date,
-            price: action.price,
-            currency: action.currency || null,
-            shares: action.shares,
-            reason: action.reason,
-            notes: action.notes,
-            kill_criteria: action.kill_criteria || null,
-            pre_mortem_text: action.pre_mortem_text || null,
-            raw_snippet: null,
-          })
-          // Fire-and-forget: dialog closes immediately, list refreshes in background.
-          if (prediction) {
-            createPrediction({
-              entry_id: id,
-              probability: prediction.probability,
-              end_date: prediction.end_date,
-              type: 'idea',
-              label: prediction.label,
-              ticker: action.ticker || null,
-              sub_skill: prediction.sub_skill,
-            }).then(() => loadPredictions())
-          }
-          loadActions()
-          showSuccess('Decision committed')
-        }}
-      />
+        {/* Tab 0: Actions */}
+        {detailTab === 0 && (
+          <Box sx={{ pt: 1.5 }}>
+            {actions.length === 0 ? (
+              <Typography color="text.secondary" variant="body2">
+                No actions yet. Add a Buy/Sell decision.
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                {actions.map((a) => (
+                  <DecisionCard
+                    key={a.id}
+                    action={a}
+                    outcome={outcomesByActionId[a.id]}
+                    currentPrice={a.ticker ? currentPriceByTicker[(a.ticker || '').trim().toUpperCase()] : undefined}
+                    onAddOrEditOutcome={() => setOutcomeDialogActionId(a.id)}
+                    onDelete={() => setConfirmDelete({ type: 'action', id: a.id })}
+                  />
+                ))}
+              </Stack>
+            )}
+            {/* Link to per-ticker aggregate view */}
+            {actions[0]?.ticker && (
+              <Box sx={{ mt: 1.5 }}>
+                <Button
+                  component={RouterLink}
+                  to={`/ideas/${encodeURIComponent(actions[0].ticker.trim().toUpperCase())}`}
+                  variant="outlined"
+                  size="small"
+                  sx={{ textTransform: 'none' }}
+                >
+                  View all ${actions[0].ticker.trim().toUpperCase()} decisions
+                </Button>
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {/* Tab 1: Predictions */}
+        {detailTab === 1 && (
+          <Box sx={{ pt: 1.5 }}>
+            {predictions.length === 0 ? (
+              <Typography color="text.secondary" variant="body2">
+                Add a time-bound prediction (probability, end date).
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                {predictions.map((p) => (
+                  <PredictionCard
+                    key={p.id}
+                    prediction={p}
+                    onEdit={() => { setEditingPrediction(p); setPredictionDialogOpen(true); }}
+                    onDelete={() => setConfirmDelete({ type: 'prediction', id: p.id })}
+                  />
+                ))}
+              </Stack>
+            )}
+          </Box>
+        )}
+
+        {/* Tab 2: Feelings */}
+        {detailTab === 2 && (
+          <Box sx={{ pt: 1.5 }}>
+            {feelings.length === 0 ? (
+              <Typography color="text.secondary" variant="body2">
+                Log how you feel about this idea or market (score 1-10).
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                {feelings.map((f) => (
+                  <FeelingCard
+                    key={f.id}
+                    feeling={f}
+                    onEdit={() => { setEditingFeeling(f); setFeelingDialogOpen(true); }}
+                    onDelete={() => setConfirmDelete({ type: 'feeling', id: f.id })}
+                  />
+                ))}
+              </Stack>
+            )}
+          </Box>
+        )}
+
+        {/* Tab 3: Valuation (Huber 3 Engines) */}
+        {detailTab === 3 && id && (
+          <Box sx={{ pt: 1.5 }}>
+            <ValuationWidget entryId={id} defaultExpanded />
+          </Box>
+        )}
+      </Box>
+
       <ActionFormDialog
         open={actionDialogOpen}
         onClose={() => setActionDialogOpen(false)}
@@ -519,15 +563,14 @@ export default function EntryDetailPage() {
             pre_mortem_text: data.pre_mortem_text || null,
             raw_snippet: null,
           })
-          // Fire-and-forget so the dialog closes immediately.
           if (data.type === 'pass' && user?.id && data.ticker?.trim()) {
-            ensurePassedForUser(user.id, data.ticker.trim(), {
+            await ensurePassedForUser(user.id, data.ticker.trim(), {
               passed_date: data.action_date,
               reason: data.reason ?? '',
               notes: data.notes ?? '',
             })
           }
-          loadActions()
+          await loadActions()
           showSuccess(`${data.type.charAt(0).toUpperCase() + data.type.slice(1)} action added`)
         }}
       />
@@ -570,15 +613,15 @@ export default function EntryDetailPage() {
               navigate('/')
             } else if (confirmDelete.type === 'action') {
               await deleteAction(confirmDelete.id)
-              loadActions()
+              await loadActions()
               showSuccess('Action deleted')
             } else if (confirmDelete.type === 'prediction') {
               await deletePrediction(confirmDelete.id)
-              loadPredictions()
+              await loadPredictions()
               showSuccess('Prediction deleted')
             } else if (confirmDelete.type === 'feeling') {
               await deleteFeeling(confirmDelete.id)
-              loadFeelings()
+              await loadFeelings()
               showSuccess('Feeling deleted')
             }
             setConfirmDelete(null)
@@ -629,7 +672,7 @@ export default function EntryDetailPage() {
               sub_skill: data.sub_skill,
             })
           }
-          loadPredictions()
+          await loadPredictions()
           showSuccess(editingPrediction ? 'Prediction updated' : 'Prediction added')
         }}
       />
@@ -655,7 +698,7 @@ export default function EntryDetailPage() {
               ticker: data.ticker || null,
             })
           }
-          loadFeelings()
+          await loadFeelings()
           showSuccess(editingFeeling ? 'Feeling updated' : 'Feeling logged')
         }}
       />
@@ -702,13 +745,11 @@ export default function EntryDetailPage() {
                 what_i_remember_now: data.what_i_remember_now?.trim() || null,
               })
             }
-            // Close dialog immediately — refresh outcomes in background.
             const wasEdit = !!outcomesByActionId[outcomeDialogActionId]
+            const refreshed = await getOutcomesForActionIds(actions.map((a) => a.id))
+            setOutcomesByActionId(Object.fromEntries(refreshed.map((o) => [o.action_id, o])))
             setOutcomeDialogActionId(null)
             showSuccess(wasEdit ? 'Outcome updated' : 'Outcome recorded')
-            getOutcomesForActionIds(actions.map((a) => a.id)).then((refreshed) => {
-              setOutcomesByActionId(Object.fromEntries(refreshed.map((o) => [o.action_id, o])))
-            })
           }}
         />
       )}

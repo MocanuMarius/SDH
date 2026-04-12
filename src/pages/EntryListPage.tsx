@@ -99,7 +99,7 @@ function effectiveInvestmentScore(entry: { investment_score?: number | null; inv
 /**
  * Walk an entry's linked actions and pull the first outcome with a non-null
  * process_score. Used to render a tiny process-outcome pill on entry cards
- * (§11.5 / R21). Returns both scores so the pill can be coloured accordingly.
+ * Returns both scores so the pill can be coloured accordingly.
  *
  * Supabase's embedded-select is tricky: because `outcomes.action_id` has a
  * UNIQUE constraint, the relationship is detected as 1:1 and `outcomes` comes
@@ -145,7 +145,7 @@ function bodyPreview(body: string): string {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 /**
- * Two-dot pill showing the entry's process × outcome scores (R21).
+ * Two-dot pill showing the entry's process × outcome scores.
  *
  *   green dot = process ≥ 3 (decision was sound)
  *   red dot   = process < 3 (decision was poor)
@@ -603,10 +603,11 @@ export default function EntryListPage() {
           top: { xs: 56, sm: 64 },
           zIndex: 10,
           bgcolor: 'background.default',
-          pb: 0.5,
-          pt: 0.5,
+          pb: 1,
+          pt: 0.25,
           mx: { xs: -1.5, sm: -2 },
           px: { xs: 1.5, sm: 2 },
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
         }}
       >
         {/* Row 1: title + toggle + new */}
@@ -653,6 +654,7 @@ export default function EntryListPage() {
             display: 'flex',
             alignItems: 'center',
             gap: 0.5,
+            flexWrap: 'wrap',
             '& .MuiToggleButton-root': { height: 26, fontSize: '0.65rem', px: 0.5, textTransform: 'none' },
           }}
         >
@@ -691,7 +693,20 @@ export default function EntryListPage() {
                 <TextField
                   {...params}
                   placeholder={tagFilter.length === 0 ? 'Tags' : ''}
-                  sx={{ '& .MuiInputBase-root': { height: 26, minHeight: 26, fontSize: '0.7rem', py: 0 } }}
+                  sx={{
+                    '& .MuiInputBase-root': {
+                      height: 26,
+                      minHeight: 26,
+                      fontSize: '0.7rem',
+                      py: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                    },
+                    '& .MuiInputBase-input': {
+                      py: '2px !important',
+                      lineHeight: 1,
+                    },
+                  }}
                 />
               )}
               sx={{ minWidth: 80, flex: 1 }}

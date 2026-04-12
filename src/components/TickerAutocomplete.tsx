@@ -57,8 +57,12 @@ export default function TickerAutocomplete({
       .finally(() => setLoading(false))
   }, [])
 
-  const handleInputChange = (_: unknown, newInputValue: string) => {
+  const handleInputChange = (_: unknown, newInputValue: string, reason: string) => {
     setInputValue(newInputValue)
+    // Sync freeform text to parent on every keystroke so the ticker is never empty on submit
+    if (reason === 'input') {
+      onChange(newInputValue.trim().toUpperCase())
+    }
     if (debounceId) clearTimeout(debounceId)
     const id = setTimeout(() => fetchOptions(newInputValue), DEBOUNCE_MS)
     setDebounceId(id)

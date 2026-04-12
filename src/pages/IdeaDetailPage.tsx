@@ -18,15 +18,17 @@ import {
   Button,
   Link,
   Breadcrumbs,
+  Stack,
 } from '@mui/material'
 import TimelineIcon from '@mui/icons-material/Timeline'
+import ValuationWidget from '../components/ValuationWidget'
 import { listActions, type ActionWithEntry } from '../services/actionsService'
 import { fetchChartData } from '../services/chartApiService'
 import TickerLinks from '../components/TickerLinks'
 import TickerTimelineChart from '../components/TickerTimelineChart'
 import RelativeDate from '../components/RelativeDate'
 import DecisionChip from '../components/DecisionChip'
-import { getEntryDisplayTitle } from '../utils/entryTitle'
+import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import OptionTypeChip from '../components/OptionTypeChip'
 import {
@@ -83,7 +85,10 @@ export default function IdeaDetailPage() {
     listActions({ limit: 500 })
       .then((data) => {
         if (!cancelled && companyKey) {
-          const forCompany = (data || []).filter((a) => normalizeTickerToCompany(a.ticker) === companyKey)
+          const forCompany = (data || []).filter((a) =>
+            normalizeTickerToCompany(a.ticker) === companyKey &&
+            !(a.entry && isAutomatedEntry(a.entry as { tags: string[]; author: string }))
+          )
           setActions(forCompany)
         } else if (!cancelled) {
           setActions([])
@@ -204,20 +209,17 @@ export default function IdeaDetailPage() {
           ${decodedTicker}
         </Typography>
       </Breadcrumbs>
-      <Box display="flex" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 2 }}>
+      <Box display="flex" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 1.5 }}>
         <Chip
           label={`$${decodedTicker}`}
-          sx={{ fontWeight: 700, fontSize: '1.1rem' }}
+          sx={{ fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.1rem' } }}
         />
         {company && (
-          <Typography variant="body1" color="text.secondary">
-            — {company}
+          <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: { xs: '60vw', sm: 'none' } }}>
+            {company}
           </Typography>
         )}
       </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        History and decisions for this idea. Chart below shows price and your decisions; use the full timeline page for zoom and filters.
-      </Typography>
       {passActions.length > 0 && (
         <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
           <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
@@ -262,7 +264,9 @@ export default function IdeaDetailPage() {
         </Paper>
       )}
 
-      <TickerTimelineChart symbol={decodedTicker} actions={actions} companyName={company} height={chartHeight} defaultRange={autoRange} />
+      <Box sx={{ width: '100%', overflow: 'hidden', mb: 1 }}>
+        <TickerTimelineChart symbol={decodedTicker} actions={actions} companyName={company} height={chartHeight} defaultRange={autoRange} />
+      </Box>
 
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Link
@@ -280,6 +284,9 @@ export default function IdeaDetailPage() {
         <Alert severity="warning" sx={{ mb: 2 }}>{chartError}</Alert>
       )}
 
+      {/* Valuation widget — per-ticker, uses the first entry's data */}
+      {actions[0]?.entry?.id && <ValuationWidget entryId={actions[0].entry.id} hideWhenEmpty />}
+
       <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
         Decisions ({actions.length})
       </Typography>
@@ -289,6 +296,51 @@ export default function IdeaDetailPage() {
             No decisions for this ticker yet.
           </Typography>
         </Paper>
+      ) : isMobile ? (
+        /* Mobile: card layout instead of table */
+        <Stack spacing={1}>
+          {actions.map((a) => {
+            const delta = actionDeltas[a.id]
+            const hasDelta = delta != null && Number.isFinite(delta)
+            return (
+              <Paper key={a.id} variant="outlined" sx={{ p: 1.5 }}>
+                <Box display="flex" alignItems="center" gap={0.75} flexWrap="wrap" sx={{ mb: 0.5 }}>
+                  <DecisionChip type={a.type} size="small" />
+                  <OptionTypeChip ticker={a.ticker} />
+                  {a.price && (
+                    <Typography variant="body2" fontWeight={600}>
+                      {a.price}{a.currency ? ` ${a.currency}` : ''}
+                    </Typography>
+                  )}
+                  {chartLoading ? null : hasDelta ? (
+                    <Typography variant="body2" sx={{ color: delta >= 0 ? 'success.main' : 'error.main', fontWeight: 600 }}>
+                      {formatDeltaPercent(delta)}
+                    </Typography>
+                  ) : null}
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                    <RelativeDate date={a.action_date} variant="caption" sx={{ color: 'inherit' }} />
+                  </Typography>
+                </Box>
+                {a.reason && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    <TickerLinks text={a.reason} variant="chip" dense />
+                  </Typography>
+                )}
+                {a.entry && (
+                  <Button
+                    component={RouterLink}
+                    to={`/entries/${a.entry.id}`}
+                    size="small"
+                    sx={{ textTransform: 'none', px: 0, fontSize: '0.75rem' }}
+                  >
+                    {getEntryDisplayTitle(a.entry, [a]).slice(0, 50)}
+                    {getEntryDisplayTitle(a.entry, [a]).length > 50 ? '…' : ''}
+                  </Button>
+                )}
+              </Paper>
+            )
+          })}
+        </Stack>
       ) : (
         <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 520 }}>
@@ -298,7 +350,7 @@ export default function IdeaDetailPage() {
                 <TableCell>Ticker</TableCell>
                 <TableCell>Date</TableCell>
                 <TableCell>Price</TableCell>
-                <TableCell>Δ (to next / now)</TableCell>
+                <TableCell>Δ</TableCell>
                 <TableCell>Reason</TableCell>
                 <TableCell>Entry</TableCell>
               </TableRow>

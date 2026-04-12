@@ -172,11 +172,8 @@ export default function IdeasPage() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
         Ideas
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Tickers from your decisions. Click a row to open the idea page, or click the ticker chip for a quick chart.
       </Typography>
 
       <TextField

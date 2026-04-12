@@ -221,7 +221,7 @@ export default function OutcomeFormDialog({
           <Divider sx={{ my: 0.5 }} />
 
           {/* Driver & scores */}
-          <Typography component="span" sx={SECTION_HEADING_SX} display="block">Process × Outcome (R19)</Typography>
+          <Typography component="span" sx={SECTION_HEADING_SX} display="block">Process × Outcome</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ mt: -0.5, mb: 0.5, display: 'block' }}>
             Score process and outcome independently. A good-process / bad-outcome trade is a win. A bad-process / good-outcome trade is a warning.
           </Typography>
@@ -362,11 +362,11 @@ export default function OutcomeFormDialog({
             </AccordionDetails>
           </Accordion>
 
-          {/* 500-word closing memo — accordion (R14) */}
+          {/* Closing memo accordion */}
           <Accordion disableGutters defaultExpanded={closing_memo.trim().length > 0} sx={{ boxShadow: 'none', '&:before': { display: 'none' }, border: 1, borderColor: 'divider' }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}>
               <Typography variant="body2" fontWeight={600}>
-                500-word closing memo (R14) {closing_memo.trim() && `• ${wordCount(closing_memo)} words`}
+                Closing memo {closing_memo.trim() && `• ${wordCount(closing_memo)} words`}
               </Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ pt: 0 }}>

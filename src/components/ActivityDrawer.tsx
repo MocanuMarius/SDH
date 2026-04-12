@@ -5,8 +5,6 @@ import {
   Box,
   Typography,
   IconButton,
-  List,
-  ListItem,
   Button,
   Chip,
   Menu,
@@ -19,7 +17,6 @@ import {
   Skeleton,
   Stack,
   Tooltip,
-  LinearProgress,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import ScheduleIcon from '@mui/icons-material/Schedule'
@@ -30,16 +27,15 @@ import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import { listReminders, completeReminder, createReminder } from '../services/remindersService'
 import { listActions } from '../services/actionsService'
-import { getEntry, listEntries } from '../services/entriesService'
-import { listOutcomes } from '../services/outcomesService'
-import { isAutomatedEntry } from '../utils/entryTitle'
+import { getEntry } from '../services/entriesService'
+import { getOutcomesForActionIds, createOutcome } from '../services/outcomesService'
+import OutcomeFormDialog from './OutcomeFormDialog'
 import {
   listPassedDueForReview,
   recordPassReview,
   snoozePassReview,
 } from '../services/passedService'
 import { fetchChartData, type ChartData, type ChartRange } from '../services/chartApiService'
-import { detectLosingPeriod, type LosingPeriodResult } from '../utils/losingPeriodDetector'
 import SwipeableCard from './SwipeableCard'
 import CheckIcon from '@mui/icons-material/Check'
 import ThumbDownIcon from '@mui/icons-material/ThumbDown'
@@ -47,9 +43,10 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import SnoozeIcon from '@mui/icons-material/Snooze'
 import type { Passed, PassReviewStatus } from '../types/database'
 import { useAuth } from '../contexts/AuthContext'
-import { useTickerChart } from '../contexts/TickerChartContext'
 import TickerLinks from './TickerLinks'
 import { getTickerDisplayLabel, normalizeTickerToCompany } from '../utils/tickerCompany'
+import { parseOptionSymbol } from '../utils/optionSymbol'
+import { getDismissedStaleIdeas, dismissStaleIdea } from '../utils/dismissedStaleIdeas'
 import OptionTypeChip from './OptionTypeChip'
 import RelativeDate from './RelativeDate'
 import type { Reminder, ActionType } from '../types/database'
@@ -123,11 +120,10 @@ type IdeaAlert = {
   company?: string
   lastDate: string
   lastType: ActionType
+  lastActionId: string
   entryPrice: number | null
   currentPrice: number | null
-  /** Signed return since last action, direction-adjusted by action type. Positive = decision aging well. */
   signedAlpha: number | null
-  /** 0–100, decays linearly over one year. */
   freshnessPct: number
 }
 
@@ -171,12 +167,21 @@ function computeFreshness(days: number): number {
   return Math.max(0, Math.min(100, 100 - (days / 365) * 100))
 }
 
-function computeSignedAlpha(entry: number | null, current: number | null, type: ActionType): number | null {
+/** Raw price change since last action — always shows what the stock actually did. */
+function computeSignedAlpha(entry: number | null, current: number | null, _type: ActionType): number | null {
   if (entry == null || current == null || entry <= 0) return null
-  const pct = ((current - entry) / entry) * 100
-  if (BULLISH_TYPES.includes(type)) return pct
-  if (BEARISH_TYPES.includes(type)) return -pct
-  return pct // neutral: hold/research/watchlist — displayed without sign coloring
+  const raw = ((current - entry) / entry) * 100
+  return Math.max(-100, Math.min(999, raw))
+}
+
+/** Annualized CAGR from a total return % and holding period in days. */
+function computeCagr(totalReturnPct: number, days: number): number | null {
+  if (days <= 0) return null
+  const years = days / 365.25
+  const multiple = 1 + totalReturnPct / 100
+  if (multiple <= 0) return -100
+  // For < 1 year, annualize on run-rate: (multiple ^ (1/years) - 1) * 100
+  return (Math.pow(multiple, 1 / years) - 1) * 100
 }
 
 function isNeutralType(type: ActionType): boolean {
@@ -210,26 +215,22 @@ function urgencyBorderColor(date: string): string {
 
 function SectionHeader({ title, count }: { title: string; count: number }) {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-      <Typography variant="subtitle2" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.06em' }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
+      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.06em' }}>
         {title}
       </Typography>
-      <Chip label={count} size="small" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700 }} />
+      <Chip label={count} size="small" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, '& .MuiChip-label': { px: 0.5 } }} />
     </Box>
   )
 }
 
 export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDrawerProps) {
   const { user } = useAuth()
-  const { openChart } = useTickerChart()
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [entryTitles, setEntryTitles] = useState<Record<string, string>>({})
   const [ideaAlerts, setIdeaAlerts] = useState<IdeaAlert[]>([])
   const [passReviews, setPassReviews] = useState<PassedWithPrice[]>([])
   const [_passReviewBusyId, setPassReviewBusyId] = useState<string | null>(null)
-  const [losingPeriod, setLosingPeriod] = useState<LosingPeriodResult | null>(null)
-  const [losingPeriodDismissed, setLosingPeriodDismissed] = useState(false)
-  const [losingEntryId, setLosingEntryId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [dismissingId, setDismissingId] = useState<string | null>(null)
   const [laterAnchor, setLaterAnchor] = useState<{ el: HTMLElement; reminder: Reminder } | null>(null)
@@ -238,41 +239,11 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
   const [dismissConfirmId, setDismissConfirmId] = useState<string | null>(null)
   const [snoozingId, setSnoozingId] = useState<string | null>(null)
   const [snoozingIdeaTicker, setSnoozingIdeaTicker] = useState<string | null>(null)
+  const [resolveTarget, setResolveTarget] = useState<{ actionId: string; ticker: string } | null>(null)
 
   const load = () => {
     if (!open) return
     setLoading(true)
-    // Detect losing-period from MANUAL outcomes only (exclude automated IBKR).
-    Promise.all([listOutcomes(), listActions({ limit: 2000 }), listEntries()])
-      .then(([outcomes, actions, entries]) => {
-        // Build set of automated entry IDs to filter out
-        const autoIds = new Set(entries.filter(isAutomatedEntry).map((e) => e.id))
-        const actionEntryMap = new Map(actions.map((a) => [a.id, a.entry_id]))
-        const manualOutcomes = outcomes.filter((o) => {
-          const entryId = actionEntryMap.get(o.action_id)
-          return entryId != null && !autoIds.has(entryId)
-        })
-        const lp = detectLosingPeriod(
-          manualOutcomes.map((o) => ({
-            action_id: o.action_id,
-            outcome_date: o.outcome_date,
-            realized_pnl: o.realized_pnl,
-          })),
-        )
-        setLosingPeriod(lp)
-        // Find the entry_id associated with the most recent loser so the nudge
-        // can deep-link directly to its post-mortem fields.
-        if (lp.mostRecentLoserActionId) {
-          const a = actions.find((x) => x.id === lp.mostRecentLoserActionId)
-          setLosingEntryId(a?.entry_id ?? null)
-        } else {
-          setLosingEntryId(null)
-        }
-      })
-      .catch(() => {
-        setLosingPeriod(null)
-        setLosingEntryId(null)
-      })
 
     // Fire passed-review fetch in parallel with the main data load. It's a
     // small table (<100 rows typically), doesn't block the main skeleton.
@@ -301,7 +272,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
       .catch(() => setPassReviews([]))
 
     Promise.all([listReminders(true), listActions({ limit: 2000 })])
-      .then(([remList, actions]) => {
+      .then(async ([remList, actions]) => {
         // Sort reminders: overdue first, then by due date ascending
         const sorted = [...remList].sort((a, b) => a.reminder_date.localeCompare(b.reminder_date))
         setReminders(sorted)
@@ -321,7 +292,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
           })
           .catch(() => {})
 
-        const byTicker: Record<string, { lastDate: string; company?: string; lastType: ActionType; entryPrice: number | null }> = {}
+        const byTicker: Record<string, { lastDate: string; company?: string; lastType: ActionType; entryPrice: number | null; actionId: string }> = {}
         actions.forEach((a) => {
           if (!a.ticker) return
           const existing = byTicker[a.ticker]
@@ -331,22 +302,35 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
               company: a.company_name ?? undefined,
               lastType: a.type as ActionType,
               entryPrice: parseActionPrice(a.price),
+              actionId: a.id,
             }
           }
         })
+
+        // Filter out tickers whose last action already has an outcome (resolved)
+        const dismissedTickers = getDismissedStaleIdeas()
+        const staleActionIds = Object.values(byTicker)
+          .filter(({ lastDate }) => daysAgo(lastDate) >= IDEA_REFRESH_DAYS)
+          .map(({ actionId }) => actionId)
+        const existingOutcomes = staleActionIds.length > 0
+          ? await getOutcomesForActionIds(staleActionIds)
+          : []
+        const resolvedActionIds = new Set(existingOutcomes.map((o) => o.action_id))
+
         const baseAlerts: IdeaAlert[] = Object.entries(byTicker)
-          .map(([ticker, { lastDate, company, lastType, entryPrice }]) => ({
+          .map(([ticker, { lastDate, company, lastType, entryPrice, actionId }]) => ({
             ticker,
             days: daysAgo(lastDate),
             company,
             lastDate,
             lastType,
+            lastActionId: actionId,
             entryPrice,
             currentPrice: null,
             signedAlpha: null,
             freshnessPct: computeFreshness(daysAgo(lastDate)),
           }))
-          .filter((a) => a.days >= IDEA_REFRESH_DAYS)
+          .filter((a) => a.days >= IDEA_REFRESH_DAYS && parseOptionSymbol(a.ticker) == null && !dismissedTickers.has(a.ticker) && !resolvedActionIds.has(a.lastActionId))
           .sort((a, b) => b.days - a.days)
           .slice(0, 20)
         setIdeaAlerts(baseAlerts)
@@ -382,18 +366,13 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
             setIdeaAlerts((prev) => {
               const enriched = prev.map((a) => {
                 const { currentPrice, entryFromChart } = priceMap[a.ticker] ?? { currentPrice: null, entryFromChart: null }
-                const effectiveEntry = a.entryPrice ?? entryFromChart
+                // Always prefer chart prices for alpha — action price may be in a different currency
+                const effectiveEntry = entryFromChart ?? a.entryPrice
                 const signedAlpha = computeSignedAlpha(effectiveEntry, currentPrice, a.lastType)
                 return { ...a, entryPrice: effectiveEntry, currentPrice, signedAlpha }
               })
-              // Re-sort: worst alpha first (big missed rallies on passes, big losses on buys)
-              // Entries with no alpha fall to the bottom.
-              return [...enriched].sort((x, y) => {
-                if (x.signedAlpha == null && y.signedAlpha == null) return y.days - x.days
-                if (x.signedAlpha == null) return 1
-                if (y.signedAlpha == null) return -1
-                return x.signedAlpha - y.signedAlpha
-              })
+              // Sort oldest first so the longest-neglected ideas surface at the top
+              return [...enriched].sort((x, y) => y.days - x.days)
             })
           })
         }
@@ -403,7 +382,6 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
   }
 
   useEffect(() => {
-    if (open) setLosingPeriodDismissed(false)
     load()
     // Intentionally only re-load on drawer open/close.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -465,14 +443,11 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
   }
 
   const visibleIdeaAlerts = ideaAlerts.filter((a) => !snoozedIdeaTickers.has(a.ticker))
-  const showLosingNudge =
-    !losingPeriodDismissed && losingPeriod != null && losingPeriod.inLosingPeriod
   const isEmpty =
     !loading &&
     reminders.length === 0 &&
     visibleIdeaAlerts.length === 0 &&
-    passReviews.length === 0 &&
-    !showLosingNudge
+    passReviews.length === 0
 
   const handlePassReview = async (id: string, status: PassReviewStatus) => {
     setPassReviewBusyId(id)
@@ -543,60 +518,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
           </Box>
         ) : (
           <>
-            {/* ── Losing-period nudge (R6/R12 — review when it hurts most) ── */}
-            {showLosingNudge && losingPeriod && (
-              <Box
-                sx={{
-                  mb: 2,
-                  p: 1.5,
-                  border: '1px solid',
-                  borderColor: '#d97706',
-                  borderLeft: '4px solid #d97706',
-                  borderRadius: 1,
-                  bgcolor: 'rgba(217,119,6,0.06)',
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
-                  <FlagOutlinedIcon fontSize="small" sx={{ color: '#d97706', mt: '2px', flexShrink: 0 }} />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={700} sx={{ color: '#78350f' }}>
-                      You're in a losing streak
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                      {losingPeriod.trigger === 'consecutive'
-                        ? `${losingPeriod.consecutiveLosses} consecutive losing closes.`
-                        : `Cumulative P&L down ${losingPeriod.drawdownPct.toFixed(1)}% from peak.`}
-                      {' '}This is when deep review has the most value — not when you avoid it.
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
-                      {losingEntryId && (
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="warning"
-                          component={RouterLink}
-                          to={`/entries/${losingEntryId}`}
-                          sx={{ textTransform: 'none', fontSize: '0.75rem' }}
-                          onClick={onClose}
-                        >
-                          Review most recent loser
-                        </Button>
-                      )}
-                      <Button
-                        size="small"
-                        variant="text"
-                        onClick={() => setLosingPeriodDismissed(true)}
-                        sx={{ textTransform: 'none', fontSize: '0.75rem', color: 'text.secondary' }}
-                      >
-                        Dismiss for now
-                      </Button>
-                    </Box>
-                  </Box>
-                </Box>
-              </Box>
-            )}
-
-            {/* ── Pass reviews due (R10 — score your rejection) ── */}
+            {/* ── Pass reviews due — score your rejection ── */}
             {passReviews.length > 0 && (
               <Box sx={{ mb: 2 }}>
                 <SectionHeader title="Score your rejection" count={passReviews.length} />
@@ -623,13 +545,18 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
                               size="small"
                               label={getTickerDisplayLabel(p.ticker)}
                               clickable
-                              onClick={() => openChart(p.ticker)}
+                              onClick={() => { onClose(); window.location.href = `/ideas/${encodeURIComponent(p.ticker)}` }}
                               sx={{ fontWeight: 700 }}
                             />
                             <Typography variant="caption" color={retColor} fontWeight={700}>
                               {retLabel}
                             </Typography>
                           </Box>
+                          {p.reason && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic' }}>
+                              {p.reason}
+                            </Typography>
+                          )}
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                             Passed <RelativeDate date={p.passed_date} sx={{ color: 'inherit' }} />
                             {p.entryPrice != null && ` · $${p.entryPrice.toFixed(2)}`}
@@ -647,28 +574,26 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
             {reminders.length > 0 && (
               <Box sx={{ mb: 2 }}>
                 <SectionHeader title="Reminders" count={reminders.length} />
-                <List dense disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Stack spacing={0.75}>
                   {reminders.map((r) => {
                     const overdue = isOverdue(r.reminder_date)
                     const dueToday = isDueToday(r.reminder_date)
                     const borderColor = urgencyBorderColor(r.reminder_date)
+                    const navTo = r.entry_id ? `/entries/${r.entry_id}` : r.ticker ? `/ideas/${encodeURIComponent(normalizeTickerToCompany(r.ticker) || r.ticker)}` : null
                     return (
-                      <ListItem
+                      <SwipeableCard
                         key={r.id}
-                        disablePadding
+                        actions={[
+                          ...(navTo ? [{ icon: <ArticleOutlinedIcon sx={{ fontSize: 18 }} />, label: 'Open', onClick: () => { onClose(); window.location.href = navTo }, color: '#2563eb' }] : []),
+                          { icon: <ScheduleIcon sx={{ fontSize: 18 }} />, label: '+7d', onClick: () => handleLaterSelect(r, 7), color: '#475569' },
+                          { icon: <CloseIcon sx={{ fontSize: 18 }} />, label: 'Dismiss', onClick: () => setDismissConfirmId(r.id), color: '#dc2626' },
+                        ]}
                         sx={{
-                          flexDirection: 'column',
-                          alignItems: 'stretch',
-                          border: '1px solid',
-                          borderColor: borderColor || 'divider',
                           borderLeft: borderColor ? `3px solid ${borderColor}` : '3px solid transparent',
-                          borderRadius: 1,
-                          p: 1.25,
                           bgcolor: overdue ? 'rgba(220,38,38,0.04)' : dueToday ? 'rgba(217,119,6,0.04)' : 'background.paper',
                         }}
                       >
-                        {/* Title row */}
-                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, mb: 0.5 }}>
+                        <Box sx={{ px: 1.25, py: 1, display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
                           <Box sx={{ color: overdue ? 'error.main' : dueToday ? 'warning.main' : 'text.secondary', mt: '2px', flexShrink: 0 }}>
                             {typeIcon(r.type)}
                           </Box>
@@ -679,69 +604,25 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
                               </Typography>
                             ) : r.ticker ? (
                               <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                                <Chip size="small" label={getTickerDisplayLabel(r.ticker)} clickable onClick={() => openChart(r.ticker!)} sx={{ fontWeight: 700 }} />
-                                <OptionTypeChip ticker={r.ticker} />
+                                <Chip size="small" label={getTickerDisplayLabel(r.ticker)} sx={{ fontWeight: 700, height: 20 }} />
                               </Box>
                             ) : (
                               <Typography variant="body2" fontWeight={600}>Reminder</Typography>
                             )}
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
-                              <Typography
-                                variant="caption"
-                                color={overdue ? 'error.main' : dueToday ? 'warning.main' : 'text.secondary'}
-                                fontWeight={overdue || dueToday ? 600 : 400}
-                              >
-                                <RelativeDate date={r.reminder_date} />
-                              </Typography>
-                              <Typography variant="caption" color="text.disabled">·</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {typeLabel(r.type)}
-                              </Typography>
-                            </Box>
-                            {r.note && (
-                              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.25, lineHeight: 1.4 }}>
-                                <TickerLinks text={r.note} variant="link" dense />
-                              </Typography>
-                            )}
+                            <Typography
+                              variant="caption"
+                              color={overdue ? 'error.main' : dueToday ? 'warning.main' : 'text.secondary'}
+                              fontWeight={overdue || dueToday ? 600 : 400}
+                              display="block"
+                            >
+                              <RelativeDate date={r.reminder_date} /> · {typeLabel(r.type)}
+                            </Typography>
                           </Box>
                         </Box>
-
-                        {/* Actions row */}
-                        <Box sx={{ display: 'flex', gap: 0.5, mt: 0.25 }}>
-                          {r.entry_id ? (
-                            <Button size="small" variant="outlined" component={RouterLink} to={`/entries/${r.entry_id}`} onClick={onClose} sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
-                              Open entry
-                            </Button>
-                          ) : r.ticker ? (
-                            <Button size="small" variant="outlined" component={RouterLink} to={`/ideas/${encodeURIComponent(normalizeTickerToCompany(r.ticker) || r.ticker)}`} onClick={onClose} sx={{ textTransform: 'none', fontSize: '0.75rem' }}>
-                              View idea
-                            </Button>
-                          ) : null}
-                          <Button
-                            size="small"
-                            startIcon={<ScheduleIcon sx={{ fontSize: '0.85rem !important' }} />}
-                            disabled={snoozingId === r.id}
-                            onClick={(e) => setLaterAnchor({ el: e.currentTarget, reminder: r })}
-                            sx={{ textTransform: 'none', fontSize: '0.75rem', color: 'text.secondary' }}
-                          >
-                            {snoozingId === r.id ? '…' : 'Snooze'}
-                          </Button>
-                          <Tooltip title="Dismiss forever">
-                            <IconButton
-                              size="small"
-                              aria-label="Dismiss forever"
-                              disabled={dismissingId === r.id}
-                              onClick={() => setDismissConfirmId(r.id)}
-                              sx={{ color: 'text.disabled', ml: 'auto' }}
-                            >
-                              <CloseIcon sx={{ fontSize: '0.9rem' }} />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </ListItem>
+                      </SwipeableCard>
                     )
                   })}
-                </List>
+                </Stack>
               </Box>
             )}
 
@@ -753,146 +634,61 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
             {visibleIdeaAlerts.length > 0 && (
               <Box>
                 <SectionHeader title={`Stale ideas · ${IDEA_REFRESH_DAYS}+ days`} count={visibleIdeaAlerts.length} />
-                <List dense disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Stack spacing={0.75}>
                   {visibleIdeaAlerts.map((a) => {
-                    const neutral = isNeutralType(a.lastType)
-                    const alphaPositive = a.signedAlpha != null && a.signedAlpha > 0
-                    const alphaColor = neutral
-                      ? '#64748b'
-                      : alphaPositive
-                        ? '#16a34a'
-                        : '#dc2626'
-                    // Magnitude bar: saturate at ±100% so typical moves have
-                    // visual gradient. Extreme moves (>100%) still max out.
-                    const alphaMagnitude =
-                      a.signedAlpha != null ? Math.min(100, Math.abs(a.signedAlpha)) : 0
-                    const freshColor = freshnessColor(a.freshnessPct)
+                    const realReturn = a.signedAlpha
+                    const cagr = realReturn != null ? computeCagr(realReturn, a.days) : null
+                    const realColor = realReturn == null ? '#64748b' : realReturn >= 0 ? '#16a34a' : '#dc2626'
+                    const cagrColor = cagr == null ? '#64748b' : cagr >= 0 ? '#16a34a' : '#dc2626'
+                    const ideaUrl = `/ideas/${encodeURIComponent(normalizeTickerToCompany(a.ticker) || a.ticker)}`
                     return (
-                      <ListItem
+                      <SwipeableCard
                         key={a.ticker}
-                        disablePadding
-                        sx={{
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          borderRadius: 1,
-                          p: 1,
-                          flexDirection: 'column',
-                          alignItems: 'stretch',
-                        }}
+                        actions={[
+                          { icon: <CheckIcon sx={{ fontSize: 18 }} />, label: 'Resolve', onClick: () => setResolveTarget({ actionId: a.lastActionId, ticker: a.ticker }), color: '#16a34a' },
+                          { icon: <LightbulbOutlinedIcon sx={{ fontSize: 18 }} />, label: 'View', onClick: () => { onClose(); window.location.href = ideaUrl }, color: '#2563eb' },
+                          { icon: <SnoozeIcon sx={{ fontSize: 18 }} />, label: '+30d', onClick: () => handleIdeaLaterSelect(a.ticker, 30), color: '#475569' },
+                          { icon: <CloseIcon sx={{ fontSize: 18 }} />, label: 'Drop', onClick: () => { dismissStaleIdea(a.ticker); setIdeaAlerts((prev) => prev.filter((x) => x.ticker !== a.ticker)) }, color: '#dc2626' },
+                        ]}
                       >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                          <LightbulbOutlinedIcon fontSize="small" sx={{ color: 'text.disabled', flexShrink: 0 }} />
+                        <Box sx={{ px: 1.25, py: 0.75, display: 'flex', gap: 0.75 }}>
                           <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                              <Chip size="small" label={getTickerDisplayLabel(a.ticker)} clickable onClick={() => openChart(a.ticker)} sx={{ fontWeight: 700 }} />
-                              <OptionTypeChip ticker={a.ticker} />
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <Chip size="small" label={getTickerDisplayLabel(a.ticker)} clickable onClick={() => { onClose(); window.location.href = `/ideas/${encodeURIComponent(a.ticker)}` }} sx={{ fontWeight: 700, height: 22 }} />
                               {a.company && (
-                                <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 120 }}>
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 100 }}>
                                   {a.company}
                                 </Typography>
                               )}
                             </Box>
-                            <Typography variant="caption" color="text.secondary" display="block">
-                              Last: <RelativeDate date={a.lastDate} />
+                            <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.7rem' }}>
+                              Last: <RelativeDate date={a.lastDate} /> · {a.days}d ago
                             </Typography>
                           </Box>
-                          <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                            <Button
-                              size="small"
-                              disabled={snoozingIdeaTicker === a.ticker}
-                              onClick={(e) => setIdeaLaterAnchor({ el: e.currentTarget, alert: a })}
-                              sx={{ textTransform: 'none', fontSize: '0.7rem', minWidth: 0, px: 1 }}
-                            >
-                              {snoozingIdeaTicker === a.ticker ? '…' : 'Snooze'}
-                            </Button>
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              component={RouterLink}
-                              to={`/ideas/${encodeURIComponent(normalizeTickerToCompany(a.ticker) || a.ticker)}`}
-                              onClick={onClose}
-                              sx={{ textTransform: 'none', fontSize: '0.7rem', minWidth: 0, px: 1 }}
-                            >
-                              View
-                            </Button>
-                          </Box>
-                        </Box>
-
-                        {/* Meters */}
-                        <Box sx={{ mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          {/* Freshness meter */}
-                          <Tooltip title={`Conviction freshness · ${a.days} days since last action`} placement="top" arrow>
-                            <Box>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.25 }}>
-                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                  Freshness
-                                </Typography>
-                                <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 600, color: freshColor }}>
-                                  {a.freshnessPct.toFixed(0)}%
+                          {/* Right-aligned return columns */}
+                          {realReturn != null && (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, minWidth: 80 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+                                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.55rem' }}>(Real)</Typography>
+                                <Typography variant="caption" fontWeight={700} sx={{ color: realColor, fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                                  {realReturn >= 0 ? '+' : ''}{realReturn.toFixed(1)}%
                                 </Typography>
                               </Box>
-                              <LinearProgress
-                                variant="determinate"
-                                value={a.freshnessPct}
-                                sx={{
-                                  height: 4,
-                                  borderRadius: 2,
-                                  bgcolor: 'action.hover',
-                                  '& .MuiLinearProgress-bar': { bgcolor: freshColor, borderRadius: 2 },
-                                }}
-                              />
+                              {cagr != null && (
+                                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+                                  <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.55rem' }}>(CAGR)</Typography>
+                                  <Typography variant="caption" fontWeight={600} sx={{ color: cagrColor, fontSize: '0.7rem', fontFamily: 'monospace' }}>
+                                    {cagr >= 0 ? '+' : ''}{cagr.toFixed(1)}%
+                                  </Typography>
+                                </Box>
+                              )}
                             </Box>
-                          </Tooltip>
-
-                          {/* Alpha-decay meter */}
-                          <Tooltip
-                            title={
-                              a.signedAlpha == null
-                                ? a.entryPrice == null
-                                  ? 'No entry price recorded — can’t compute alpha'
-                                  : 'Fetching current price…'
-                                : neutral
-                                  ? `${a.signedAlpha >= 0 ? '+' : ''}${a.signedAlpha.toFixed(1)}% since ${a.lastType} (neutral action)`
-                                  : alphaPositive
-                                    ? `Aging well: ${a.signedAlpha >= 0 ? '+' : ''}${a.signedAlpha.toFixed(1)}% in your favor since ${a.lastType}`
-                                    : `Aging poorly: ${a.signedAlpha.toFixed(1)}% against you since ${a.lastType}`
-                            }
-                            placement="top"
-                            arrow
-                          >
-                            <Box>
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.25 }}>
-                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                  {directionLabel(a.lastType)}
-                                </Typography>
-                                <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 600, color: a.signedAlpha == null ? 'text.disabled' : alphaColor }}>
-                                  {a.signedAlpha == null
-                                    ? a.entryPrice == null
-                                      ? '—'
-                                      : '…'
-                                    : `${a.signedAlpha >= 0 ? '+' : ''}${a.signedAlpha.toFixed(1)}%`}
-                                </Typography>
-                              </Box>
-                              <LinearProgress
-                                variant="determinate"
-                                value={alphaMagnitude}
-                                sx={{
-                                  height: 4,
-                                  borderRadius: 2,
-                                  bgcolor: 'action.hover',
-                                  '& .MuiLinearProgress-bar': {
-                                    bgcolor: a.signedAlpha == null ? 'action.disabled' : alphaColor,
-                                    borderRadius: 2,
-                                  },
-                                }}
-                              />
-                            </Box>
-                          </Tooltip>
+                          )}
                         </Box>
-                      </ListItem>
+                      </SwipeableCard>
                     )
                   })}
-                </List>
+                </Stack>
               </Box>
             )}
           </>
@@ -936,6 +732,35 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Outcome resolution dialog for stale ideas */}
+      {resolveTarget && (
+        <OutcomeFormDialog
+          open
+          onClose={() => setResolveTarget(null)}
+          initial={null}
+          actionLabel={getTickerDisplayLabel(resolveTarget.ticker)}
+          onSubmit={async (data) => {
+            await createOutcome({
+              action_id: resolveTarget.actionId,
+              realized_pnl: data.realized_pnl,
+              outcome_date: data.outcome_date,
+              notes: data.notes,
+              driver: data.driver,
+              post_mortem_notes: data.post_mortem_notes || null,
+              process_quality: data.process_quality ?? null,
+              outcome_quality: data.outcome_quality ?? null,
+              process_score: data.process_score,
+              outcome_score: data.outcome_score,
+              closing_memo: data.closing_memo?.trim() || null,
+              error_type: data.error_type ?? null,
+              what_i_remember_now: data.what_i_remember_now?.trim() || null,
+            })
+            setIdeaAlerts((prev) => prev.filter((x) => x.ticker !== resolveTarget.ticker))
+            setResolveTarget(null)
+          }}
+        />
+      )}
     </Drawer>
   )
 }

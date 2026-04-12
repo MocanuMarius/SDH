@@ -40,13 +40,6 @@ export default function ImportPage() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
-        Import entries
-      </Typography>
-      <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
-        Upload a Journalytic-compatible CSV with columns: EntryId, Date, Author, Tags, TitleMarkdown, BodyMarkdown.
-      </Typography>
-
       <Box display="flex" alignItems="center" gap={2} sx={{ mb: 2 }}>
         <Button variant="outlined" component="label" startIcon={<UploadFileIcon />} disabled={importing}>
           Choose CSV

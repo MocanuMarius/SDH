@@ -55,6 +55,8 @@ import type { EntryValuation } from '../types/database'
 interface Props {
   entryId: string
   defaultExpanded?: boolean
+  /** When true, don't render at all if no valuation data exists in the DB */
+  hideWhenEmpty?: boolean
 }
 
 const DEFAULT_INPUTS: EngineInputs = {
@@ -349,7 +351,7 @@ function EnginesStackedChart({ width, height, points, multiples, onMultipleChang
 
 // ── Main widget ────────────────────────────────────────────────────────
 
-export default function ValuationWidget({ entryId, defaultExpanded = false }: Props) {
+export default function ValuationWidget({ entryId, defaultExpanded = false, hideWhenEmpty = false }: Props) {
   const [inputs, setInputs] = useState<EngineInputs>(DEFAULT_INPUTS)
   const [loaded, setLoaded] = useState(false)
   const [row, setRow] = useState<EntryValuation | null>(null)
@@ -472,6 +474,9 @@ export default function ValuationWidget({ entryId, defaultExpanded = false }: Pr
     })
     setDirty(true)
   }
+
+  // When hideWhenEmpty is set, don't render if no data saved in DB
+  if (hideWhenEmpty && loaded && !row) return null
 
   return (
     <Card variant="outlined" sx={{ mt: 2, borderLeft: '4px solid #a855f7' }}>

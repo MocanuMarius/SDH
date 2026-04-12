@@ -16,7 +16,7 @@ export default function TagChip({ tag, colorOverride, sx, ...rest }: TagChipProp
   const color = colorOverride ?? getTagColor(tag)
 
   // Strip leading # if already present to avoid ##tag
-  const display = tag.startsWith('#') ? tag : `#${tag}`
+  const display = (tag ?? '').startsWith('#') ? tag : `#${tag ?? ''}`
 
   return (
     <Chip

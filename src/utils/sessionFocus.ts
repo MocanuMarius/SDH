@@ -1,7 +1,7 @@
 /**
  * Session training focus — localStorage-backed.
  *
- * Per deliberate-practice R3 ("name the sub-skill before each session"), the
+ * Per deliberate-practice principles ("name the sub-skill before each session"), the
  * user picks a sub-skill they're training during a given practice session.
  * This lightweight store holds that choice for the current day so subsequent
  * entries and predictions can auto-tag it.

@@ -126,19 +126,16 @@ export default function LongTermDecisionsPage() {
   }
 
   const getStatusLabel = (decision: LongTermDecision) => {
-    if (decision.status === 'resolved') return '✅ Resolved'
-    if (decision.status === 'overdue') return '⏰ Overdue'
-    if (decision.daysUntilHorizon <= 7) return '⏳ Due Soon'
-    return '📅 Upcoming'
+    if (decision.status === 'resolved') return 'Resolved'
+    if (decision.status === 'overdue') return 'Overdue'
+    if (decision.daysUntilHorizon <= 7) return 'Due soon'
+    return 'Upcoming'
   }
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={600} sx={{ mb: 3 }}>
-        📅 Long-Term Decisions Tracker
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Track decisions with expected resolution dates. Monitor which are on track, overdue, or resolved.
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
+        Decisions
       </Typography>
 
       {/* Summary Cards */}
@@ -266,9 +263,6 @@ export default function LongTermDecisionsPage() {
         </TableContainer>
       )}
 
-      <Alert severity="info" sx={{ mt: 3 }}>
-        💡 Tip: Add a decision horizon date when creating or editing entries to track long-term decisions. Compare expected vs actual outcomes to measure your timeline estimation accuracy.
-      </Alert>
     </Box>
   )
 }

@@ -71,7 +71,6 @@ export default function EntryFormPage() {
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [insertDecisionOpen, setInsertDecisionOpen] = useState(false)
   const [feelingDialogOpen, setFeelingDialogOpen] = useState(false)
   const [pendingFeelingType, setPendingFeelingType] = useState<FeelingType>('market')
   const [tradingPlanExpanded, setTradingPlanExpanded] = useState(false)
@@ -82,7 +81,7 @@ export default function EntryFormPage() {
   const [predictionPercent, setPredictionPercent] = useState('')
   const [predictionDate, setPredictionDate] = useState('')
   const [decision_horizon, setDecisionHorizon] = useState('')
-  const [bodyTab, setBodyTab] = useState<'write' | 'preview'>('write')
+  const [bodyTab, setBodyTab] = useState<'write' | 'preview' | 'decision'>('write')
   const formRef = useRef<HTMLFormElement>(null)
   const initialValuesRef = useRef({ title_markdown: '', body_markdown: '', tagsStr: '' })
 
@@ -226,7 +225,7 @@ export default function EntryFormPage() {
       // Ctrl/Cmd+B: Insert Buy decision block
       if (modifier && e.key === 'b') {
         e.preventDefault()
-        setInsertDecisionOpen(true)
+        setBodyTab('decision')
       }
 
       // Ctrl/Cmd+Shift+M: Open market feeling dialog (only on edit, not new)
@@ -385,70 +384,93 @@ export default function EntryFormPage() {
         />
       </Box>
 
-      {/* Editor area with tabs: Write | Preview | Tags | + Decision Block button */}
+      {/* Editor area with tabs: Write | Preview | + Decision */}
       <Paper variant="outlined" sx={{ mb: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs
-            value={bodyTab}
-            onChange={(_, v) => setBodyTab(v as 'write' | 'preview')}
-            sx={{ flex: 1, minHeight: 34, '& .MuiTab-root': { minHeight: 34, py: 0.25, textTransform: 'none', fontSize: '0.8rem' } }}
-          >
-            <Tab label="Write" value="write" />
-            <Tab label="Preview" value="preview" />
-          </Tabs>
-          <Button
-            size="small"
-            startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
-            onClick={() => setInsertDecisionOpen(true)}
-            sx={{ textTransform: 'none', fontSize: '0.75rem', mr: 0.5, whiteSpace: 'nowrap' }}
-          >
-            Decision
-          </Button>
-        </Box>
-        {/* Tags row inside editor */}
-        <Autocomplete
-          multiple
-          freeSolo
-          size="small"
-          options={tagPresets}
-          value={tagValues}
-          onChange={(_, newVal) => setTagsStr(newVal.join(', '))}
-          renderTags={(value, getTagProps) =>
-            value.map((opt, idx) => (
-              <TagChip key={opt} label={opt} size="small" {...getTagProps({ index: idx })} />
-            ))
-          }
-          renderInput={(params) => (
-            <TextField {...params} placeholder="Tags" variant="standard"
-              sx={{ '& .MuiInput-underline:before': { borderBottom: 'none' }, '& .MuiInput-underline:after': { borderBottom: 'none' }, '& .MuiInput-underline:hover:not(.Mui-disabled):before': { borderBottom: 'none' } }}
-            />
+          {bodyTab === 'decision' ? (
+            <Button
+              size="small"
+              onClick={() => setBodyTab('write')}
+              sx={{ textTransform: 'none', fontSize: '0.8rem', minHeight: 34, px: 1.5, gap: 0.5 }}
+            >
+              ← Back to editor
+            </Button>
+          ) : (
+            <>
+              <Tabs
+                value={bodyTab}
+                onChange={(_, v) => setBodyTab(v as 'write' | 'preview')}
+                sx={{ flex: 1, minHeight: 34, '& .MuiTab-root': { minHeight: 34, py: 0.25, textTransform: 'none', fontSize: '0.8rem' } }}
+              >
+                <Tab label="Write" value="write" />
+                <Tab label="Preview" value="preview" />
+              </Tabs>
+              <Button
+                size="small"
+                startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
+                onClick={() => setBodyTab('decision')}
+                sx={{ textTransform: 'none', fontSize: '0.75rem', mr: 0.5, whiteSpace: 'nowrap' }}
+              >
+                Decision
+              </Button>
+            </>
           )}
-          sx={{ px: 1.5, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
-        />
-        {bodyTab === 'write' ? (
-          <TickerDollarField
-            fullWidth
-            multiline
-            minRows={12}
-            value={body_markdown}
-            onChange={setBodyMarkdown}
-            placeholder="Write your notes here. Use ### Buy Decision / ### Sell Decision etc., or click Insert decision block above."
-            helperText="Type $ then company or symbol for ticker suggestions. Markdown supported."
-            sx={{
-              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-              '& .MuiInputBase-root': { borderRadius: 0 },
-            }}
-          />
-        ) : (
-          <Box sx={{ p: 2, minHeight: 200 }}>
-            {body_markdown.trim() ? (
-              <MarkdownRender source={body_markdown} />
+        </Box>
+        {bodyTab !== 'decision' && (
+          <>
+            {/* Tags row inside editor */}
+            <Autocomplete
+              multiple
+              freeSolo
+              size="small"
+              options={tagPresets}
+              value={tagValues}
+              onChange={(_, newVal) => setTagsStr(newVal.join(', '))}
+              renderTags={(value, getTagProps) =>
+                value.map((opt, idx) => (
+                  <TagChip key={opt} tag={opt} size="small" {...getTagProps({ index: idx })} />
+                ))
+              }
+              renderInput={(params) => (
+                <TextField {...params} placeholder="Tags" variant="standard"
+                  sx={{ '& .MuiInput-underline:before': { borderBottom: 'none' }, '& .MuiInput-underline:after': { borderBottom: 'none' }, '& .MuiInput-underline:hover:not(.Mui-disabled):before': { borderBottom: 'none' } }}
+                />
+              )}
+              sx={{ px: 1.5, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
+            />
+            {bodyTab === 'write' ? (
+              <TickerDollarField
+                fullWidth
+                multiline
+                minRows={6}
+                value={body_markdown}
+                onChange={setBodyMarkdown}
+                placeholder="Write your thesis... (markdown supported, $ for tickers)"
+                sx={{
+                  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+                  '& .MuiInputBase-root': { borderRadius: 0 },
+                }}
+              />
             ) : (
-              <Typography color="text.secondary" variant="body2" fontStyle="italic">
-                Nothing to preview yet — switch to Write and start typing.
-              </Typography>
+              <Box sx={{ p: 2, minHeight: 200 }}>
+                {body_markdown.trim() ? (
+                  <MarkdownRender source={body_markdown} />
+                ) : (
+                  <Typography color="text.secondary" variant="body2" fontStyle="italic">
+                    Nothing to preview yet — switch to Write and start typing.
+                  </Typography>
+                )}
+              </Box>
             )}
-          </Box>
+          </>
+        )}
+        {bodyTab === 'decision' && (
+          <InsertDecisionBlockDialog
+            open={true}
+            onClose={() => setBodyTab('write')}
+            onInsert={handleInsertDecisionBlock}
+            inline
+          />
         )}
       </Paper>
 
@@ -461,8 +483,8 @@ export default function EntryFormPage() {
           sx={{ p: 1.5, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
           onClick={() => setTradingPlanExpanded(!tradingPlanExpanded)}
         >
-          <Typography variant="body2" fontWeight={600} color="text.secondary">
-            More options (sentiment, prediction, trading plan)
+          <Typography variant="caption" fontWeight={600} color="text.secondary">
+            More
           </Typography>
           <IconButton size="small" sx={{ transform: tradingPlanExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms' }}>
             <ExpandMoreIcon />
@@ -594,11 +616,6 @@ export default function EntryFormPage() {
         </Button>
       </Box>
 
-      <InsertDecisionBlockDialog
-        open={insertDecisionOpen}
-        onClose={() => setInsertDecisionOpen(false)}
-        onInsert={handleInsertDecisionBlock}
-      />
       <FeelingFormDialog
         open={feelingDialogOpen}
         onClose={() => setFeelingDialogOpen(false)}

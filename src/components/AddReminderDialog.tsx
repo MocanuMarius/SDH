@@ -7,7 +7,9 @@ import {
   Button,
   TextField,
   Typography,
+  IconButton,
 } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
 
 interface AddReminderDialogProps {
   open: boolean
@@ -37,8 +39,11 @@ export default function AddReminderDialog({ open, onClose, onSubmit, entryTitle 
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Add reminder</DialogTitle>
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1.5 }}>
+        Add reminder
+        <IconButton size="small" onClick={onClose} edge="end"><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
       <DialogContent>
         {entryTitle && (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -52,6 +57,7 @@ export default function AddReminderDialog({ open, onClose, onSubmit, entryTitle 
           onChange={(e) => setReminderDate(e.target.value)}
           fullWidth
           margin="normal"
+          size="small"
           InputLabelProps={{ shrink: true }}
         />
         <TextField
@@ -61,11 +67,12 @@ export default function AddReminderDialog({ open, onClose, onSubmit, entryTitle 
           onChange={(e) => setNote(e.target.value)}
           fullWidth
           margin="normal"
+          size="small"
           multiline
           minRows={2}
         />
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" onClick={handleSubmit} disabled={loading}>
           {loading ? 'Adding…' : 'Add reminder'}

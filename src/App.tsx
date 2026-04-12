@@ -33,8 +33,6 @@ import MenuIcon from '@mui/icons-material/Menu'
 import NotificationsIcon from '@mui/icons-material/Notifications'
 import TimelineIcon from '@mui/icons-material/Timeline'
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
-import TouchAppOutlinedIcon from '@mui/icons-material/TouchAppOutlined'
-import InsightsIcon from '@mui/icons-material/Insights'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined'
 import AnalyticsIcon from '@mui/icons-material/Analytics'
@@ -45,8 +43,6 @@ import WatchlistIcon from '@mui/icons-material/Bookmarks'
 import ImportIcon from '@mui/icons-material/FileDownload'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import PsychologyIcon from '@mui/icons-material/Psychology'
-import TuneIcon from '@mui/icons-material/Tune'
-import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { SnackbarProvider } from './contexts/SnackbarContext'
 import { TickerChartProvider } from './contexts/TickerChartContext'
@@ -59,18 +55,13 @@ import EntryDetailPage from './pages/EntryDetailPage'
 import EntryFormPage from './pages/EntryFormPage'
 // Heavy pages: lazy-loaded for code splitting
 const ActionsPage = lazy(() => import('./pages/ActionsPage'))
-const PassedPage = lazy(() => import('./pages/PassedPage'))
-const InsightsPage = lazy(() => import('./pages/InsightsPage'))
-const ImportPage = lazy(() => import('./pages/ImportPage'))
-const IbkrTransactionsPage = lazy(() => import('./pages/IbkrTransactionsPage'))
 const TimelinePage = lazy(() => import('./pages/TimelinePage'))
 const IdeasPage = lazy(() => import('./pages/IdeasPage'))
 const IdeaDetailPage = lazy(() => import('./pages/IdeaDetailPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
-const AnalyticsDashboardPage = lazy(() => import('./pages/AnalyticsDashboardPage'))
-const CalibrationDashboardPage = lazy(() => import('./pages/CalibrationDashboardPage'))
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
 const LongTermDecisionsPage = lazy(() => import('./pages/LongTermDecisionsPage'))
-const BrokerImportPage = lazy(() => import('./pages/BrokerImportPage'))
+const ImportHub = lazy(() => import('./pages/ImportHub'))
 const SkillEngineeringDashboard = lazy(() => import('./pages/SkillEngineeringDashboard'))
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
 
@@ -92,22 +83,18 @@ function Page({ children }: { children: ReactNode }) {
 const PRIMARY_NAV = [
   { to: '/', label: 'Journal', icon: ArticleOutlinedIcon },
   { to: '/ideas', label: 'Ideas', icon: LightbulbOutlinedIcon },
-  { to: '/actions', label: 'Actions', icon: TouchAppIcon },
-  { to: '/watchlist', label: 'Watchlist', icon: WatchlistIcon },
   { to: '/timeline', label: 'Timeline', icon: TimelineIcon },
+  { to: '/watchlist', label: 'Watchlist', icon: WatchlistIcon },
   { to: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
 ]
 
 // Secondary items in "More" dropdown
 const SECONDARY_NAV = [
-  { to: '/insights', label: 'Insights', icon: InsightsIcon },
-  { to: '/decisions', label: 'Decisions', icon: AssignmentIcon },
-  { to: '/passed', label: 'Passed', icon: TouchAppOutlinedIcon },
+  { to: '/actions', label: 'Actions', icon: TouchAppIcon },
   { to: '/skill-engineering', label: 'Practice', icon: PsychologyIcon },
-  { to: '/calibration', label: 'Calibration', icon: TuneIcon },
-  { to: '/broker-import', label: 'Broker Import', icon: CloudUploadIcon },
-  { to: '/import', label: 'Import', icon: ImportIcon },
+  { to: '/decisions', label: 'Decisions', icon: AssignmentIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
+  { to: '/import', label: 'Import', icon: ImportIcon },
 ]
 
 function NavButton({ to, label, icon: Icon }: { to: string; label: string; icon: React.ElementType }) {
@@ -267,27 +254,18 @@ function MobileBottomNav({ onOpenNav, onOpenActivity, activityCount }: { onOpenN
         bottom: 0,
         left: 0,
         right: 0,
-        borderTop: '1px solid',
-        borderColor: 'divider',
+        bgcolor: '#0f172a',
+        borderTop: 'none',
         pb: 'env(safe-area-inset-bottom)',
+        '& .MuiBottomNavigationAction-root': { color: 'rgba(255,255,255,0.6)' },
+        '& .Mui-selected': { color: '#38bdf8 !important' },
         zIndex: (t) => t.zIndex.appBar - 1,
       }}
     >
-      <BottomNavigationAction
-        label="Activity"
-        value="/activity"
-        icon={
-          <Badge badgeContent={activityCount} color="secondary">
-            <NotificationsIcon fontSize="small" />
-          </Badge>
-        }
-        onClick={(e) => { e.preventDefault(); onOpenActivity() }}
-      />
       <BottomNavigationAction label="Journal" value="/journal" icon={<ArticleOutlinedIcon />} component={RouterLink} to="/" />
-      <BottomNavigationAction label="Watchlist" value="/watchlist" icon={<WatchlistIcon fontSize="small" />} component={RouterLink} to="/watchlist" />
       <BottomNavigationAction label="Timeline" value="/timeline" icon={<TimelineIcon />} component={RouterLink} to="/timeline" />
       <BottomNavigationAction label="Ideas" value="/ideas" icon={<LightbulbOutlinedIcon />} component={RouterLink} to="/ideas" />
-      <BottomNavigationAction label="Actions" value="/actions" icon={<TouchAppOutlinedIcon />} component={RouterLink} to="/actions" />
+      <BottomNavigationAction label="Watchlist" value="/watchlist" icon={<WatchlistIcon fontSize="small" />} component={RouterLink} to="/watchlist" />
       <BottomNavigationAction label="More" value="more" icon={<MoreHorizIcon />} onClick={(e) => { e.preventDefault(); onOpenNav() }} />
     </BottomNavigation>
   )
@@ -326,17 +304,17 @@ function AppRoutes() {
       <Route path="/entries/:id" element={<ProtectedLayout><Page><EntryDetailPage /></Page></ProtectedLayout>} />
       <Route path="/entries/:id/edit" element={<ProtectedLayout><Page><EntryFormPage /></Page></ProtectedLayout>} />
       <Route path="/actions" element={<ProtectedLayout><Page><ActionsPage /></Page></ProtectedLayout>} />
-      <Route path="/passed" element={<ProtectedLayout><Page><PassedPage /></Page></ProtectedLayout>} />
-      <Route path="/insights" element={<ProtectedLayout><Page><InsightsPage /></Page></ProtectedLayout>} />
-      <Route path="/analytics" element={<ProtectedLayout><Page><AnalyticsDashboardPage /></Page></ProtectedLayout>} />
-      <Route path="/calibration" element={<ProtectedLayout><Page><CalibrationDashboardPage /></Page></ProtectedLayout>} />
+      <Route path="/passed" element={<Navigate to="/ideas" replace />} />
+      <Route path="/analytics" element={<ProtectedLayout><Page><AnalyticsPage /></Page></ProtectedLayout>} />
+      <Route path="/insights" element={<Navigate to="/analytics" replace />} />
+      <Route path="/calibration" element={<Navigate to="/analytics" replace />} />
       <Route path="/decisions" element={<ProtectedLayout><Page><LongTermDecisionsPage /></Page></ProtectedLayout>} />
       <Route path="/ideas" element={<ProtectedLayout><Page><IdeasPage /></Page></ProtectedLayout>} />
       <Route path="/ideas/:ticker" element={<ProtectedLayout><Page><IdeaDetailPage /></Page></ProtectedLayout>} />
       <Route path="/timeline" element={<ProtectedLayout><Page><TimelinePage /></Page></ProtectedLayout>} />
-      <Route path="/import" element={<ProtectedLayout><Page><ImportPage /></Page></ProtectedLayout>} />
-      <Route path="/ibkr" element={<ProtectedLayout><Page><IbkrTransactionsPage /></Page></ProtectedLayout>} />
-      <Route path="/broker-import" element={<ProtectedLayout><Page><BrokerImportPage /></Page></ProtectedLayout>} />
+      <Route path="/import" element={<ProtectedLayout><Page><ImportHub /></Page></ProtectedLayout>} />
+      <Route path="/ibkr" element={<Navigate to="/import" replace />} />
+      <Route path="/broker-import" element={<Navigate to="/import" replace />} />
       <Route path="/settings" element={<ProtectedLayout><Page><SettingsPage /></Page></ProtectedLayout>} />
       <Route path="/skill-engineering" element={<ProtectedLayout><Page><SkillEngineeringDashboard /></Page></ProtectedLayout>} />
       <Route path="/watchlist" element={<ProtectedLayout><Page><WatchlistPage /></Page></ProtectedLayout>} />
@@ -366,7 +344,6 @@ function AppLayout() {
         component="main"
         sx={{
           minHeight: '100vh',
-          overflowX: 'hidden',
           pt: { xs: '56px', sm: '64px' },
           pb: { xs: isMobile ? 10 : 2, sm: 0 },
         }}
@@ -375,7 +352,7 @@ function AppLayout() {
           maxWidth="lg"
           sx={{
             px: { xs: 1.5, sm: 2 },
-            py: { xs: 2, sm: 3 },
+            py: { xs: 0.75, sm: 1.5 },
             maxWidth: 'lg',
             width: '100%',
             boxSizing: 'border-box',

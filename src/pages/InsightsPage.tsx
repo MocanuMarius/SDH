@@ -162,9 +162,6 @@ export default function InsightsPage() {
   if (error) {
     return (
       <Box>
-        <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
-          Insights
-        </Typography>
         <Alert severity="error" onClose={() => setError(null)}>
           {error}
         </Alert>
@@ -208,11 +205,15 @@ export default function InsightsPage() {
   })
   const typeData = Object.entries(byType).map(([type, count]) => ({ type, count }))
 
-  const byDate: Record<string, number> = {}
+  // Aggregate decisions by month for a readable chart
+  const byMonth: Record<string, number> = {}
   actions.forEach((a) => {
-    if (a.action_date) byDate[a.action_date] = (byDate[a.action_date] ?? 0) + 1
+    if (a.action_date) {
+      const month = a.action_date.slice(0, 7) // YYYY-MM
+      byMonth[month] = (byMonth[month] ?? 0) + 1
+    }
   })
-  const byDateArr = Object.entries(byDate)
+  const byDateArr = Object.entries(byMonth)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, count]) => ({ date, count }))
 
@@ -678,10 +679,6 @@ export default function InsightsPage() {
 
   return (
     <Box>
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
-        Insights
-      </Typography>
-
       {/* Dashboard metric tiles — Simply Wall St–style: label above, big value */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 6, md: 3 }}>
@@ -1563,14 +1560,14 @@ export default function InsightsPage() {
           <Typography variant="subtitle1" fontWeight={600} gutterBottom>
             Decisions over time
           </Typography>
-          <Box sx={{ height: 280 }}>
+          <Box sx={{ height: { xs: 200, sm: 280 } }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={byDateArr} margin={{ top: 16, right: 24, left: 48, bottom: 24 }}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.25} stroke="#94a3b8" />
-                <XAxis dataKey="date" tick={{ fontSize: 13, fill: '#334155' }} />
-                <YAxis domain={[0, 'auto']} tick={{ fontSize: 13, fill: '#334155' }} />
-                <Tooltip contentStyle={{ fontSize: 13 }} />
-                <Line type="monotone" dataKey="count" stroke={CHART_COLOR_PRIMARY} strokeWidth={2} dot={{ r: 4 }} />
+              <LineChart data={byDateArr} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} stroke="#94a3b8" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748b' }} angle={-45} textAnchor="end" height={50} />
+                <YAxis domain={[0, 'auto']} tick={{ fontSize: 10, fill: '#64748b' }} width={30} />
+                <Tooltip contentStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="count" stroke={CHART_COLOR_PRIMARY} strokeWidth={2} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </Box>

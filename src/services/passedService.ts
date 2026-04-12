@@ -78,7 +78,7 @@ export async function deletePassed(id: string): Promise<void> {
   if (error) throw error
 }
 
-// ─── R10: Passed-idea forced review loop ────────────────────────────────
+// ─── Passed-idea forced review loop ────────────────────────────────
 
 /**
  * Fetch passed ideas whose follow_up_date is on or before today AND have not

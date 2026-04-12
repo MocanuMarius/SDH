@@ -120,11 +120,11 @@ export interface Outcome {
   process_quality?: ProcessOutcomeQuality
   /** F12: Was the outcome good? (binary — superseded by outcome_score for new data) */
   outcome_quality?: ProcessOutcomeQuality
-  /** R19: Process score 1-5 — research, reasoning, bias-awareness, rule-following. */
+  /** Process score 1-5: research, reasoning, bias-awareness, rule-following. */
   process_score?: number | null
-  /** R19: Outcome score 1-5 — did the trade actually make money. */
+  /** Outcome score 1-5: did the trade actually make money. */
   outcome_score?: number | null
-  /** R14: ≤500 word closing memo — original thesis, outcome, reasoning errors, do-differently, recurring theme. */
+  /** Closing memo (500 words max): original thesis, outcome, reasoning errors, do-differently, recurring theme. */
   closing_memo?: string | null
   /** F21: Error taxonomy (weakness profile) */
   error_type?: ErrorType[] | null
@@ -163,13 +163,13 @@ export interface Passed {
   passed_date: string
   reason: string
   notes: string
-  /** R10: date at which the Activity drawer prompts a retrospective review. */
+  /** Date at which the Activity drawer prompts a retrospective review. */
   follow_up_date?: string | null
-  /** R10: 'correct' | 'should_have_bought' | 'inconclusive' | null (not yet reviewed). */
+  /** Retrospective verdict: 'correct' | 'should_have_bought' | 'inconclusive' | null. */
   review_status?: PassReviewStatus | null
-  /** R10: when the review was completed. */
+  /** When the review was completed. */
   reviewed_at?: string | null
-  /** R10: optional free-form note captured at review time. */
+  /** Optional free-form note captured at review time. */
   review_notes?: string | null
   created_at: string
 }
@@ -207,7 +207,7 @@ export interface EntryPrediction {
   type: string
   label: string | null
   ticker: string | null
-  /** R7/R16: which sub-skill this prediction is training (see src/types/subSkills.ts) */
+  /** Which sub-skill this prediction is training (see src/types/subSkills.ts). */
   sub_skill?: string | null
   created_at: string
   updated_at: string

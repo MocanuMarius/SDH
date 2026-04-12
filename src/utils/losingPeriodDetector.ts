@@ -1,5 +1,5 @@
 /**
- * R6/R12 Losing-period detector — purely client-side.
+ * Losing-period detector — purely client-side.
  *
  * Given the user's closed outcomes, decides whether the Activity drawer should
  * fire a "you're in a losing streak" nudge. Two independent triggers:
@@ -14,7 +14,7 @@
  * Either trigger flips `inLosingPeriod = true`. The consuming UI can then
  * nudge the user to run a post-mortem on the most recent loser.
  *
- * The whole point of this detector is R12: invert the natural habit of
+ * The whole point of this detector is to invert the natural habit of
  * avoiding review during drawdowns. The nudge should be prominent.
  */
 

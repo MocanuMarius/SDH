@@ -9,7 +9,6 @@ import {
   Button,
   Chip,
   FormControl,
-  FormControlLabel,
   InputLabel,
   Select,
   MenuItem,
@@ -30,10 +29,8 @@ import OptionTypeChip from '../components/OptionTypeChip'
 import { computeRangeStats, type RangeStats } from '../utils/chartRangeStats'
 import RelativeDate from '../components/RelativeDate'
 import DecisionChip from '../components/DecisionChip'
-import TimelineNewsPanel from '../components/TimelineNewsPanel'
 import { getChartCategory, getDecisionTypeColor } from '../theme/decisionTypes'
 import { isAutomatedEntry } from '../utils/entryTitle'
-import html2canvas from 'html2canvas'
 
 /** Assign each action to the chart point whose date is closest to the action date (no spreading by capacity). */
 function getClosestChartPointByDate(
@@ -55,13 +52,13 @@ function getClosestChartPointByDate(
 }
 
 const RANGES: { value: ChartRange; label: string }[] = [
-  { value: '1d', label: '1D' },
-  { value: '5d', label: '5D' },
   { value: '1m', label: '1M' },
   { value: '3m', label: '3M' },
   { value: '6m', label: '6M' },
   { value: 'ytd', label: 'YTD' },
   { value: '1y', label: '1Y' },
+  { value: '2y', label: '2Y' },
+  { value: '3y', label: '3Y' },
   { value: '5y', label: '5Y' },
   { value: 'max', label: 'MAX' },
 ]
@@ -192,25 +189,6 @@ export default function TimelinePage() {
     }
   }, [loading, chartData.length])
 
-  const handleDownloadChart = async () => {
-    const el = chartContainerRef.current
-    if (!el) return
-    try {
-      const canvas = await html2canvas(el, {
-        useCORS: true,
-        scale: 2,
-        backgroundColor: '#ffffff',
-        logging: false,
-      })
-      const link = document.createElement('a')
-      link.download = `timeline-${symbol}-${new Date().toISOString().slice(0, 10)}.png`
-      link.href = canvas.toDataURL('image/png')
-      link.click()
-    } catch (e) {
-      console.error('Chart export failed:', e)
-    }
-  }
-
   useEffect(() => {
     setZoomRange(null)
     setMeasureSelection(null)
@@ -248,10 +226,13 @@ export default function TimelinePage() {
     return () => { cancelled = true }
   }, [range, symbolParam])
 
-  const symbolCompanyKey = symbolParam && symbolParam !== 'SPY' ? normalizeTickerToCompany(symbolParam) : null
+  const benchmarkSymbols = BENCHMARK_OPTIONS.map((b) => b.symbol.toUpperCase())
+  const isIndexView = !symbolParam || benchmarkSymbols.includes(symbolParam.toUpperCase())
+  const symbolCompanyKey = isIndexView ? null : normalizeTickerToCompany(symbolParam!)
 
   const minDate = chartData.length > 0 ? chartData[0].date : ''
-  const maxDate = chartData.length > 0 ? chartData[chartData.length - 1].date : ''
+  // Include today's actions even if chart data only goes to yesterday's close
+  const maxDate = chartData.length > 0 ? new Date().toISOString().slice(0, 10) : ''
 
   const actionsInRange = useMemo(
     () =>
@@ -740,19 +721,22 @@ export default function TimelinePage() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
-        Timeline — {symbol} & your decisions
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
+        Timeline — {symbol}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        Chart shows {symbol} with your decisions. Use Ideas → View on Timeline for a ticker, or <code style={{ fontSize: '0.85em' }}>?symbol=TICKER</code>.
-      </Typography>
-      <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
-        <FormControl size="small" sx={{ minWidth: 160 }} variant="outlined">
+      <Box sx={{ mb: 1.5, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+        <FormControl size="small" sx={{ minWidth: 140 }} variant="outlined">
           <InputLabel>Benchmark</InputLabel>
           <Select
-            value={symbolParam}
+            value={benchmarkSymbols.includes(symbolParam?.toUpperCase() ?? '') ? symbolParam : ''}
             label="Benchmark"
             onChange={(e) => setSearchParams({ symbol: e.target.value })}
+            displayEmpty
+            renderValue={(v) => {
+              if (!v && symbolParam && !benchmarkSymbols.includes(symbolParam.toUpperCase())) return symbolParam
+              const opt = BENCHMARK_OPTIONS.find(b => b.symbol === v)
+              return opt?.label ?? v ?? ''
+            }}
           >
             {BENCHMARK_OPTIONS.map((b) => (
               <MenuItem key={b.symbol} value={b.symbol}>
@@ -761,10 +745,7 @@ export default function TimelinePage() {
             ))}
           </Select>
         </FormControl>
-        <Button size="small" variant="outlined" onClick={handleDownloadChart}>
-          Download
-        </Button>
-        <FormControl size="small" sx={{ minWidth: 140 }} variant="outlined">
+        <FormControl size="small" sx={{ minWidth: 130 }} variant="outlined">
           <InputLabel>Show decisions</InputLabel>
           <Select
             multiple
@@ -796,15 +777,12 @@ export default function TimelinePage() {
             </MenuItem>
           </Select>
         </FormControl>
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={hideAutomated}
-              onChange={(_, checked) => setHideAutomated(checked)}
-              size="small"
-            />
-          }
-          label="Hide automated (IBKR import)"
+        <Chip
+          size="small"
+          label={hideAutomated ? 'Auto off' : 'Auto on'}
+          onClick={() => setHideAutomated((v) => !v)}
+          variant={hideAutomated ? 'filled' : 'outlined'}
+          sx={{ height: 28, fontSize: '0.7rem' }}
         />
       </Box>
 
@@ -855,10 +833,11 @@ export default function TimelinePage() {
                     setMeasureSelection(null)
                   }}
                   sx={{
-                    minWidth: 36,
-                    px: 0.75,
-                    py: 0.3,
-                    fontSize: '0.78rem',
+                    minWidth: 28,
+                    minHeight: 28,
+                    px: 0.5,
+                    py: 0.15,
+                    fontSize: '0.7rem',
                     fontWeight: range === r.value && zoomRange == null ? 700 : 500,
                     borderRadius: 1,
                     color: range === r.value && zoomRange == null ? undefined : 'text.secondary',
@@ -882,7 +861,7 @@ export default function TimelinePage() {
                   if (v) applyDateRange(v, toDate)
                 }}
                 InputLabelProps={{ shrink: true }}
-                sx={{ width: 148 }}
+                sx={{ width: { xs: 130, sm: 148 } }}
               />
               <Typography variant="body2" color="text.secondary" sx={{ mx: 0.25 }}>–</Typography>
               <TextField
@@ -896,7 +875,7 @@ export default function TimelinePage() {
                   if (v) applyDateRange(fromDate, v)
                 }}
                 InputLabelProps={{ shrink: true }}
-                sx={{ width: 148 }}
+                sx={{ width: { xs: 130, sm: 148 } }}
               />
               {zoomRange != null && (
                 <Button
@@ -1012,9 +991,7 @@ export default function TimelinePage() {
               )
             })()}
           </Box>
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-            Drag to select a range · Pinch or Ctrl+scroll to zoom · Two-finger scroll to pan · % change appears above.
-          </Typography>
+          {/* spacing after chart */}
           {chartFilteredActions.length > 0 && (
             <Box sx={{ mt: 2 }}>
               <Typography variant="subtitle2" fontWeight={600} color="text.secondary" sx={{ mb: 1 }}>
@@ -1052,21 +1029,15 @@ export default function TimelinePage() {
               </List>
             </Box>
           )}
+          {/* Decision legend chips — compact, no text */}
           {(chartFilteredActions.length > 0 || actionsInRange.length > 0) && (
-            <Box sx={{ mt: 1.5, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2" color="text.secondary">
-                {chartFilteredActions.length} decision(s) shown
-                {chartFilteredActions.length !== actionsInRange.length &&
-                  ` (${actionsInRange.length} in range)`}
-                — click a bubble to select.
-                {selectedAction && (
-                  <> Same ticker (<strong>{getTickerDisplayLabel(selectedAction.ticker) || `$${selectedAction.ticker}`}</strong>) highlighted; others greyed. </>
-                )}
-                Green: buy, red: sell, gray: other.
+            <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <DecisionChip type="buy" size="small" />
+              <DecisionChip type="sell" size="small" />
+              <DecisionChip type="other" label="Other" size="small" />
+              <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                {chartFilteredActions.length} shown
               </Typography>
-              <Box component="span" sx={{ display: 'flex', gap: 0.5 }}>
-                <DecisionChip type="buy" size="small" /> <DecisionChip type="sell" size="small" /> <DecisionChip type="other" label="Other" size="small" />
-              </Box>
             </Box>
           )}
           {selectedAction && (
@@ -1099,16 +1070,6 @@ export default function TimelinePage() {
         </Paper>
       )}
 
-      {/* News headlines for the currently-visible period. Reacts to zoom/brush
-          range (via fromDate/toDate sync effect) and to the selected ticker. */}
-      {chartData.length > 0 && (
-        <TimelineNewsPanel
-          symbol={symbolParam || 'SPY'}
-          fromDate={fromDate || null}
-          toDate={toDate || null}
-          selectionLabel={zoomRange ? 'zoom' : undefined}
-        />
-      )}
     </Box>
   )
 }

@@ -17,6 +17,8 @@ import {
   InputAdornment,
   Divider,
   Stack,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
@@ -52,6 +54,16 @@ interface ActionFormDialogProps {
 
 const getToday = () => new Date().toISOString().slice(0, 10)
 
+/** Convert YYYY-MM-DD to DDMMMYY format for option tickers (e.g., 2027-01-15 → 15JAN27) */
+function formatOptionDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+  const day = String(d.getDate()).padStart(2, '0')
+  const mon = months[d.getMonth()]
+  const year = String(d.getFullYear()).slice(2)
+  return `${day}${mon}${year}`
+}
+
 const daysAgo = (n: number) => {
   const d = new Date()
   d.setDate(d.getDate() - n)
@@ -75,6 +87,10 @@ export default function ActionFormDialog({
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [kill_criteria, setKillCriteria] = useState((initial as { kill_criteria?: string })?.kill_criteria ?? '')
   const [pre_mortem_text, setPreMortemText] = useState((initial as { pre_mortem_text?: string | null })?.pre_mortem_text ?? '')
+  const [isOption, setIsOption] = useState(false)
+  const [optionExpiry, setOptionExpiry] = useState('')
+  const [optionStrike, setOptionStrike] = useState('')
+  const [optionType, setOptionType] = useState<'C' | 'P'>('C')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -122,10 +138,14 @@ export default function ActionFormDialog({
     }
     setError(null)
     setSaving(true)
+    // Compose option ticker: "AAPL 15JAN27 200 C"
+    const effectiveTicker = isOption && optionExpiry && optionStrike
+      ? `${ticker.trim()} ${formatOptionDate(optionExpiry)} ${optionStrike.trim()} ${optionType}`
+      : ticker.trim()
     try {
       await onSubmit({
         type,
-        ticker,
+        ticker: effectiveTicker,
         company_name: company_name || '',
         action_date,
         price,
@@ -197,6 +217,39 @@ export default function ActionFormDialog({
                 size="small"
                 onSelectResult={handleTickerSelect}
               />
+              <FormControlLabel
+                control={<Checkbox size="small" checked={isOption} onChange={(_, v) => setIsOption(v)} />}
+                label={<Typography variant="caption">This is an option</Typography>}
+                sx={{ mt: 0.5, ml: 0 }}
+              />
+              {isOption && (
+                <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                  <TextField
+                    size="small"
+                    label="Expiry"
+                    type="date"
+                    value={optionExpiry}
+                    onChange={(e) => setOptionExpiry(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    size="small"
+                    label="Strike"
+                    value={optionStrike}
+                    onChange={(e) => setOptionStrike(e.target.value)}
+                    placeholder="200"
+                    sx={{ width: 80 }}
+                  />
+                  <FormControl size="small" sx={{ width: 70 }}>
+                    <InputLabel>C/P</InputLabel>
+                    <Select value={optionType} label="C/P" onChange={(e) => setOptionType(e.target.value as 'C' | 'P')}>
+                      <MenuItem value="C">Call</MenuItem>
+                      <MenuItem value="P">Put</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+              )}
             </Box>
 
             <Box>

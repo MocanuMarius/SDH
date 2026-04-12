@@ -123,9 +123,9 @@ const theme = createTheme({
         body: {
           backgroundColor: tokens.bgDefault,
           color: tokens.textPrimary,
-          overflowX: 'hidden',
+          overflowX: 'clip',
         },
-        html: { overflowX: 'hidden' },
+        html: { overflowX: 'clip' },
         /* Remove focus/selection outline from Recharts so chart clicks don’t show orange outline */
         '.recharts-wrapper, .recharts-wrapper:focus, .recharts-wrapper:focus-visible': { outline: 'none' },
         '.recharts-surface, .recharts-surface:focus, .recharts-surface:focus-visible': { outline: 'none' },
@@ -148,11 +148,13 @@ const theme = createTheme({
       defaultProps: { elevation: 0 },
       styleOverrides: {
         root: {
-          backgroundColor: tokens.bgPaper,
-          borderBottom: `1px solid ${tokens.borderSubtle}`,
-          color: tokens.textPrimary,
-          '& .MuiButton-root': { color: tokens.textPrimary },
-          '& .MuiIconButton-root': { color: tokens.textPrimary },
+          backgroundColor: '#0f172a',
+          borderBottom: 'none',
+          borderRadius: 0,
+          color: '#ffffff',
+          '& .MuiButton-root': { color: '#ffffff' },
+          '& .MuiIconButton-root': { color: '#ffffff' },
+          '& .MuiTypography-root': { color: '#ffffff' },
         },
       },
     },

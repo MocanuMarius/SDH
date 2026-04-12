@@ -27,6 +27,8 @@ import {
   InputAdornment,
   Divider,
   Switch,
+  Tabs,
+  Tab,
   useMediaQuery,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
@@ -170,6 +172,7 @@ export default function WatchlistPage() {
 
   // Search filter
   const [searchTicker, setSearchTicker] = useState('')
+  const [activeTab, setActiveTab] = useState(0)
 
   const CONDITIONS = ['<', '>', '<=', '>=', '==', '!=']
 
@@ -312,7 +315,7 @@ export default function WatchlistPage() {
       }
 
       handleCloseDialog()
-      loadWatchlist()
+      await loadWatchlist()
     } catch (e) {
       console.error('Error saving alert:', e)
       setError(e instanceof Error ? e.message : 'Failed to save alert')
@@ -324,7 +327,7 @@ export default function WatchlistPage() {
     try {
       const { error } = await supabase.from('watchlist_items').delete().eq('id', id)
       if (error) throw error
-      loadWatchlist()
+      await loadWatchlist()
     } catch (e) {
       console.error('Error deleting alert:', e)
       setError(e instanceof Error ? e.message : 'Failed to delete alert')
@@ -343,7 +346,7 @@ export default function WatchlistPage() {
         event_type: newStatus === 'active' ? 'enabled' : 'disabled',
         details: { reason: 'manual' },
       })
-      loadWatchlist()
+      await loadWatchlist()
     } catch (e) {
       console.error('Error updating status:', e)
       setError(e instanceof Error ? e.message : 'Failed to update status')
@@ -379,7 +382,7 @@ export default function WatchlistPage() {
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
-      <Typography variant="h5" fontWeight={700} sx={{ mb: 1.5 }}>Watchlist</Typography>
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>Watchlist</Typography>
 
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
@@ -387,18 +390,25 @@ export default function WatchlistPage() {
         </Alert>
       )}
 
-      {/* Two-column layout: Active alerts 3/4, Recent alerts 1/4 */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '3fr 1fr' }, gap: 2 }}>
-        {/* Left: Active Alerts - Table layout */}
+      {/* Tab header + Add button */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_, v) => setActiveTab(v)}
+          sx={{ flex: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.25, textTransform: 'none', fontSize: '0.85rem' } }}
+        >
+          <Tab label={`Active (${filteredItems.filter(i => i.status === 'active').length})`} />
+          <Tab label={`Recent (${history.length})`} />
+        </Tabs>
+        <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleOpenDialog()} sx={{ textTransform: 'none', flexShrink: 0 }}>
+          Add
+        </Button>
+      </Box>
+
+      {/* Tab 0: Active Alerts */}
+      {activeTab === 0 && (
         <Card>
           <CardContent>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">Active Alerts ({filteredItems.filter(i => i.status === 'active').length})</Typography>
-              <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
-                Add
-              </Button>
-            </Box>
-
             {/* Search Bar */}
             <TextField
               size="small"
@@ -412,7 +422,7 @@ export default function WatchlistPage() {
                   </InputAdornment>
                 ),
               }}
-              sx={{ mb: 2, width: '100%' }}
+              sx={{ mb: 1.5, width: '100%' }}
             />
 
             {items.length === 0 ? (
@@ -526,24 +536,23 @@ export default function WatchlistPage() {
             )}
           </CardContent>
         </Card>
+      )}
 
-        {/* Right: Recent Alerts - Compact */}
+      {/* Tab 1: Recent Alerts */}
+      {activeTab === 1 && (
         <Card>
-          <CardContent sx={{ p: 1.5 }}>
-            <Typography variant="body2" sx={{ fontWeight: 700, mb: 1, fontSize: '0.9rem' }}>
-              Recent ({Math.min(history.length, 10)})
-            </Typography>
+          <CardContent>
             {history.length === 0 ? (
-              <Typography color="textSecondary" variant="caption" sx={{ fontSize: '0.75rem' }}>
-                No recent alerts
+              <Typography color="textSecondary">
+                No alerts triggered yet. When your price alerts fire, they will appear here.
               </Typography>
             ) : (
               <Stack spacing={0} divider={<Divider />}>
-                {history.slice(0, 10).map((h) => (
-                  <Box key={h.id} sx={{ py: 1, px: 0.5, display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
-                    <Typography variant="body2" fontWeight={700} sx={{ minWidth: 40 }}>{h.ticker}</Typography>
-                    <Typography variant="caption" fontFamily="monospace">{h.condition}${h.alert_price.toFixed(0)}</Typography>
-                    <Typography variant="caption" fontWeight={600} color="success.main">${h.price_when_triggered.toFixed(0)}</Typography>
+                {history.map((h) => (
+                  <Box key={h.id} sx={{ py: 1.25, px: 0.5, display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography variant="body2" fontWeight={700} sx={{ minWidth: 50 }}>{h.ticker}</Typography>
+                    <Typography variant="body2" fontFamily="monospace">{h.condition} ${Number(h.alert_price).toFixed(2)}</Typography>
+                    <Typography variant="body2" fontWeight={600} color="success.main">hit ${Number(h.price_when_triggered).toFixed(2)}</Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
                       {relativeDate(h.triggered_at)}
                     </Typography>
@@ -553,7 +562,7 @@ export default function WatchlistPage() {
             )}
           </CardContent>
         </Card>
-      </Box>
+      )}
 
       {/* Add/Edit dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="xs" fullWidth fullScreen={isMobile}>

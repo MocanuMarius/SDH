@@ -1,5 +1,5 @@
 /**
- * Process × Outcome 2×2 scatter (R15 / R19 / R20).
+ * Process × Outcome 2×2 scatter.
  *
  * Plots every scored outcome on a 5x5 grid where the X axis is process score
  * and the Y axis is outcome score. The four quadrants carry different meanings:
@@ -13,7 +13,7 @@
  *
  * Also displays the Pearson correlation between process and outcome scores.
  * Pure luck ≈ 0, pure skill ≈ 1, real investor ≈ 0.3–0.5 with noise.
- * Correlation near 0 means "you're not learning anything" (R20).
+ * Correlation near 0 means "you're not learning anything".
  */
 
 import { Fragment } from 'react'
@@ -99,7 +99,7 @@ export default function ProcessOutcomeScatter({ outcomes }: ProcessOutcomeScatte
     return (
       <Paper variant="outlined" sx={{ p: 3 }}>
         <Typography variant="h6" fontWeight={600} sx={{ mb: 1 }}>
-          Process × Outcome (R15 / R19)
+          Process × Outcome
         </Typography>
         <Typography variant="body2" color="text.secondary">
           No scored outcomes yet. When you close a position and score it 1–5 on process and outcome, this chart will populate.
@@ -115,7 +115,7 @@ export default function ProcessOutcomeScatter({ outcomes }: ProcessOutcomeScatte
           Process × Outcome Scatter
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Every closed position scored on both dimensions. High-process / low-outcome (top-left of the top row) are your BEST trades — the framework's R21 celebration zone.
+          Every closed position scored on both dimensions. High-process / low-outcome (top-left) are your best trades — process was right, celebrate that.
         </Typography>
       </Box>
 

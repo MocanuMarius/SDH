@@ -3,7 +3,7 @@
  *
  * Shows calibration Brier broken out by the 11 deliberate-practice sub-skills,
  * ranked from best to worst. A prominent "weakest sub-skill" nudge surfaces
- * the one you should attack next quarter per R16.
+ * the one you should attack next quarter.
  */
 
 import { useEffect, useState } from 'react'
@@ -102,7 +102,7 @@ export default function PerSubSkillBrier() {
         <Typography variant="body2">
           <strong>Brier per sub-skill:</strong> 0.0 = perfect forecasting, 0.25 ≈ coin-flip, 0.5+ =
           dangerously overconfident. Track these quarterly and spend your next cycle on the weakest
-          sub-skill (R16).
+          sub-skill.
         </Typography>
       </Alert>
 

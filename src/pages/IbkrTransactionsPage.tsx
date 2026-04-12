@@ -91,9 +91,6 @@ export default function IbkrTransactionsPage() {
 
   return (
     <Box>
-      <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
-        IBKR
-      </Typography>
       <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
         Broker transaction history and activity insights from your IBKR statements. Run <code>npm run parse:ibkr</code> after adding new HTML to <code>data/private/ibkr-raw/</code>.
       </Typography>

@@ -42,12 +42,15 @@ interface InsertDecisionBlockDialogProps {
   open: boolean
   onClose: () => void
   onInsert: (markdown: string) => void
+  /** When true, render form fields only (no dialog wrapper). Used for inline embedding. */
+  inline?: boolean
 }
 
 export default function InsertDecisionBlockDialog({
   open,
   onClose,
   onInsert,
+  inline = false,
 }: InsertDecisionBlockDialogProps) {
   const [type, setType] = useState<string>('buy')
   const [ticker, setTicker] = useState('')
@@ -102,6 +105,156 @@ export default function InsertDecisionBlockDialog({
     setType('buy')
   }
 
+  const fields = (
+    <Stack spacing={2} sx={{ pt: 0.5 }}>
+      <FormControl size="small" fullWidth>
+        <InputLabel>Type</InputLabel>
+        <Select
+          value={type}
+          label="Type"
+          onChange={(e) => setType(e.target.value)}
+          renderValue={(v) => <DecisionChip type={v} size="small" sx={{ pointerEvents: 'none' }} />}
+        >
+          {ACTION_TYPES.map((t) => (
+            <MenuItem key={t} value={t}>
+              <DecisionChip type={t} size="small" sx={{ pointerEvents: 'none' }} />
+            </MenuItem>
+          ))}
+          {customTypes.length > 0 && [
+            <Divider key="div" />,
+            ...customTypes.map((ct) => (
+              <MenuItem key={ct.id} value={ct.id}>
+                <DecisionChip type={ct.id} size="small" sx={{ pointerEvents: 'none' }} />
+              </MenuItem>
+            )),
+          ]}
+        </Select>
+      </FormControl>
+
+      <TickerAutocomplete
+        value={ticker}
+        onChange={setTicker}
+        label="Ticker"
+        placeholder="$SYMBOL or type company/symbol"
+        size="small"
+        onSelectResult={handleTickerSelect}
+      />
+
+      <Box>
+        <TextField
+          size="small"
+          label="Decision date"
+          type="date"
+          value={action_date}
+          onChange={(e) => setActionDate(e.target.value)}
+          InputLabelProps={{ shrink: true }}
+          fullWidth
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start" sx={{ mr: 0, '& .MuiSvgIcon-root': { fontSize: 18 } }}>
+                <CalendarTodayIcon color="action" />
+              </InputAdornment>
+            ),
+          }}
+        />
+        <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Today', fn: () => getToday() },
+            { label: 'Yesterday', fn: () => daysAgo(1) },
+            { label: '1 week ago', fn: () => daysAgo(7) },
+            { label: '2 weeks ago', fn: () => daysAgo(14) },
+            { label: '1 month ago', fn: () => daysAgo(30) },
+          ].map(({ label, fn }) => (
+            <Button key={label} size="small" variant="outlined" onClick={() => setActionDate(fn())} sx={{ textTransform: 'none' }}>
+              {label}
+            </Button>
+          ))}
+        </Box>
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <TextField
+          size="small"
+          label="Price"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder="75.40"
+          sx={{ flex: 1 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start" sx={{ '& .MuiSvgIcon-root': { fontSize: 18 } }}>
+                <AttachMoneyIcon color="action" />
+              </InputAdornment>
+            ),
+          }}
+        />
+        <TextField
+          size="small"
+          label="Currency"
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value)}
+          placeholder="USD"
+          sx={{ width: 90 }}
+        />
+      </Box>
+
+      <TextField
+        size="small"
+        label="Shares (optional)"
+        type="number"
+        value={shares}
+        onChange={(e) => setShares(e.target.value === '' ? '' : Number(e.target.value))}
+        inputProps={{ min: 0, step: 1 }}
+      />
+
+      <ReasonField
+        value={reason}
+        onChange={setReason}
+        label="Reason"
+        placeholder="e.g. Cheap, Too expensive, or pick / type"
+        size="small"
+        fullWidth
+        showManagePresets
+      />
+
+      <TextField
+        size="small"
+        label="Notes / expanded reasoning"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        multiline
+        minRows={2}
+      />
+
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Button
+          type={inline ? 'button' : 'submit'}
+          variant="contained"
+          size="small"
+          sx={{ flex: 1 }}
+          onClick={inline ? (e) => handleSubmit(e as unknown as React.FormEvent) : undefined}
+        >
+          Insert into body
+        </Button>
+        {inline && (
+          <Button onClick={onClose} variant="outlined" size="small">
+            Cancel
+          </Button>
+        )}
+      </Box>
+    </Stack>
+  )
+
+  // Inline mode: render fields directly without dialog wrapper (no <form> to avoid nesting)
+  if (inline) {
+    return (
+      <Box sx={{ p: 1.5 }}>
+        {fields}
+      </Box>
+    )
+  }
+
+  // Dialog mode: wrap in BottomSheet
   return (
     <BottomSheet open={open} onClose={onClose} maxWidth="sm">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1.5 }}>
@@ -110,133 +263,8 @@ export default function InsertDecisionBlockDialog({
       </DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent>
-          <Stack spacing={2.5} sx={{ pt: 0.5 }}>
-            <FormControl size="small" fullWidth>
-              <InputLabel>Type</InputLabel>
-              <Select
-                value={type}
-                label="Type"
-                onChange={(e) => setType(e.target.value)}
-                renderValue={(v) => <DecisionChip type={v} size="small" sx={{ pointerEvents: 'none' }} />}
-              >
-                {ACTION_TYPES.map((t) => (
-                  <MenuItem key={t} value={t}>
-                    <DecisionChip type={t} size="small" sx={{ pointerEvents: 'none' }} />
-                  </MenuItem>
-                ))}
-                {customTypes.length > 0 && [
-                  <Divider key="div" />,
-                  ...customTypes.map((ct) => (
-                    <MenuItem key={ct.id} value={ct.id}>
-                      <DecisionChip type={ct.id} size="small" sx={{ pointerEvents: 'none' }} />
-                    </MenuItem>
-                  )),
-                ]}
-              </Select>
-            </FormControl>
-
-            <TickerAutocomplete
-              value={ticker}
-              onChange={setTicker}
-              label="Ticker"
-              placeholder="$SYMBOL or type company/symbol"
-              size="small"
-              onSelectResult={handleTickerSelect}
-            />
-
-            <Box>
-              <TextField
-                size="small"
-                label="Decision date"
-                type="date"
-                value={action_date}
-                onChange={(e) => setActionDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start" sx={{ mr: 0, '& .MuiSvgIcon-root': { fontSize: 18 } }}>
-                      <CalendarTodayIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
-                {[
-                  { label: 'Today', fn: () => getToday() },
-                  { label: 'Yesterday', fn: () => daysAgo(1) },
-                  { label: '1 week ago', fn: () => daysAgo(7) },
-                  { label: '2 weeks ago', fn: () => daysAgo(14) },
-                  { label: '1 month ago', fn: () => daysAgo(30) },
-                ].map(({ label, fn }) => (
-                  <Button key={label} size="small" variant="outlined" onClick={() => setActionDate(fn())} sx={{ textTransform: 'none' }}>
-                    {label}
-                  </Button>
-                ))}
-              </Box>
-            </Box>
-
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <TextField
-                size="small"
-                label="Price"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="75.40"
-                sx={{ flex: 1 }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start" sx={{ '& .MuiSvgIcon-root': { fontSize: 18 } }}>
-                      <AttachMoneyIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <TextField
-                size="small"
-                label="Currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                placeholder="USD"
-                sx={{ width: 90 }}
-              />
-            </Box>
-
-            <TextField
-              size="small"
-              label="Shares (optional)"
-              type="number"
-              value={shares}
-              onChange={(e) => setShares(e.target.value === '' ? '' : Number(e.target.value))}
-              inputProps={{ min: 0, step: 1 }}
-            />
-
-            <ReasonField
-              value={reason}
-              onChange={setReason}
-              label="Reason"
-              placeholder="e.g. Cheap, Too expensive, or pick / type"
-              size="small"
-              fullWidth
-              showManagePresets
-            />
-
-            <TextField
-              size="small"
-              label="Notes / expanded reasoning"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              multiline
-              minRows={2}
-            />
-          </Stack>
+          {fields}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} variant="outlined">Cancel</Button>
-          <Button type="submit" variant="contained">
-            Insert into body
-          </Button>
-        </DialogActions>
       </form>
     </BottomSheet>
   )

@@ -19,9 +19,9 @@ export interface OutcomeAnalytics {
   holdingDays: number
   processQuality: 'good' | 'bad' | null
   outcomeQuality: 'good' | 'bad' | null
-  /** R19: 1-5 process score (research, reasoning, bias-awareness, rule-following) */
+  /** 1-5 process score (research, reasoning, bias-awareness, rule-following) */
   processScore: number | null
-  /** R19: 1-5 outcome score (did the trade actually make money) */
+  /** 1-5 outcome score (did the trade actually make money) */
   outcomeScore: number | null
   driver: 'thesis' | 'other' | null // what drove the result?
   errorTypes: ErrorType[] // analytical, informational, behavioral, sizing, timing
