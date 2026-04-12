@@ -1,0 +1,59 @@
+# Watchlist Price Monitor — runs every 5 minutes via GitHub Actions.
+#
+# Checks Yahoo Finance prices against your Supabase watchlist_items,
+# sends Telegram alerts when conditions are met, and auto-rearms targets.
+#
+# Requires these GitHub repo secrets:
+#   SUPABASE_URL          — your Supabase project URL
+#   SUPABASE_ANON_KEY     — your Supabase anon/public key
+#   TELEGRAM_BOT_TOKEN    — Telegram bot token from @BotFather
+#   TELEGRAM_CHAT_ID      — your Telegram chat ID
+#
+# The script exits after one pass (no setInterval). GitHub runs a fresh
+# instance every 5 minutes. Free tier supports this.
+
+name: Watchlist Monitor
+
+on:
+  schedule:
+    # Every 5 minutes, 7 days a week. The script fetches the last known price
+    # from Yahoo regardless of market state, so alerts fire anytime.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    # Manual trigger button in the GitHub Actions UI for testing.
+
+jobs:
+  check-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+
+        run: npm install --legacy-peer-deps --ignore-scripts 2>/dev/null || npm install --legacy-peer-deps
+
+      - name: Run watchlist check (single pass)
+
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          # The monitor script runs a continuous loop with setInterval.
+          # For GitHub Actions we only want ONE pass, so we use a small
+          # wrapper that imports the check function and exits.
+          node -e "
+            import('./scripts/watchlist-monitor-single.mjs')
+              .then(m => m.default())
+              .then(() => process.exit(0))
+              .catch(e => { console.error(e); process.exit(1) })
+          "

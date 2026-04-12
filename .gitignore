@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+*.local
+
+# Env (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Private data (never commit)
+data/private/
+data/private/**
+data/*.ibkr
+data/*-activity.json
+data/*-statements*
+data/tmp/
+data/generated/
+
+# IBKR financial data — contains real account IDs and trade history
+public/data/ibkr-activity-summary.json
+data/parsed-sample-trades.json
+
+# Test data with secrets
+data/test/secrets/
+data/test/*-auth*
+
+# LLM / Claude artifacts and one-time planning docs (not app code)
+docs/
+FIX_PLAN.md
+SKILL_ENGINEERING_GUIDE.md
+WATCHLIST_SETUP.md
+.cursorrules
+.claude/
+
+# Reference files (large JPGs/PDFs from articles — not app assets)
+data/public/reference/
+
+# Public markdown files (internal working docs, not served by the app)
+public/deliberate-practice-framework.md
+public/remaining-ux-suggestions.md
+
+# Test reference data (Journalytic dumps, browser snapshots)
+data/test/
+start-dev.sh
+requirements/
