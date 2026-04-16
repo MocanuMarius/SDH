@@ -1,4 +1,4 @@
-import { Box, Tab, Tabs, Paper, Typography, FormControl, InputLabel, Select, MenuItem, useMediaQuery } from '@mui/material'
+import { Box, Tab, Tabs, Paper, Typography, FormControl, InputLabel, Select, MenuItem, useMediaQuery, Tooltip } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { useState } from 'react'
 import PerSubSkillBrier from '../components/skill-engineering/PerSubSkillBrier'
@@ -11,12 +11,28 @@ import ErrorBoundary from '../components/ErrorBoundary'
 // Tab order — "Per Sub-Skill Brier" is now tab 0 (the old "Calibration & Brier Score"
 // component was a never-finished scaffold that used a random placeholder for outcomes
 // and queried a nonexistent user_id column; deleted in favour of this working version).
-const TAB_LABELS = [
-  'Per Sub-Skill Brier',
-  'Error Taxonomy',
-  'Base Rate Database',
-  'Case Library',
+// Each entry: short label shown on the tab + plain-language description shown
+// on hover. The labels themselves stay terse so the scrollable Tabs row fits on
+// mobile; the tooltips give first-time users an actual handle on what's inside.
+const TABS: { label: string; help: string }[] = [
+  {
+    label: 'Per Sub-Skill Brier',
+    help: 'Brier score = how well your prediction probabilities match reality. Lower is better. Broken down per sub-skill (timing, valuation, etc.) so you can see where you\'re calibrated and where you\'re off.',
+  },
+  {
+    label: 'Error Taxonomy',
+    help: 'When you record an outcome you can tag the error type (e.g. "anchored to entry", "ignored kill criteria"). This panel ranks the errors that cost you the most so you know what to drill on next.',
+  },
+  {
+    label: 'Base Rate Database',
+    help: 'Reference rates from your own history: how often a Buy reaches +20% before a stop, how often a Pass would have paid off, etc. Use as a sanity check before making the next call.',
+  },
+  {
+    label: 'Case Library',
+    help: 'Closed positions with a written post-mortem. Sorted by lesson-richness so you can re-read your most instructive trades when the same setup comes up again.',
+  },
 ]
+const TAB_LABELS = TABS.map((t) => t.label)
 
 interface TabPanelProps {
   children?: React.ReactNode
@@ -83,13 +99,14 @@ export default function SkillEngineeringDashboard() {
             variant="scrollable"
             scrollButtons="auto"
           >
-            {TAB_LABELS.map((label, i) => (
-              <Tab
-                key={label}
-                label={label}
-                id={`skill-tab-${i}`}
-                aria-controls={`skill-tabpanel-${i}`}
-              />
+            {TABS.map((t, i) => (
+              <Tooltip key={t.label} title={t.help} arrow placement="bottom">
+                <Tab
+                  label={t.label}
+                  id={`skill-tab-${i}`}
+                  aria-controls={`skill-tabpanel-${i}`}
+                />
+              </Tooltip>
             ))}
           </Tabs>
         </Paper>

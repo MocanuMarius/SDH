@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import {
   Box,
@@ -16,9 +16,7 @@ import {
   Button,
 } from '@mui/material'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
-import { listEntries } from '../services/entriesService'
-import { listActions } from '../services/actionsService'
-import { listOutcomes } from '../services/outcomesService'
+import { useEntries, useActions, useOutcomes } from '../hooks/queries'
 import { isAutomatedEntry } from '../utils/entryTitle'
 import type { Entry, Action, Outcome } from '../types/database'
 
@@ -32,72 +30,44 @@ interface LongTermDecision {
 }
 
 export default function LongTermDecisionsPage() {
-  const [decisions, setDecisions] = useState<LongTermDecision[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // ─── Server data via react-query (auto-refreshes after mutations elsewhere) ───
+  const entriesQ = useEntries()
+  const actionsQ = useActions()
+  const outcomesQ = useOutcomes()
+  const loading = entriesQ.isLoading || actionsQ.isLoading || outcomesQ.isLoading
+  const queryError = entriesQ.error || actionsQ.error || outcomesQ.error
+  const error = queryError ? (queryError as Error).message : null
+  const [, setError] = useState<string | null>(null) // kept for any local error needs (unused now)
+  void setError
 
-  useEffect(() => {
-    loadDecisions()
-  }, [])
-
-  async function loadDecisions() {
-    setLoading(true)
-    setError(null)
-    try {
-      const [entries, actions, outcomes] = await Promise.all([
-        listEntries(),
-        listActions(),
-        listOutcomes(),
-      ])
-
-      // Filter out automated IBKR entries + only keep entries with a decision horizon
-      const entriesWithHorizon = entries.filter((e) => e.decision_horizon && !isAutomatedEntry(e))
-
-      // Build lookup maps
-      const actionMap = new Map(actions.map((a: Action) => [a.entry_id, a]))
-      const outcomeByActionId = new Map(outcomes.map((o: Outcome) => [o.action_id, o]))
-
-      // Create decision records
-      const decisionsData: LongTermDecision[] = entriesWithHorizon.map((entry) => {
-        const action = actionMap.get(entry.id) || null
-        const outcome = action ? outcomeByActionId.get(action.id) || null : null
-        const horizonDate = new Date(entry.decision_horizon!)
-        const today = new Date()
-        const daysUntilHorizon = Math.floor((horizonDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-
-        let status: 'overdue' | 'upcoming' | 'resolved'
-        if (outcome) {
-          status = 'resolved'
-        } else if (daysUntilHorizon < 0) {
-          status = 'overdue'
-        } else {
-          status = 'upcoming'
-        }
-
-        return {
-          entry,
-          action,
-          outcome,
-          daysUntilHorizon,
-          status,
-          isResolved: !!outcome,
-        }
-      })
-
-      // Sort: overdue first, then by days until horizon
-      decisionsData.sort((a, b) => {
-        if (a.status === 'overdue' && b.status !== 'overdue') return -1
-        if (a.status !== 'overdue' && b.status === 'overdue') return 1
-        return a.daysUntilHorizon - b.daysUntilHorizon
-      })
-
-      setDecisions(decisionsData)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load decisions')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const decisions = useMemo<LongTermDecision[]>(() => {
+    const entries = entriesQ.data ?? []
+    const actions = actionsQ.data ?? []
+    const outcomes = outcomesQ.data ?? []
+    // Filter out automated IBKR entries + only keep entries with a decision horizon
+    const entriesWithHorizon = entries.filter((e) => e.decision_horizon && !isAutomatedEntry(e))
+    const actionMap = new Map(actions.map((a: Action) => [a.entry_id, a]))
+    const outcomeByActionId = new Map(outcomes.map((o: Outcome) => [o.action_id, o]))
+    const data: LongTermDecision[] = entriesWithHorizon.map((entry: Entry) => {
+      const action = actionMap.get(entry.id) || null
+      const outcome = action ? outcomeByActionId.get(action.id) || null : null
+      const horizonDate = new Date(entry.decision_horizon!)
+      const today = new Date()
+      const daysUntilHorizon = Math.floor((horizonDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      let status: 'overdue' | 'upcoming' | 'resolved'
+      if (outcome) status = 'resolved'
+      else if (daysUntilHorizon < 0) status = 'overdue'
+      else status = 'upcoming'
+      return { entry, action, outcome, daysUntilHorizon, status, isResolved: !!outcome }
+    })
+    // Sort: overdue first, then by days until horizon
+    data.sort((a, b) => {
+      if (a.status === 'overdue' && b.status !== 'overdue') return -1
+      if (a.status !== 'overdue' && b.status === 'overdue') return 1
+      return a.daysUntilHorizon - b.daysUntilHorizon
+    })
+    return data
+  }, [entriesQ.data, actionsQ.data, outcomesQ.data])
 
   if (loading) {
     return (
@@ -135,7 +105,7 @@ export default function LongTermDecisionsPage() {
   return (
     <Box>
       <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
-        Decisions
+        Long-term horizons
       </Typography>
 
       {/* Summary Cards */}

@@ -25,13 +25,12 @@ import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
 import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined'
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone'
 import RefreshIcon from '@mui/icons-material/Refresh'
-import { listReminders, completeReminder, createReminder } from '../services/remindersService'
-import { listActions } from '../services/actionsService'
+import { completeReminder, createReminder } from '../services/remindersService'
+import { useReminders, useActions, usePassedDueForReview, useInvalidate } from '../hooks/queries'
 import { getEntry } from '../services/entriesService'
 import { getOutcomesForActionIds, createOutcome } from '../services/outcomesService'
 import OutcomeFormDialog from './OutcomeFormDialog'
 import {
-  listPassedDueForReview,
   recordPassReview,
   snoozePassReview,
 } from '../services/passedService'
@@ -226,6 +225,7 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
 
 export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDrawerProps) {
   const { user } = useAuth()
+  const invalidate = useInvalidate()
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [entryTitles, setEntryTitles] = useState<Record<string, string>>({})
   const [ideaAlerts, setIdeaAlerts] = useState<IdeaAlert[]>([])
@@ -241,40 +241,54 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
   const [snoozingIdeaTicker, setSnoozingIdeaTicker] = useState<string | null>(null)
   const [resolveTarget, setResolveTarget] = useState<{ actionId: string; ticker: string } | null>(null)
 
+  // ─── Source data via react-query — auto-refreshes after any mutation that ──
+  // ─── invalidates reminders / passed / actions anywhere in the app.        ──
+  const remindersQ = useReminders(true)
+  const passedDueQ = usePassedDueForReview()
+  const actionsQ = useActions({ limit: 2000 })
+
   const load = () => {
     if (!open) return
     setLoading(true)
 
-    // Fire passed-review fetch in parallel with the main data load. It's a
-    // small table (<100 rows typically), doesn't block the main skeleton.
-    listPassedDueForReview()
-      .then((due) => {
-        // Enrich each with entry + current price from the chart API.
-        // We cap at 10 reviews per open to keep chart calls reasonable.
-        const capped = due.slice(0, 10)
-        return Promise.all(
-          capped.map((p) =>
-            fetchChartData(p.ticker, '1y')
-              .then((data): PassedWithPrice => {
-                const entryPrice = findPriceAtDate(data, p.passed_date)
-                const currentPrice = data?.prices?.[data.prices.length - 1] ?? null
-                const returnSincePass =
-                  entryPrice != null && currentPrice != null && entryPrice > 0
-                    ? ((currentPrice - entryPrice) / entryPrice) * 100
-                    : null
-                return { ...p, entryPrice, currentPrice, returnSincePass }
-              })
-              .catch((): PassedWithPrice => ({ ...p, entryPrice: null, currentPrice: null, returnSincePass: null })),
-          ),
-        )
-      })
-      .then((enriched) => setPassReviews(enriched))
-      .catch(() => setPassReviews([]))
+    // Enrich passed-due-for-review with current price + return from the chart API.
+    // We cap at 10 reviews per open to keep chart calls reasonable.
+    const due = passedDueQ.data ?? []
+    {
+      const capped = due.slice(0, 10)
+      Promise.all(
+        capped.map((p) =>
+          fetchChartData(p.ticker, '1y')
+            .then((data): PassedWithPrice => {
+              const entryPrice = findPriceAtDate(data, p.passed_date)
+              const currentPrice = data?.prices?.[data.prices.length - 1] ?? null
+              const returnSincePass =
+                entryPrice != null && currentPrice != null && entryPrice > 0
+                  ? ((currentPrice - entryPrice) / entryPrice) * 100
+                  : null
+              return { ...p, entryPrice, currentPrice, returnSincePass }
+            })
+            .catch((): PassedWithPrice => ({ ...p, entryPrice: null, currentPrice: null, returnSincePass: null })),
+        ),
+      )
+        .then((enriched) => setPassReviews(enriched))
+        .catch(() => setPassReviews([]))
+    }
 
-    Promise.all([listReminders(true), listActions({ limit: 2000 })])
+    Promise.resolve([remindersQ.data ?? [], actionsQ.data ?? []] as const)
       .then(async ([remList, actions]) => {
+        // Dedupe: same entry/ticker + same due date + same type appearing twice
+        // is almost always a double-tap during creation. Keep the earliest by id
+        // so "snooze" / "dismiss" land on a stable target.
+        const seen = new Set<string>()
+        const deduped = remList.filter((r) => {
+          const key = `${r.entry_id ?? ''}|${(r.ticker ?? '').toUpperCase()}|${r.reminder_date}|${r.type}`
+          if (seen.has(key)) return false
+          seen.add(key)
+          return true
+        })
         // Sort reminders: overdue first, then by due date ascending
-        const sorted = [...remList].sort((a, b) => a.reminder_date.localeCompare(b.reminder_date))
+        const sorted = [...deduped].sort((a, b) => a.reminder_date.localeCompare(b.reminder_date))
         setReminders(sorted)
 
         const entryIds = [...new Set(sorted.filter((r) => r.entry_id).map((r) => r.entry_id!))]
@@ -383,15 +397,17 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
 
   useEffect(() => {
     load()
-    // Intentionally only re-load on drawer open/close.
+    // Re-derive whenever the drawer opens OR the underlying react-query
+    // datasets change (e.g. add a Pass elsewhere → passed-due refetches → drawer re-renders).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, remindersQ.dataUpdatedAt, passedDueQ.dataUpdatedAt, actionsQ.dataUpdatedAt])
 
   const handleDismissForever = async (id: string) => {
     setDismissingId(id)
     try {
       await completeReminder(id)
       setReminders((prev) => prev.filter((r) => r.id !== id))
+      invalidate.reminders()
       setDismissConfirmId(null)
       onRefresh?.()
     } finally {
@@ -417,6 +433,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
           a.reminder_date.localeCompare(b.reminder_date)
         )
       )
+      invalidate.reminders()
       onRefresh?.()
     } finally {
       setSnoozingId(null)
@@ -436,6 +453,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
         ticker,
       })
       setSnoozedIdeaTickers((prev) => new Set(prev).add(ticker))
+      invalidate.reminders()
       onRefresh?.()
     } finally {
       setSnoozingIdeaTicker(null)
@@ -617,6 +635,16 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
                             >
                               <RelativeDate date={r.reminder_date} /> · {typeLabel(r.type)}
                             </Typography>
+                            {r.note?.trim() && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                display="block"
+                                sx={{ fontSize: '0.7rem', fontStyle: 'italic', mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                              >
+                                "{r.note.trim()}"
+                              </Typography>
+                            )}
                           </Box>
                         </Box>
                       </SwipeableCard>
@@ -656,13 +684,13 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                               <Chip size="small" label={getTickerDisplayLabel(a.ticker)} clickable onClick={() => { onClose(); window.location.href = `/ideas/${encodeURIComponent(a.ticker)}` }} sx={{ fontWeight: 700, height: 22 }} />
                               {a.company && (
-                                <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 100 }}>
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 160, flex: 1 }}>
                                   {a.company}
                                 </Typography>
                               )}
                             </Box>
                             <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.7rem' }}>
-                              Last: <RelativeDate date={a.lastDate} /> · {a.days}d ago
+                              Last entry <RelativeDate date={a.lastDate} />
                             </Typography>
                           </Box>
                           {/* Right-aligned return columns */}
@@ -766,14 +794,11 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
 }
 
 export function useActivityBadge(): { count: number; refresh: () => void } {
-  const [count, setCount] = useState(0)
-  const refresh = () => {
-    listReminders(true).then((reminders) => {
-      const today = new Date().toISOString().slice(0, 10)
-      const due = reminders.filter((r) => r.reminder_date <= today).length
-      setCount(due)
-    }).catch(() => {})
-  }
-  useEffect(() => { refresh() }, [])
+  // Reads from the shared react-query cache, so any invalidate.reminders()
+  // call anywhere in the app re-counts the badge automatically.
+  const remindersQ = useReminders(true)
+  const today = new Date().toISOString().slice(0, 10)
+  const count = (remindersQ.data ?? []).filter((r) => r.reminder_date <= today).length
+  const refresh = () => { void remindersQ.refetch() }
   return { count, refresh }
 }

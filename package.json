@@ -27,6 +27,7 @@
     "@mui/material": "^6.3.0",
     "@mui/x-data-grid": "^7.29.12",
     "@supabase/supabase-js": "^2.47.10",
+    "@tanstack/react-query": "^5.99.0",
     "@visx/axis": "^3.6.0",
     "@visx/brush": "^3.12.0",
     "@visx/curve": "^3.12.0",

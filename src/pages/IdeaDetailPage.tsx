@@ -22,8 +22,9 @@ import {
 } from '@mui/material'
 import TimelineIcon from '@mui/icons-material/Timeline'
 import ValuationWidget from '../components/ValuationWidget'
-import { listActions, type ActionWithEntry } from '../services/actionsService'
+import { type ActionWithEntry } from '../services/actionsService'
 import { fetchChartData } from '../services/chartApiService'
+import { useActions } from '../hooks/queries'
 import TickerLinks from '../components/TickerLinks'
 import TickerTimelineChart from '../components/TickerTimelineChart'
 import RelativeDate from '../components/RelativeDate'
@@ -64,12 +65,10 @@ export default function IdeaDetailPage() {
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const chartHeight = isMobile ? 280 : 380
-  const [actions, setActions] = useState<ActionWithEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [chartData, setChartData] = useState<{ dates: string[]; prices: number[] } | null>(null)
   const [chartLoading, setChartLoading] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [counterfactual, setCounterfactual] = useState<{
     totalReturnPct: number | null
     hypotheticalEnd: number | null
@@ -77,32 +76,20 @@ export default function IdeaDetailPage() {
     loading: boolean
   }>({ totalReturnPct: null, hypotheticalEnd: null, cagr: null, loading: false })
 
-  useEffect(() => {
-    if (!ticker) return
-    let cancelled = false
-    setLoading(true)
+  // ─── react-query: shared actions cache, auto-refreshes everywhere ──
+  const allActionsQ = useActions({ limit: 500 })
+  const loading = allActionsQ.isLoading
+  const queryError = allActionsQ.error ? (allActionsQ.error as Error).message : null
+  const actions: ActionWithEntry[] = useMemo(() => {
+    if (!ticker) return []
     const companyKey = normalizeTickerToCompany(decodeURIComponent(ticker))
-    listActions({ limit: 500 })
-      .then((data) => {
-        if (!cancelled && companyKey) {
-          const forCompany = (data || []).filter((a) =>
-            normalizeTickerToCompany(a.ticker) === companyKey &&
-            !(a.entry && isAutomatedEntry(a.entry as { tags: string[]; author: string }))
-          )
-          setActions(forCompany)
-        } else if (!cancelled) {
-          setActions([])
-          setError(`Invalid ticker: ${ticker}`)
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e?.message ?? 'Failed to load')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [ticker])
+    if (!companyKey) return []
+    return (allActionsQ.data ?? []).filter((a) =>
+      normalizeTickerToCompany(a.ticker) === companyKey &&
+      !(a.entry && isAutomatedEntry(a.entry as { tags: string[]; author: string }))
+    )
+  }, [allActionsQ.data, ticker])
+  const errorMessage = error ?? queryError ?? (ticker && !loading && !normalizeTickerToCompany(decodeURIComponent(ticker)) ? `Invalid ticker: ${ticker}` : null)
 
   const passActions = useMemo(() => actions.filter((a) => a.type === 'pass'), [actions])
   const firstPassDate = useMemo(
@@ -190,10 +177,10 @@ export default function IdeaDetailPage() {
     )
   }
 
-  if (error) {
+  if (errorMessage) {
     return (
       <Box>
-        <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>
+        <Alert severity="error" onClose={() => setError(null)}>{errorMessage}</Alert>
         <Button component={RouterLink} to="/ideas" sx={{ mt: 2 }}>Back to Ideas</Button>
       </Box>
     )

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Box,
@@ -12,15 +12,12 @@ import {
 import SearchIcon from '@mui/icons-material/Search'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams, GridRowParams } from '@mui/x-data-grid'
-import { listActions, type ActionWithEntry } from '../services/actionsService'
-import { listEntries } from '../services/entriesService'
-import { listPassed } from '../services/passedService'
 import { normalizeTickerToCompany } from '../utils/tickerCompany'
 import { isAutomatedEntry } from '../utils/entryTitle'
 import RelativeDate from '../components/RelativeDate'
 import DecisionChip from '../components/DecisionChip'
-import type { Passed } from '../types/database'
 import { useTickerChart } from '../contexts/TickerChartContext'
+import { useActions, useEntries, usePassed } from '../hooks/queries'
 
 interface IdeaRow {
   id: string // DataGrid requires an id field
@@ -37,31 +34,25 @@ interface IdeaRow {
 export default function IdeasPage() {
   const navigate = useNavigate()
   const { openChart } = useTickerChart()
-  const [actions, setActions] = useState<ActionWithEntry[]>([])
-  const [passedList, setPassedList] = useState<Passed[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    Promise.all([listActions({ limit: 5000 }), listPassed(), listEntries({ limit: 10000 })])
-      .then(([a, p, entries]) => {
-        if (cancelled) return
-        // Only show actions from real Journalytic entries, not auto-created IBKR ones.
-        const autoIds = new Set((entries ?? []).filter(isAutomatedEntry).map((e) => e.id))
-        setActions(a.filter((act) => !autoIds.has(act.entry_id)))
-        setPassedList(p ?? [])
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e?.message ?? 'Failed to load ideas')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [])
+  // ─── react-query: actions/passed/entries are shared across pages ──
+  const actionsQ = useActions({ limit: 5000 })
+  const passedQ = usePassed()
+  const entriesQ = useEntries({ limit: 10000 })
+  const loading = actionsQ.isLoading || passedQ.isLoading || entriesQ.isLoading
+  const queryError = actionsQ.error || passedQ.error || entriesQ.error
+  const errorMessage = error ?? (queryError ? (queryError as Error).message : null)
+
+  // Filter out actions from auto-imported entries — same logic as before.
+  const actions = useMemo(() => {
+    const all = actionsQ.data ?? []
+    const entries = entriesQ.data ?? []
+    const autoIds = new Set(entries.filter(isAutomatedEntry).map((e) => e.id))
+    return all.filter((act) => !autoIds.has(act.entry_id))
+  }, [actionsQ.data, entriesQ.data])
+  const passedList = passedQ.data ?? []
 
   const ideas = useMemo(() => {
     const byCompany: Record<string, {
@@ -191,9 +182,9 @@ export default function IdeasPage() {
         }}
       />
 
-      {error && (
+      {errorMessage && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-          {error}
+          {errorMessage}
         </Alert>
       )}
 

@@ -18,8 +18,9 @@ import {
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams, GridColumnVisibilityModel } from '@mui/x-data-grid'
-import { listActions, type ActionWithEntry } from '../services/actionsService'
-import { getOutcomesForActionIds, createOutcome } from '../services/outcomesService'
+import { type ActionWithEntry } from '../services/actionsService'
+import { createOutcome } from '../services/outcomesService'
+import { useActions, useOutcomesByActionIds, useInvalidate } from '../hooks/queries'
 import { fetchChartData } from '../services/chartApiService'
 import MarkdownRender from '../components/MarkdownRender'
 import TickerLinks from '../components/TickerLinks'
@@ -43,10 +44,7 @@ function parsePrice(price: string | null | undefined): number | null {
 
 export default function ActionsPage() {
   const { openChart } = useTickerChart()
-  const [actions, setActions] = useState<ActionWithEntry[]>([])
-  const [outcomesByActionId, setOutcomesByActionId] = useState<Record<string, Outcome>>({})
   const [currentPriceByTicker, setCurrentPriceByTicker] = useState<Record<string, number>>({})
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hideAutomated, setHideAutomated] = useState(true)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -66,35 +64,22 @@ export default function ActionsPage() {
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 })
   const theme = useTheme()
   const isMobile = !useMediaQuery(theme.breakpoints.up('md'))
+  const invalidate = useInvalidate()
 
+  const normalizedTickerFilter = tickerFilter.trim() ? normalizeTicker(tickerFilter.trim()) : undefined
+  const actionsQ = useActions({ type: typeFilter || undefined, ticker: normalizedTickerFilter, limit: 500 })
+  const actions: ActionWithEntry[] = actionsQ.data ?? []
+  const outcomesQ = useOutcomesByActionIds(actions.map((a) => a.id))
+  const outcomesByActionId = useMemo(() => {
+    const map: Record<string, Outcome> = {}
+    ;(outcomesQ.data ?? []).forEach((o) => { map[o.action_id] = o })
+    return map
+  }, [outcomesQ.data])
+  const loading = actionsQ.isLoading
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    const normalizedTickerFilter = tickerFilter.trim() ? normalizeTicker(tickerFilter.trim()) : undefined
-
-    // Parallel fetch: actions + (once we have IDs) outcomes
-    listActions({ type: typeFilter || undefined, ticker: normalizedTickerFilter, limit: 500 })
-      .then(async (data) => {
-        if (cancelled) return
-        setActions(data)
-        if (data.length > 0) {
-          const outcomes = await getOutcomesForActionIds(data.map((a) => a.id))
-          if (!cancelled) {
-            const map: Record<string, Outcome> = {}
-            outcomes.forEach((o) => { map[o.action_id] = o })
-            setOutcomesByActionId(map)
-          }
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e?.message ?? 'Failed to load actions')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    setPaginationModel((prev) => ({ ...prev, page: 0 }))
-    return () => { cancelled = true }
-  }, [typeFilter, tickerFilter])
+    if (actionsQ.error) setError((actionsQ.error as Error).message ?? 'Failed to load actions')
+  }, [actionsQ.error])
+  useEffect(() => { setPaginationModel((prev) => ({ ...prev, page: 0 })) }, [typeFilter, tickerFilter])
 
   // Fetch current prices — parallel Promise.all (cache in chartApiService prevents re-fetching)
   const tickersToFetch = useMemo(
@@ -196,15 +181,33 @@ export default function ActionsPage() {
         renderCell: (p: GridRenderCellParams<Row>) => <RelativeDate date={p.value as string} />,
       },
       {
-        field: 'currentPrice',
-        headerName: 'Current price',
-        width: 120,
+        field: 'decisionPrice',
+        headerName: 'Price',
+        width: 100,
         renderCell: (p: GridRenderCellParams<Row>) =>
           p.value != null ? (
-            <Typography variant="body2">{(p.value as number).toFixed(2)}</Typography>
+            <Typography variant="body2" fontWeight={500}>
+              {(p.value as number).toFixed(2)}
+              {p.row.currency ? <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.25 }}>{p.row.currency}</Typography> : null}
+            </Typography>
           ) : (
             <Typography variant="caption" color="text.secondary">—</Typography>
           ),
+      },
+      {
+        field: 'currentPrice',
+        headerName: 'Current price',
+        width: 120,
+        renderCell: (p: GridRenderCellParams<Row>) => {
+          if (p.value != null) return <Typography variant="body2">{(p.value as number).toFixed(2)}</Typography>
+          // Distinguish "no chart for this ticker yet" (still fetching) from "no data".
+          // If the ticker key isn't yet in the price cache at all, show a subtle dot.
+          const tickerKey = normalizeTicker(p.row.ticker || '')
+          const inFlight = tickerKey && tickersToFetch.includes(tickerKey) && !(tickerKey in currentPriceByTicker)
+          return inFlight
+            ? <Typography variant="caption" color="text.secondary">…</Typography>
+            : <Typography variant="caption" color="text.secondary">—</Typography>
+        },
       },
       {
         field: 'oppReturnPct',
@@ -279,13 +282,13 @@ export default function ActionsPage() {
 
   // Hide some columns on mobile
   const columnVisibilityModel: GridColumnVisibilityModel = isMobile
-    ? { currentPrice: false, oppReturnPct: false, reason: false, entry: false }
+    ? { decisionPrice: false, currentPrice: false, oppReturnPct: false, reason: false, entry: false }
     : {}
 
   return (
     <Box>
       <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
-        Actions
+        Trades
       </Typography>
 
       <Box display="flex" gap={1} flexWrap="wrap" sx={{ mb: 1.5 }}>
@@ -379,15 +382,9 @@ export default function ActionsPage() {
               error_type: data.error_type,
               what_i_remember_now: data.what_i_remember_now,
             })
-            // Close immediately — refresh list in background.
+            // Close immediately — react-query refreshes everything subscribed to outcomes.
             setOutcomeDialogAction(null)
-            getOutcomesForActionIds([outcomeDialogAction.id]).then((list) => {
-              setOutcomesByActionId((prev) => {
-                const next = { ...prev }
-                list.forEach((o) => { next[o.action_id] = o })
-                return next
-              })
-            })
+            invalidate.outcomes()
           } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to save outcome')
           }

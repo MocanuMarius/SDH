@@ -47,9 +47,9 @@ import {
   type EngineYearPoint,
 } from '../utils/valuationEngines'
 import {
-  getValuationByEntryId,
   upsertValuation,
 } from '../services/entryValuationsService'
+import { useValuation, useInvalidate } from '../hooks/queries'
 import type { EntryValuation } from '../types/database'
 
 interface Props {
@@ -353,7 +353,6 @@ function EnginesStackedChart({ width, height, points, multiples, onMultipleChang
 
 export default function ValuationWidget({ entryId, defaultExpanded = false, hideWhenEmpty = false }: Props) {
   const [inputs, setInputs] = useState<EngineInputs>(DEFAULT_INPUTS)
-  const [loaded, setLoaded] = useState(false)
   const [row, setRow] = useState<EntryValuation | null>(null)
   const [expanded, setExpanded] = useState(() => {
     if (defaultExpanded) return true
@@ -369,34 +368,28 @@ export default function ValuationWidget({ entryId, defaultExpanded = false, hide
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const invalidate = useInvalidate()
 
-  // Load existing row on mount (entry_valuations table).
+  // Load existing row via react-query so it auto-refreshes when invalidated elsewhere.
+  const valuationQ = useValuation(entryId)
+  const loaded = !valuationQ.isLoading
   useEffect(() => {
-    let cancelled = false
-    getValuationByEntryId(entryId)
-      .then((r) => {
-        if (cancelled) return
-        if (r) {
-          setRow(r)
-          setInputs({
-            earningsGrowthPct: Number(r.earnings_growth_pct),
-            currentMultiple: Number(r.current_multiple),
-            targetMultiple: Number(r.target_multiple),
-            shareholderYieldPct: Number(r.shareholder_yield_pct),
-            horizonYears: Number(r.horizon_years),
-            multipleCurve: Array.isArray(r.multiple_curve) ? (r.multiple_curve as number[]) : null,
-          })
-          setExpanded(true)
-        }
+    const r = valuationQ.data
+    if (r) {
+      setRow(r)
+      setInputs({
+        earningsGrowthPct: Number(r.earnings_growth_pct),
+        currentMultiple: Number(r.current_multiple),
+        targetMultiple: Number(r.target_multiple),
+        shareholderYieldPct: Number(r.shareholder_yield_pct),
+        horizonYears: Number(r.horizon_years),
+        multipleCurve: Array.isArray(r.multiple_curve) ? (r.multiple_curve as number[]) : null,
       })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLoaded(true)
-      })
-    return () => {
-      cancelled = true
+      setExpanded(true)
+    } else if (!valuationQ.isLoading) {
+      setRow(null)
     }
-  }, [entryId])
+  }, [valuationQ.data, valuationQ.isLoading])
 
   // Debounced autosave.
   useEffect(() => {
@@ -417,6 +410,8 @@ export default function ValuationWidget({ entryId, defaultExpanded = false, hide
         })
         setRow(saved)
         setDirty(false)
+        // Make any other component reading this entry's valuation refresh.
+        invalidate.valuation(entryId)
       } finally {
         setSaving(false)
       }

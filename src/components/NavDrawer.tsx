@@ -25,9 +25,9 @@ const NAV_ITEMS = [
   { to: '/timeline', label: 'Timeline', icon: TimelineIcon },
   { to: '/watchlist', label: 'Watchlist', icon: NotificationsActiveIcon },
   { to: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
-  { to: '/actions', label: 'Actions', icon: TouchAppIcon },
+  { to: '/actions', label: 'Trades', icon: TouchAppIcon },
   { to: '/skill-engineering', label: 'Practice', icon: SchoolIcon },
-  { to: '/decisions', label: 'Decisions', icon: EventNoteIcon },
+  { to: '/decisions', label: 'Long-term horizons', icon: EventNoteIcon },
   { to: '/import', label: 'Import', icon: FileDownloadIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ]

@@ -36,9 +36,10 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import RemoveIcon from '@mui/icons-material/Remove'
 import LoopIcon from '@mui/icons-material/Loop'
-import { listEntriesWithActions, countAutomatedEntries } from '../services/entriesService'
+import { countAutomatedEntries } from '../services/entriesService'
 import type { EntryWithActions } from '../services/entriesService'
 import { useDebounce } from '../hooks/useDebounce'
+import { useEntriesWithActions } from '../hooks/queries'
 import { getChartCategory } from '../theme/decisionTypes'
 import MarkdownRender from '../components/MarkdownRender'
 import RelativeDate from '../components/RelativeDate'
@@ -327,8 +328,8 @@ const EntryGridCard = memo(function EntryGridCard({ entry }: { entry: EntryWithA
               }),
         }}
       >
-        {/* Always-visible collapsed header */}
-        <CardActionArea onClick={handleToggle} sx={{ flex: 'none' }}>
+        {/* Always-visible collapsed header — primary click opens the entry; chevron toggles preview */}
+        <CardActionArea component={RouterLink} to={`/entries/${entry.id}`} sx={{ flex: 'none' }}>
           <CardContent sx={{ pb: 1 }}>
             <Box display="flex" alignItems="flex-start" justifyContent="space-between" gap={1}>
               <Box flex={1} minWidth={0}>
@@ -363,15 +364,32 @@ const EntryGridCard = memo(function EntryGridCard({ entry }: { entry: EntryWithA
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
                 <ProcessOutcomeBadge {...entryProcessOutcome(entry)} />
                 <InvestmentScoreBadge score={effectiveInvestmentScore(entry)} />
-                <ExpandMoreIcon
-                  fontSize="small"
-                  sx={{
-                    color: 'text.secondary',
-                    transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.2s',
-                    mt: 0.5,
-                  }}
-                />
+                {/* Tooltip preview chevron — stops propagation so clicking it doesn't navigate */}
+                <Tooltip title={expanded ? 'Hide preview' : 'Show preview'}>
+                  <Box
+                    component="span"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={expanded ? 'Hide preview' : 'Show preview'}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggle() }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleToggle() } }}
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 24,
+                      height: 24,
+                      borderRadius: '50%',
+                      cursor: 'pointer',
+                      color: 'text.secondary',
+                      transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s, background-color 0.15s',
+                      '&:hover': { bgcolor: 'action.hover' },
+                    }}
+                  >
+                    <ExpandMoreIcon fontSize="small" />
+                  </Box>
+                </Tooltip>
               </Box>
             </Box>
           </CardContent>
@@ -497,9 +515,6 @@ const EntryListRow = memo(function EntryListRow({ entry }: { entry: EntryWithAct
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function EntryListPage() {
-  const [entries, setEntries] = useState<EntryWithActions[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [tagFilter, setTagFilter] = useState<string[]>([])
@@ -509,6 +524,16 @@ export default function EntryListPage() {
   const [pageSize, setPageSize] = useState(INITIAL_PAGE_SIZE)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [gridView, setGridView] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // ─── react-query: shared cache, auto-refetches when entries change anywhere ──
+  const entriesQ = useEntriesWithActions({ search: debouncedSearch || undefined, limit: pageSize, hideAutomated })
+  const entries: EntryWithActions[] = entriesQ.data ?? []
+  const loading = entriesQ.isLoading
+  // Surface query errors via the existing alert
+  useEffect(() => {
+    if (entriesQ.error) setError((entriesQ.error as Error).message ?? 'Failed to load entries')
+  }, [entriesQ.error])
 
   useEffect(() => {
     const onScroll = () => setShowScrollTop(window.scrollY > 300)
@@ -526,19 +551,8 @@ export default function EntryListPage() {
     return () => { cancelled = true }
   }, [])
 
-  useEffect(() => {
-    const cancelled = { current: false }
-    setLoading(true)
-    listEntriesWithActions({ search: debouncedSearch || undefined, limit: pageSize, hideAutomated })
-      .then((data) => { if (!cancelled.current) setEntries(data) })
-      .catch((e) => { if (!cancelled.current) setError(e.message ?? 'Failed to load entries') })
-      .finally(() => { if (!cancelled.current) setLoading(false) })
-    return () => { cancelled.current = true }
-  }, [debouncedSearch, pageSize, hideAutomated])
-
   const handlePullRefresh = async () => {
-    const data = await listEntriesWithActions({ search: debouncedSearch || undefined, limit: pageSize, hideAutomated })
-    setEntries(data)
+    await entriesQ.refetch()
   }
 
   const allTags = useMemo(
@@ -664,18 +678,34 @@ export default function EntryListPage() {
             size="small"
             onChange={(_, v) => { if (v !== null) setInvestmentFilter(v as InvestmentFilter) }}
           >
-            <ToggleButton value="all">All {bucketCounts.all}</ToggleButton>
-            <ToggleButton value="spec" sx={{ color: '#dc2626' }}>S {bucketCounts.spec}</ToggleButton>
-            <ToggleButton value="mixed" sx={{ color: '#ca8a04' }}>M {bucketCounts.mixed}</ToggleButton>
-            <ToggleButton value="invest" sx={{ color: '#16a34a' }}>I {bucketCounts.invest}</ToggleButton>
+            <Tooltip
+              title={
+                bucketCounts.unscored > 0
+                  ? `All ${bucketCounts.all} entries (${bucketCounts.spec} spec + ${bucketCounts.mixed} mixed + ${bucketCounts.invest} invest + ${bucketCounts.unscored} unscored)`
+                  : 'All entries'
+              }
+            >
+              <ToggleButton value="all">All {bucketCounts.all}</ToggleButton>
+            </Tooltip>
+            <Tooltip title="Speculation: short-dated, thin thesis, or no writeup">
+              <ToggleButton value="spec" sx={{ color: '#dc2626' }}>S {bucketCounts.spec}</ToggleButton>
+            </Tooltip>
+            <Tooltip title="Mixed: some structure, some gaps">
+              <ToggleButton value="mixed" sx={{ color: '#ca8a04' }}>M {bucketCounts.mixed}</ToggleButton>
+            </Tooltip>
+            <Tooltip title="Investment: detailed writeup + structure">
+              <ToggleButton value="invest" sx={{ color: '#16a34a' }}>I {bucketCounts.invest}</ToggleButton>
+            </Tooltip>
           </ToggleButtonGroup>
-          <Chip
-            size="small"
-            label={hideAutomated ? 'Auto off' : 'Auto on'}
-            onClick={() => setHideAutomated((v) => !v)}
-            variant={hideAutomated ? 'filled' : 'outlined'}
-            sx={{ height: 26, fontSize: '0.65rem' }}
-          />
+          <Tooltip title={hideAutomated ? 'Currently hiding broker-imported entries — click to show them' : 'Currently showing broker-imported entries — click to hide them'}>
+            <Chip
+              size="small"
+              label={hideAutomated ? 'Hide automated' : 'Show automated'}
+              onClick={() => setHideAutomated((v) => !v)}
+              variant={hideAutomated ? 'filled' : 'outlined'}
+              sx={{ height: 26, fontSize: '0.65rem' }}
+            />
+          </Tooltip>
           {allTags.length > 0 && (
             <Autocomplete
               multiple

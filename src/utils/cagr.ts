@@ -1,7 +1,18 @@
 /**
  * Compute annualized CAGR from start date to end date using chart price series.
  * Returns null if insufficient data.
+ *
+ * Two safety rails to keep noise out of "average CAGR" stats:
+ *   1. Refuse to annualize sub-90-day windows. A 30% move in 2 weeks pencilled
+ *      out as CAGR is meaningless and explodes via `(1/years)` → `**` when years
+ *      is tiny.
+ *   2. Cap the result at ±500%/year. Anything above is almost always a corp
+ *      action, bad chart data, or a meme spike — including these numbers in an
+ *      average historically produced things like "+46,151,908%".
  */
+
+const MIN_YEARS_FOR_CAGR = 90 / 365.25 // ~0.247y — below this, CAGR is noise
+const MAX_ABS_CAGR = 5 // ±500%/year — anything beyond is treated as noise
 
 export function computeCagrFromChart(
   dates: string[],
@@ -33,9 +44,10 @@ export function computeCagrFromChart(
   const startMs = new Date(dates[startIdx]).getTime()
   const endMs = new Date(dates[endIdx]).getTime()
   const years = (endMs - startMs) / (365.25 * 24 * 60 * 60 * 1000)
-  if (years <= 0) return null
+  if (years < MIN_YEARS_FOR_CAGR) return null // window too short to annualize
   const cagr = (endPrice / startPrice) ** (1 / years) - 1
-  return Math.max(-1, cagr) // clamp to -100% annualized
+  if (!Number.isFinite(cagr)) return null
+  return Math.max(-1, Math.min(MAX_ABS_CAGR, cagr))
 }
 
 /** Format CAGR as percentage string, e.g. "+12.5%" or "-3.2%" */

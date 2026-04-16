@@ -22,8 +22,8 @@ import {
 import { ParentSize } from '@visx/responsive'
 import TimelineChartVisx, { getTimelineChartResponsiveMargin } from '../components/TimelineChartVisx'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
-import { listActions } from '../services/actionsService'
 import type { ActionWithEntry } from '../services/actionsService'
+import { useActions } from '../hooks/queries'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import OptionTypeChip from '../components/OptionTypeChip'
 import { computeRangeStats, type RangeStats } from '../utils/chartRangeStats'
@@ -120,7 +120,10 @@ export default function TimelinePage() {
   // Range selector date inputs — synced from zoomRange; user edits trigger applyDateRange
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
-  const [actions, setActions] = useState<ActionWithEntry[]>([])
+  // Actions live in the shared react-query cache. Auto-refreshes when added/edited
+  // anywhere else in the app (entry detail, /trades, etc.).
+  const actionsQ = useActions({ limit: 500 })
+  const actions: ActionWithEntry[] = actionsQ.data ?? []
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
@@ -200,17 +203,13 @@ export default function TimelinePage() {
     setLoading(true)
     setError(null)
     const chartSymbol = symbolParam || 'SPY'
-    Promise.all([
-      fetchChartData(chartSymbol, range).catch((e) => {
+    fetchChartData(chartSymbol, range)
+      .catch((e) => {
         if (!cancelled) setError(`Could not load chart for "${chartSymbol}". Check the symbol and try again. (${e?.message ?? 'Chart API unavailable'})`)
         return null
-      }),
-      listActions({ limit: 500 }).catch(() => []),
-    ])
-      .then(([data, actionList]) => {
+      })
+      .then((data) => {
         if (cancelled) return
-        const list = Array.isArray(actionList) ? actionList : []
-        setActions(list)
         if (data?.dates?.length) {
           setSymbol(data.symbol || chartSymbol)
           setChartData(

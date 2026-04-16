@@ -64,15 +64,27 @@ export function getTickerDisplayLabel(ticker: string | null | undefined): string
   return `$${ticker.trim()}`
 }
 
-/** Base symbol without exchange/suffix (e.g. CSU:TO → CSU, CSU.TO → CSU, AAPL → AAPL). For options, returns underlying. */
+/**
+ * Canonical key for grouping tickers that refer to the same security across listings.
+ *
+ * Rules:
+ *   • Options collapse to underlying ("APP 270115P00200000" → "APP").
+ *   • Canadian dual listings collapse: "CSU:TO", "CSU.TO", "CSU.NE" → "CSU".
+ *   • Everything else keeps its suffix: "MTX.DE" stays "MTX.DE" (German MTU
+ *     Aero ≠ US MTX). Earlier code stripped ALL dot/colon suffixes which
+ *     silently merged different securities and routed users to wrong charts.
+ */
+const CANADIAN_DUAL_LIST_SUFFIXES = /(?:[.:](TO|V|NE|CN))$/i
+
 export function normalizeTickerToCompany(ticker: string | null | undefined): string {
   if (ticker == null || typeof ticker !== 'string') return ''
   const t = ticker.trim()
   if (!t) return ''
   const underlying = getUnderlyingFromOption(t)
   if (underlying) return underlying
-  const base = t.split(/[.:]/)[0]?.trim().toUpperCase() ?? ''
-  return base || t.toUpperCase()
+  const upper = t.toUpperCase()
+  // Strip Canadian-listing suffix only (these trade the same shares in CAD)
+  return upper.replace(CANADIAN_DUAL_LIST_SUFFIXES, '')
 }
 
 /** True if both tickers refer to the same company (by normalized key) */

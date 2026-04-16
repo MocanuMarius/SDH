@@ -18,11 +18,12 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import { useAuth } from '../contexts/AuthContext'
-import { getEntry, createEntry, updateEntry } from '../services/entriesService'
+import { createEntry, updateEntry } from '../services/entriesService'
 import { createFeeling } from '../services/feelingsService'
 import { createPrediction } from '../services/predictionsService'
 import { generateEntryId } from '../utils/id'
 import { useSnackbar } from '../contexts/SnackbarContext'
+import { useEntry, useInvalidate } from '../hooks/queries'
 import InsertDecisionBlockDialog from '../components/InsertDecisionBlockDialog'
 import FeelingFormDialog from '../components/FeelingFormDialog'
 import TickerDollarField from '../components/TickerDollarField'
@@ -59,6 +60,7 @@ export default function EntryFormPage() {
   const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const { showSuccess, showError } = useSnackbar()
+  const invalidate = useInvalidate()
   const isNew = !id || id === 'new'
 
   const [date, setDate] = useState(EMPTY.date)
@@ -73,7 +75,9 @@ export default function EntryFormPage() {
   const [error, setError] = useState<string | null>(null)
   const [feelingDialogOpen, setFeelingDialogOpen] = useState(false)
   const [pendingFeelingType, setPendingFeelingType] = useState<FeelingType>('market')
-  const [tradingPlanExpanded, setTradingPlanExpanded] = useState(false)
+  // Expand the trading-plan section by default for new entries so first-time
+  // users discover the pre-mortem fields. Existing entries default to collapsed.
+  const [tradingPlanExpanded, setTradingPlanExpanded] = useState(() => !id || id === 'new')
   const [entryRules, setEntryRules] = useState('')
   const [exitRules, setExitRules] = useState('')
   const [riskLimit, setRiskLimit] = useState('')
@@ -163,46 +167,47 @@ export default function EntryFormPage() {
     localStorage.removeItem(DRAFT_KEY)
   }, [])
 
+  // Load existing entry via react-query so the form auto-refreshes if the
+  // underlying entry is edited elsewhere (e.g. quick-note appended on detail page).
+  const editEntryQ = useEntry(isNew ? undefined : id)
   useEffect(() => {
-    if (isNew || !id) {
+    if (isNew) {
       setLoading(false)
       return
     }
-    let cancelled = false
-    getEntry(id)
-      .then((entry) => {
-        if (!cancelled && entry) {
-          setDate(entry.date)
-          setAuthor(entry.author)
-          setTagsStr(entry.tags.join(', '))
-          setTitleMarkdown(entry.title_markdown)
-          setBodyMarkdown(entry.body_markdown)
-          setMarketContext(entry.market_context || '')
-          setMarketFeeling(entry.market_feeling || null)
-          setDecisionHorizon(entry.decision_horizon || '')
-          initialValuesRef.current = { title_markdown: entry.title_markdown, body_markdown: entry.body_markdown, tagsStr: entry.tags.join(', ') }
-          if (entry.trading_plan) {
-            setTradingPlanExpanded(true)
-            const lines = entry.trading_plan.split('\n')
-            const entryIdx = lines.findIndex((l) => l.startsWith('Entry:'))
-            const exitIdx = lines.findIndex((l) => l.startsWith('Exit:'))
-            const riskIdx = lines.findIndex((l) => l.startsWith('Risk:'))
-            const profitIdx = lines.findIndex((l) => l.startsWith('Profit:'))
-            if (entryIdx >= 0) setEntryRules(lines[entryIdx].replace('Entry:', '').trim())
-            if (exitIdx >= 0) setExitRules(lines[exitIdx].replace('Exit:', '').trim())
-            if (riskIdx >= 0) setRiskLimit(lines[riskIdx].replace('Risk:', '').trim())
-            if (profitIdx >= 0) setProfitTarget(lines[profitIdx].replace('Profit:', '').trim())
-          }
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e.message ?? 'Failed to load entry')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [id, isNew])
+    if (editEntryQ.isLoading) {
+      setLoading(true)
+      return
+    }
+    setLoading(false)
+    if (editEntryQ.error) {
+      setError((editEntryQ.error as Error).message ?? 'Failed to load entry')
+      return
+    }
+    const entry = editEntryQ.data
+    if (!entry) return
+    setDate(entry.date)
+    setAuthor(entry.author)
+    setTagsStr(entry.tags.join(', '))
+    setTitleMarkdown(entry.title_markdown)
+    setBodyMarkdown(entry.body_markdown)
+    setMarketContext(entry.market_context || '')
+    setMarketFeeling(entry.market_feeling || null)
+    setDecisionHorizon(entry.decision_horizon || '')
+    initialValuesRef.current = { title_markdown: entry.title_markdown, body_markdown: entry.body_markdown, tagsStr: entry.tags.join(', ') }
+    if (entry.trading_plan) {
+      setTradingPlanExpanded(true)
+      const lines = entry.trading_plan.split('\n')
+      const entryIdx = lines.findIndex((l) => l.startsWith('Entry:'))
+      const exitIdx = lines.findIndex((l) => l.startsWith('Exit:'))
+      const riskIdx = lines.findIndex((l) => l.startsWith('Risk:'))
+      const profitIdx = lines.findIndex((l) => l.startsWith('Profit:'))
+      if (entryIdx >= 0) setEntryRules(lines[entryIdx].replace('Entry:', '').trim())
+      if (exitIdx >= 0) setExitRules(lines[exitIdx].replace('Exit:', '').trim())
+      if (riskIdx >= 0) setRiskLimit(lines[riskIdx].replace('Risk:', '').trim())
+      if (profitIdx >= 0) setProfitTarget(lines[profitIdx].replace('Profit:', '').trim())
+    }
+  }, [isNew, editEntryQ.data, editEntryQ.isLoading, editEntryQ.error])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -264,6 +269,7 @@ export default function EntryFormPage() {
       type: data.type,
       ticker: data.ticker,
     })
+    invalidate.feelings(entryId)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -311,10 +317,12 @@ export default function EntryFormPage() {
         })
         entryId = entry.id
         clearDraft()
+        invalidate.entries()
         showSuccess('Entry created')
         navigate(`/entries/${entry.id}`)
       } else if (id) {
         await updateEntry(id, entryData)
+        invalidate.entries()
         showSuccess('Entry saved')
         navigate(`/entries/${id}`)
       }
@@ -331,6 +339,7 @@ export default function EntryFormPage() {
             label: `${probability}% by ${predictionDate}`,
             ticker: null,
           })
+          invalidate.predictions(entryId)
         } catch (predErr) {
           console.warn('Failed to save prediction:', predErr)
           // Don't fail the entire save if prediction fails
@@ -483,9 +492,14 @@ export default function EntryFormPage() {
           sx={{ p: 1.5, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
           onClick={() => setTradingPlanExpanded(!tradingPlanExpanded)}
         >
-          <Typography variant="caption" fontWeight={600} color="text.secondary">
-            More
-          </Typography>
+          <Box>
+            <Typography variant="caption" fontWeight={700} color="text.primary" sx={{ display: 'block' }}>
+              Trading plan, predictions & market context
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
+              Pre-mortem fields — entry / exit rules, sentiment, decision horizon. Recommended for skill-building.
+            </Typography>
+          </Box>
           <IconButton size="small" sx={{ transform: tradingPlanExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms' }}>
             <ExpandMoreIcon />
           </IconButton>
@@ -588,7 +602,7 @@ export default function EntryFormPage() {
         </Collapse>
       </Paper>
 
-      <Box display="flex" gap={1}>
+      <Box display="flex" gap={1} alignItems="center">
         <Button
           type="submit"
           variant="contained"
@@ -597,6 +611,11 @@ export default function EntryFormPage() {
         >
           {saving ? <CircularProgress size={24} /> : isNew ? 'Create' : 'Save'}
         </Button>
+        {!saving && !title_markdown.trim() && !body_markdown.trim() && (
+          <Typography variant="caption" color="text.secondary">
+            Add a title or write a thesis to enable {isNew ? 'Create' : 'Save'}.
+          </Typography>
+        )}
         <Button
           component={RouterLink}
           to={isNew ? '/' : `/entries/${id}`}

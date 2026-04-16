@@ -304,11 +304,12 @@ export default function ActionFormDialog({
               />
               <TextField
                 size="small"
-                label="Currency"
+                label="Cur."
                 value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
+                onChange={(e) => setCurrency(e.target.value.toUpperCase())}
                 placeholder="USD"
-                sx={{ width: 90 }}
+                sx={{ width: 110 }}
+                inputProps={{ maxLength: 4 }}
               />
             </Box>
 

@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom'
-import { Box, Button, Chip, Typography, Alert, Card, CardHeader, CardContent, Stack, Skeleton, Paper, Breadcrumbs, Link, useMediaQuery, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Tabs, Tab, TextField, InputAdornment } from '@mui/material'
+import { Box, Button, Chip, Typography, Alert, Stack, Skeleton, Paper, Breadcrumbs, Link, useMediaQuery, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Tabs, Tab, TextField, InputAdornment } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import { useTheme } from '@mui/material/styles'
 import EditIcon from '@mui/icons-material/Edit'
@@ -8,33 +8,37 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
-import { getEntry, deleteEntry, updateEntry } from '../services/entriesService'
+import { deleteEntry, updateEntry } from '../services/entriesService'
 import { createReminder } from '../services/remindersService'
 import { fetchChartData } from '../services/chartApiService'
 import { useAuth } from '../contexts/AuthContext'
 import {
-  listActionsByEntryId,
   createAction,
   deleteAction,
 } from '../services/actionsService'
 import { ensurePassedForUser } from '../services/passedService'
 import {
-  getOutcomesForActionIds,
   createOutcome,
   updateOutcome,
 } from '../services/outcomesService'
 import {
-  listPredictionsByEntryId,
   createPrediction,
   updatePrediction,
   deletePrediction,
 } from '../services/predictionsService'
 import {
-  listFeelingsByEntryId,
   createFeeling,
   updateFeeling,
   deleteFeeling,
 } from '../services/feelingsService'
+import {
+  useEntry,
+  useActionsByEntry,
+  useOutcomesByActionIds,
+  usePredictions,
+  useFeelings,
+  useInvalidate,
+} from '../hooks/queries'
 import ActionFormDialog from '../components/ActionFormDialog'
 import OutcomeFormDialog from '../components/OutcomeFormDialog'
 import PredictionFormDialog from '../components/PredictionFormDialog'
@@ -51,8 +55,6 @@ import TagChip from '../components/TagChip'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
 import { getTickerDisplayLabel } from '../utils/tickerCompany'
-import type { Entry } from '../types/database'
-import type { Action } from '../types/database'
 import type { Outcome } from '../types/database'
 import type { EntryPrediction, EntryFeeling } from '../types/database'
 
@@ -63,11 +65,26 @@ export default function EntryDetailPage() {
   const { showSuccess } = useSnackbar()
   const muiTheme = useTheme()
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'))
-  const [entry, setEntry] = useState<Entry | null>(null)
-  const [actions, setActions] = useState<Action[]>([])
-  const [outcomesByActionId, setOutcomesByActionId] = useState<Record<string, Outcome>>({})
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+
+  // ─── Server data via react-query (auto-refreshes after mutations elsewhere) ───
+  const entryQ = useEntry(id)
+  const actionsQ = useActionsByEntry(id)
+  const actions = actionsQ.data ?? []
+  const outcomesQ = useOutcomesByActionIds(actions.map((a) => a.id))
+  const outcomesByActionId = useMemo(() => {
+    const map: Record<string, Outcome> = {}
+    ;(outcomesQ.data ?? []).forEach((o) => { map[o.action_id] = o })
+    return map
+  }, [outcomesQ.data])
+  const predictionsQ = usePredictions(id)
+  const predictions = predictionsQ.data ?? []
+  const feelingsQ = useFeelings(id)
+  const feelings = feelingsQ.data ?? []
+
+  const entry = entryQ.data ?? null
+  const loading = entryQ.isLoading
+  const error = entryQ.error?.message ?? null
+  const invalidate = useInvalidate()
   const [detailTab, setDetailTab] = useState(0)
   const [quickNote, setQuickNote] = useState('')
   const [savingNote, setSavingNote] = useState(false)
@@ -83,8 +100,6 @@ export default function EntryDetailPage() {
     | null
   >(null)
   const [confirmLoading, setConfirmLoading] = useState(false)
-  const [predictions, setPredictions] = useState<EntryPrediction[]>([])
-  const [feelings, setFeelings] = useState<EntryFeeling[]>([])
   const [predictionDialogOpen, setPredictionDialogOpen] = useState(false)
   const [feelingDialogOpen, setFeelingDialogOpen] = useState(false)
   const [editingPrediction, setEditingPrediction] = useState<EntryPrediction | null>(null)
@@ -127,7 +142,7 @@ export default function EntryDetailPage() {
       const noteBlock = `\n\n> **Note ${date}:** ${quickNote.trim()}`
       const updated = (entry.body_markdown || '') + noteBlock
       await updateEntry(id, { body_markdown: updated })
-      setEntry((prev) => prev ? { ...prev, body_markdown: updated } : prev)
+      invalidate.entries()
       setQuickNote('')
       showSuccess('Note added')
     } catch {
@@ -136,60 +151,6 @@ export default function EntryDetailPage() {
       setSavingNote(false)
     }
   }
-
-  const loadActions = useCallback(async () => {
-    if (!id) return
-    try {
-      const list = await listActionsByEntryId(id)
-      setActions(list)
-      if (list.length > 0) {
-        const outcomes = await getOutcomesForActionIds(list.map((a) => a.id))
-        const map: Record<string, Outcome> = {}
-        outcomes.forEach((o) => { map[o.action_id] = o })
-        setOutcomesByActionId(map)
-      } else {
-        setOutcomesByActionId({})
-      }
-    } catch { /* ignore */ }
-  }, [id])
-
-
-  const loadPredictions = useCallback(async () => {
-    if (!id) return
-    try { setPredictions(await listPredictionsByEntryId(id)) } catch { /* ignore */ }
-  }, [id])
-
-  const loadFeelings = useCallback(async () => {
-    if (!id) return
-    try { setFeelings(await listFeelingsByEntryId(id)) } catch { /* ignore */ }
-  }, [id])
-
-  useEffect(() => {
-    if (!id) return
-    let cancelled = false
-    setLoading(true)
-    getEntry(id)
-      .then((data) => {
-        if (!cancelled) setEntry(data)
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e.message ?? 'Failed to load entry')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [id])
-
-  useEffect(() => {
-    loadActions()
-  }, [loadActions])
-
-  useEffect(() => {
-    if (!id) return
-    loadPredictions()
-    loadFeelings()
-  }, [id, loadPredictions, loadFeelings])
 
   if (loading || !id) {
     return (
@@ -331,16 +292,27 @@ export default function EntryDetailPage() {
         <MarkdownRender source={entry.body_markdown} dense />
       </Box>
 
-      {/* Quick note — append a timestamped note without editing the full entry */}
+      {/* Quick note — append a timestamped note without editing the full entry.
+          Multi-line auto-grow; Cmd/Ctrl+Enter or Enter (no shift) submits. */}
       <TextField
         size="small"
-        placeholder="Add a note..."
+        placeholder="Add a note... (markdown supported, Shift+Enter for newline)"
         value={quickNote}
         onChange={(e) => setQuickNote(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddNote() } }}
+        onKeyDown={(e) => {
+          // Submit on Enter alone, or Cmd/Ctrl+Enter even with Shift held.
+          // Shift+Enter inserts a newline (default textarea behavior).
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
+            e.preventDefault()
+            handleAddNote()
+          }
+        }}
         disabled={savingNote}
         fullWidth
-        sx={{ mt: 1.5, '& .MuiInputBase-root': { fontSize: '0.85rem' } }}
+        multiline
+        minRows={1}
+        maxRows={8}
+        sx={{ mt: 1.5, '& .MuiInputBase-root': { fontSize: '0.85rem', alignItems: 'flex-end' } }}
         InputProps={{
           endAdornment: quickNote.trim() ? (
             <InputAdornment position="end">
@@ -569,8 +541,9 @@ export default function EntryDetailPage() {
               reason: data.reason ?? '',
               notes: data.notes ?? '',
             })
+            invalidate.passed()
           }
-          await loadActions()
+          invalidate.actions()
           showSuccess(`${data.type.charAt(0).toUpperCase() + data.type.slice(1)} action added`)
         }}
       />
@@ -609,19 +582,21 @@ export default function EntryDetailPage() {
           try {
             if (confirmDelete.type === 'entry' && id) {
               await deleteEntry(id)
+              invalidate.entries()
               showSuccess('Entry deleted')
               navigate('/')
             } else if (confirmDelete.type === 'action') {
               await deleteAction(confirmDelete.id)
-              await loadActions()
+              invalidate.actions()
+              invalidate.outcomes()
               showSuccess('Action deleted')
             } else if (confirmDelete.type === 'prediction') {
               await deletePrediction(confirmDelete.id)
-              await loadPredictions()
+              invalidate.predictions(id)
               showSuccess('Prediction deleted')
             } else if (confirmDelete.type === 'feeling') {
               await deleteFeeling(confirmDelete.id)
-              await loadFeelings()
+              invalidate.feelings(id)
               showSuccess('Feeling deleted')
             }
             setConfirmDelete(null)
@@ -672,7 +647,7 @@ export default function EntryDetailPage() {
               sub_skill: data.sub_skill,
             })
           }
-          await loadPredictions()
+          invalidate.predictions(id)
           showSuccess(editingPrediction ? 'Prediction updated' : 'Prediction added')
         }}
       />
@@ -698,7 +673,7 @@ export default function EntryDetailPage() {
               ticker: data.ticker || null,
             })
           }
-          await loadFeelings()
+          invalidate.feelings(id)
           showSuccess(editingFeeling ? 'Feeling updated' : 'Feeling logged')
         }}
       />
@@ -746,8 +721,7 @@ export default function EntryDetailPage() {
               })
             }
             const wasEdit = !!outcomesByActionId[outcomeDialogActionId]
-            const refreshed = await getOutcomesForActionIds(actions.map((a) => a.id))
-            setOutcomesByActionId(Object.fromEntries(refreshed.map((o) => [o.action_id, o])))
+            invalidate.outcomes()
             setOutcomeDialogActionId(null)
             showSuccess(wasEdit ? 'Outcome updated' : 'Outcome recorded')
           }}

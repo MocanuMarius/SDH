@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import {
   Box,
@@ -45,10 +45,8 @@ import {
   Pie,
   Cell,
 } from 'recharts'
-import { listEntries } from '../services/entriesService'
-import { listActions } from '../services/actionsService'
-import { listOutcomes, getTickerForOutcome } from '../services/outcomesService'
-import { listPassed } from '../services/passedService'
+import { getTickerForOutcome } from '../services/outcomesService'
+import { useEntries, useActions, useOutcomes, usePassed } from '../hooks/queries'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import { normalizeTicker } from '../utils/tickerNormalization'
 import { fetchChartData } from '../services/chartApiService'
@@ -58,7 +56,7 @@ import { ERROR_TYPE_LABELS } from '../utils/errorTypeLabels'
 import { computeCounterfactualFromChart, computeCagrFromChart, formatCagrPercent, formatDurationSince } from '../utils/cagr'
 import type { Entry } from '../types/database'
 import type { Action } from '../types/database'
-import type { Outcome, ErrorType, Passed } from '../types/database'
+import type { Outcome, ErrorType } from '../types/database'
 import DecisionChip from '../components/DecisionChip'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -75,18 +73,31 @@ const CHART_COLOR_PRIMARY = '#0ea5e9'
 const CHART_COLOR_SECONDARY = '#6366f1'
 
 export default function InsightsPage() {
-  const [entries, setEntries] = useState<Entry[]>([])
-  const [actions, setActions] = useState<Action[]>([])
-  const [outcomes, setOutcomes] = useState<Outcome[]>([])
-  const [passedTickers, setPassedTickers] = useState<Set<string>>(new Set())
-  const [passedList, setPassedList] = useState<Passed[]>([])
+  // ─── Server data via react-query (auto-refreshes after mutations elsewhere) ───
+  const entriesQ = useEntries({ limit: 10000 })
+  const actionsQ = useActions({ limit: 10000 })
+  const outcomesQ = useOutcomes()
+  const passedQ = usePassed()
+  const entries = entriesQ.data ?? []
+  const actions = actionsQ.data ?? []
+  const outcomes = outcomesQ.data ?? []
+  const passedList = passedQ.data ?? []
+  const passedTickers = useMemo(
+    () => new Set(passedList.map((x) => normalizeTickerToCompany(x.ticker))),
+    [passedList]
+  )
+  const loading = entriesQ.isLoading || actionsQ.isLoading || outcomesQ.isLoading || passedQ.isLoading
+  const queryError = entriesQ.error || actionsQ.error || outcomesQ.error || passedQ.error
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (queryError) setError((queryError as Error).message ?? 'Failed to load insights')
+  }, [queryError])
+
   const [passedHypothetical, setPassedHypothetical] = useState<Record<string, { hypotheticalEnd: number | null; totalReturnPct: number | null; cagr: number | null } | null>>({})
   const [heatMapYear, setHeatMapYear] = useState(() => new Date().getFullYear())
   const [heatMapMetric, setHeatMapMetric] = useState<'entries' | 'decisions' | 'both'>('both')
   const [ideasYear, setIdeasYear] = useState(() => new Date().getFullYear())
   const [metricsYear, setMetricsYear] = useState(() => new Date().getFullYear())
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [reviewQueueExpanded, setReviewQueueExpanded] = useState(false)
   const [reasonOppDecisionFilter, setReasonOppDecisionFilter] = useState<string>('')
   const [reasonOppReasonFilter, setReasonOppReasonFilter] = useState<string>('')
@@ -123,33 +134,7 @@ export default function InsightsPage() {
     return () => { cancelled = true }
   }, [passedList])
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    Promise.all([
-      listEntries({ limit: 10000 }).catch(() => []),
-      listActions({ limit: 10000 }).catch(() => []),
-      listOutcomes().catch(() => []),
-      listPassed().catch(() => []),
-    ])
-      .then(([e, a, o, p]) => {
-        if (cancelled) return
-        setEntries(Array.isArray(e) ? e : [])
-        setActions(Array.isArray(a) ? a : [])
-        setOutcomes(Array.isArray(o) ? o : [])
-        const passed = Array.isArray(p) ? p : []
-        setPassedTickers(new Set(passed.map((x) => normalizeTickerToCompany(x.ticker))))
-        setPassedList(passed)
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e?.message ?? 'Failed to load insights')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [])
+  // Data is fetched declaratively via react-query above — no manual fetch needed.
 
   if (loading) {
     return (

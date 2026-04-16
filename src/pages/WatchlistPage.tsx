@@ -29,6 +29,7 @@ import {
   Switch,
   Tabs,
   Tab,
+  Tooltip,
   useMediaQuery,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
@@ -397,8 +398,12 @@ export default function WatchlistPage() {
           onChange={(_, v) => setActiveTab(v)}
           sx={{ flex: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.25, textTransform: 'none', fontSize: '0.85rem' } }}
         >
-          <Tab label={`Active (${filteredItems.filter(i => i.status === 'active').length})`} />
-          <Tab label={`Recent (${history.length})`} />
+          <Tooltip title="Alerts you've set up that are currently armed">
+            <Tab label={`Active (${filteredItems.filter(i => i.status === 'active').length})`} />
+          </Tooltip>
+          <Tooltip title="Alerts that have already triggered (price hit your target) — last 50">
+            <Tab label={`Triggered (${history.length})`} />
+          </Tooltip>
         </Tabs>
         <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleOpenDialog()} sx={{ textTransform: 'none', flexShrink: 0 }}>
           Add

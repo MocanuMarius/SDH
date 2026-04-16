@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link as RouterLink, useLocation
 import { ThemeProvider, useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import CssBaseline from '@mui/material/CssBaseline'
-import { useState, Component, lazy, Suspense } from 'react'
+import { useState, useEffect, Component, lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
 import LinearProgress from '@mui/material/LinearProgress'
 
@@ -90,9 +90,9 @@ const PRIMARY_NAV = [
 
 // Secondary items in "More" dropdown
 const SECONDARY_NAV = [
-  { to: '/actions', label: 'Actions', icon: TouchAppIcon },
+  { to: '/actions', label: 'Trades', icon: TouchAppIcon },
   { to: '/skill-engineering', label: 'Practice', icon: PsychologyIcon },
-  { to: '/decisions', label: 'Decisions', icon: AssignmentIcon },
+  { to: '/decisions', label: 'Long-term horizons', icon: AssignmentIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
   { to: '/import', label: 'Import', icon: ImportIcon },
 ]
@@ -330,6 +330,13 @@ function AppLayout() {
   const { count: activityCount, refresh: refreshActivity } = useActivityBadge()
   const muiTheme = useTheme()
   const isMobile = !useMediaQuery(muiTheme.breakpoints.up('md'))
+  // Auto-close any open drawer/menu on navigation. The drawer is over the main
+  // content, so a route change without auto-close leaves it covering the new page.
+  const location = useLocation()
+  useEffect(() => {
+    setActivityOpen(false)
+    setNavOpen(false)
+  }, [location.pathname])
   return (
     <>
       <AppBarNav
