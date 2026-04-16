@@ -30,9 +30,7 @@ export default function AnalyticsPage() {
 
   return (
     <Box>
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>
-        Analytics
-      </Typography>
+      <Typography variant="h1" sx={{ mb: 1, mt: 0.5 }}>Analytics</Typography>
       <Tabs
         value={tab}
         onChange={handleTabChange}

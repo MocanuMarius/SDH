@@ -8,6 +8,9 @@ import {
   TextField,
   Typography,
   IconButton,
+  ToggleButton,
+  ToggleButtonGroup,
+  Box,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 
@@ -18,20 +21,35 @@ interface AddReminderDialogProps {
   entryTitle?: string
 }
 
+const PRESETS: { label: string; days: number }[] = [
+  { label: '1 week', days: 7 },
+  { label: '2 weeks', days: 14 },
+  { label: '1 month', days: 30 },
+  { label: '3 months', days: 90 },
+  { label: '6 months', days: 180 },
+  { label: '1 year', days: 365 },
+  { label: '2 years', days: 730 },
+]
+
+const DEFAULT_DAYS = 30
+
+function addDaysIso(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 export default function AddReminderDialog({ open, onClose, onSubmit, entryTitle }: AddReminderDialogProps) {
-  const [reminderDate, setReminderDate] = useState(() => {
-    const d = new Date()
-    d.setDate(d.getDate() + 30)
-    return d.toISOString().slice(0, 10)
-  })
+  const [days, setDays] = useState<number>(DEFAULT_DAYS)
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async () => {
     setLoading(true)
     try {
-      await onSubmit(reminderDate, note.trim())
+      await onSubmit(addDaysIso(days), note.trim())
       setNote('')
+      setDays(DEFAULT_DAYS)
       onClose()
     } finally {
       setLoading(false)
@@ -50,16 +68,25 @@ export default function AddReminderDialog({ open, onClose, onSubmit, entryTitle 
             Entry: {entryTitle.slice(0, 60)}{entryTitle.length > 60 ? '…' : ''}
           </Typography>
         )}
-        <TextField
-          label="Remind me on"
-          type="date"
-          value={reminderDate}
-          onChange={(e) => setReminderDate(e.target.value)}
-          fullWidth
-          margin="normal"
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 1 }}>
+          Remind me in
+        </Typography>
+        <ToggleButtonGroup
+          value={days}
+          exclusive
+          onChange={(_, v) => { if (v !== null) setDays(v) }}
           size="small"
-          InputLabelProps={{ shrink: true }}
-        />
+          sx={{ flexWrap: 'wrap', gap: 0.5, '& .MuiToggleButton-root': { border: 1, borderColor: 'divider', borderRadius: 1, textTransform: 'none' } }}
+        >
+          {PRESETS.map((p) => (
+            <ToggleButton key={p.days} value={p.days}>{p.label}</ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+        <Box sx={{ mt: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            {addDaysIso(days)}
+          </Typography>
+        </Box>
         <TextField
           label="Note (optional)"
           placeholder="e.g. Revisit thesis, Check what happened"

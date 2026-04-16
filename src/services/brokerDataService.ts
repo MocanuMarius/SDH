@@ -712,6 +712,7 @@ export async function importTradesFromStatement(
           : '';
 
       const actionInsert: ActionInsert = {
+        user_id: userId,
         entry_id: entryId,
         type: actionType,
         ticker: trade.symbol,
@@ -892,6 +893,7 @@ export async function importDividendsFromStatement(
 
       // Create action (income receipt)
       const actionInsert: ActionInsert = {
+        user_id: userId,
         entry_id: entryId,
         type: 'sell' as ActionType, // Using 'sell' as proxy for income events
         ticker: dividend.symbol,

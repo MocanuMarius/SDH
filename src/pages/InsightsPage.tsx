@@ -160,7 +160,7 @@ export default function InsightsPage() {
   // Exclude automated IBKR entries from all counts and calculations.
   const autoEntryIds = new Set(entries.filter(isAutomatedEntry).map((e) => e.id))
   const manualEntries = entries.filter((e) => !autoEntryIds.has(e.id))
-  const manualActions = actions.filter((a) => !autoEntryIds.has(a.entry_id))
+  const manualActions = actions.filter((a) => a.entry_id == null || !autoEntryIds.has(a.entry_id))
   const actionIds = new Set(manualActions.map((a) => a.id))
   const manualOutcomes = outcomes.filter((o) => actionIds.has(o.action_id))
 
@@ -467,7 +467,7 @@ export default function InsightsPage() {
                 return (
                   <Link
                     component={RouterLink}
-                    to={`/ideas/${ideaKey}`}
+                    to={`/tickers/${ideaKey}`}
                     key={action.id}
                     underline="hover"
                     sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.75rem', color: 'inherit' }}
@@ -700,7 +700,7 @@ export default function InsightsPage() {
               {passedList.length === 0 ? '—' : passedWithCagr.length === 0 ? '…' : formatCagrPercent(avgCagrPassed)}
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-              {passedList.length === 0 ? 'No passed ideas' : passedWithCagr.length < passedList.length ? `Avg CAGR since pass (${passedWithCagr.length}/${passedList.length})` : 'Avg CAGR since each pass'}
+              {passedList.length === 0 ? 'No passed tickers' : passedWithCagr.length < passedList.length ? `Avg CAGR since pass (${passedWithCagr.length}/${passedList.length})` : 'Avg CAGR since each pass'}
             </Typography>
           </Paper>
         </Grid>
@@ -717,7 +717,7 @@ export default function InsightsPage() {
               {entriesPerWeek} avg journal entries/week · {decisionsPerWeek} avg trades/week
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {tagsPerWeek} avg tags/week · {ideasPerWeek} avg ideas/week · {newIdeasLast4} new ideas
+              {tagsPerWeek} avg tags/week · {ideasPerWeek} avg tickers/week · {newIdeasLast4} new
             </Typography>
           </Paper>
         </Grid>
@@ -730,7 +730,7 @@ export default function InsightsPage() {
               {entriesCount} journal entries · {actionsCount} trades
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {tagsCount} Tags · {ideasCount} Ideas
+              {tagsCount} Tags · {ideasCount} Tickers
             </Typography>
           </Paper>
         </Grid>
@@ -749,7 +749,7 @@ export default function InsightsPage() {
               {entriesCount} journal entries · {actionsCount} trades
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {tagsCount} Tags · {ideasCount} Ideas
+              {tagsCount} Tags · {ideasCount} Tickers
             </Typography>
           </Paper>
         </Grid>
@@ -762,7 +762,7 @@ export default function InsightsPage() {
               {entriesPerWeek} avg journal entries/week · {decisionsPerWeek} avg trades/week
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {tagsPerWeek} avg tags/week · {ideasPerWeek} avg ideas/week · {newIdeasLast4} new ideas
+              {tagsPerWeek} avg tags/week · {ideasPerWeek} avg tickers/week · {newIdeasLast4} new
             </Typography>
             {topTagsLast4.length > 0 && (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
@@ -882,9 +882,9 @@ export default function InsightsPage() {
                 </Select>
               </FormControl>
             </Box>
-            <Typography variant="overline" color="text.secondary" display="block" sx={{ fontSize: '0.65rem' }}>Ideas</Typography>
+            <Typography variant="overline" color="text.secondary" display="block" sx={{ fontSize: '0.65rem' }}>Tickers</Typography>
             <Typography variant="body2" sx={{ mb: 0.5, fontSize: '0.8rem' }}>
-              {ideasInYear.size} ideas mentioned · {newIdeasInYear} new ideas · {entriesInMetricsYear} journal entries
+              {ideasInYear.size} tickers mentioned · {newIdeasInYear} new · {entriesInMetricsYear} journal entries
             </Typography>
             <Typography variant="overline" color="text.secondary" display="block" sx={{ fontSize: '0.65rem' }}>Trades (decisions)</Typography>
             <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
@@ -947,7 +947,7 @@ export default function InsightsPage() {
           <Grid size={{ xs: 12, md: 6 }}>
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Top 10 ideas
+                Top 10 tickers
               </Typography>
               <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
                 {topIdeas.map(({ companyKey, ticker, count, company_name }) => (
@@ -958,7 +958,7 @@ export default function InsightsPage() {
                       label={ticker ? getTickerDisplayLabel(ticker) || `$${ticker}` : `$${companyKey}`}
                       size="small"
                       component={RouterLink}
-                      to={`/ideas/${encodeURIComponent(companyKey)}`}
+                      to={`/tickers/${encodeURIComponent(companyKey)}`}
                       clickable
                       sx={{ fontWeight: 600 }}
                     />
@@ -990,10 +990,10 @@ export default function InsightsPage() {
           <Grid size={{ xs: 12, md: 6 }}>
             <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Idea status
+                Ticker status
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                How your {ideaStatusTotal} ideas are classified by latest decision
+                How your {ideaStatusTotal} tickers are classified by latest decision
               </Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
                 <Box sx={{ width: '100%', maxWidth: 220, height: 200 }}>
@@ -1058,7 +1058,7 @@ export default function InsightsPage() {
         <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
           <Box display="flex" alignItems="center" gap={1} sx={{ mb: 1 }}>
             <Typography variant="subtitle1" fontWeight={600}>
-              Most mentioned ideas
+              Most mentioned tickers
             </Typography>
             <FormControl size="small" variant="outlined" sx={{ minWidth: 90 }}>
               <InputLabel>Year</InputLabel>
@@ -1080,7 +1080,7 @@ export default function InsightsPage() {
                   label={ticker ? getTickerDisplayLabel(ticker) || `$${ticker}` : `$${companyKey}`}
                   size="small"
                   component={RouterLink}
-                  to={`/ideas/${encodeURIComponent(companyKey)}`}
+                  to={`/tickers/${encodeURIComponent(companyKey)}`}
                   clickable
                   sx={{ fontWeight: 600 }}
                 />
@@ -1280,7 +1280,7 @@ export default function InsightsPage() {
                 <TableRow key={row.closingAction.id}>
                   <TableCell><DecisionChip type={action.type} size="small" /></TableCell>
                   <TableCell>
-                    <Link component={RouterLink} to={`/ideas/${encodeURIComponent(normalizeTickerToCompany(action.ticker) || action.ticker?.toUpperCase() || '')}`} underline="hover" fontWeight={600}>
+                    <Link component={RouterLink} to={`/tickers/${encodeURIComponent(normalizeTickerToCompany(action.ticker) || action.ticker?.toUpperCase() || '')}`} underline="hover" fontWeight={600}>
                       {action.ticker ? getTickerDisplayLabel(action.ticker) : '—'}
                     </Link>
                   </TableCell>
@@ -1355,7 +1355,7 @@ export default function InsightsPage() {
       {passedList.length > 0 && (
         <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
           <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-            Passed ideas that ran away
+            Passed tickers that ran away
           </Typography>
           <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
             CAGR from pass date to today (no position size). See <Link component={RouterLink} to="/passed">Passed</Link> for full list.
@@ -1376,7 +1376,7 @@ export default function InsightsPage() {
                 <ListItem key={item.id} disablePadding sx={{ py: 0.5 }}>
                   <ListItemText
                     primary={
-                      <Link component={RouterLink} to={`/ideas/${companyKey}`} underline="hover" fontWeight={600}>
+                      <Link component={RouterLink} to={`/tickers/${companyKey}`} underline="hover" fontWeight={600}>
                         ${item.ticker}
                       </Link>
                     }

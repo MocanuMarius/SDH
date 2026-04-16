@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   Box,
   Typography,
@@ -20,45 +20,34 @@ import { useTheme } from '@mui/material/styles'
 import FilterListIcon from '@mui/icons-material/FilterList'
 import CloseIcon from '@mui/icons-material/Close'
 import Grid from '@mui/material/Grid2'
-import { generateAnalyticsSnapshot, type AnalyticsFilter, type AnalyticsSnapshot } from '../services/analyticsService'
+import { useQuery } from '@tanstack/react-query'
+import { generateAnalyticsSnapshot, type AnalyticsFilter } from '../services/analyticsService'
 import MetricCard from '../components/MetricCard'
 
 export default function AnalyticsDashboardPage() {
-  const [snapshot, setSnapshot] = useState<AnalyticsSnapshot | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // Filter state is applied on click; fed into the query key so changing it
+  // triggers a fresh fetch via react-query (and any invalidate.actions/entries
+  // mutation in the app re-runs the snapshot too via the 'analytics' key prefix).
+  const [appliedFilter, setAppliedFilter] = useState<AnalyticsFilter>({})
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
-  // On mobile, the filter toolbar collapses into a button.
   const [filtersOpen, setFiltersOpen] = useState(!isMobile)
 
-  useEffect(() => {
-    loadAnalytics()
-    // loadAnalytics reads startDate/endDate at call time but we want an initial
-    // load on mount only; date filter changes are applied via the Apply button.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  async function loadAnalytics() {
-    setLoading(true)
-    setError(null)
-    try {
-      const filter: AnalyticsFilter = {}
-      if (startDate) filter.startDate = startDate
-      if (endDate) filter.endDate = endDate
-      const data = await generateAnalyticsSnapshot(filter)
-      setSnapshot(data)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load analytics')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const snapshotQ = useQuery({
+    queryKey: ['analytics', 'snapshot', appliedFilter],
+    queryFn: () => generateAnalyticsSnapshot(appliedFilter),
+  })
+  const snapshot = snapshotQ.data ?? null
+  const loading = snapshotQ.isLoading
+  const error = snapshotQ.error ? (snapshotQ.error as Error).message : null
 
   function handleApplyFilters() {
-    loadAnalytics()
+    const next: AnalyticsFilter = {}
+    if (startDate) next.startDate = startDate
+    if (endDate) next.endDate = endDate
+    setAppliedFilter(next)
   }
 
   if (loading && !snapshot) {

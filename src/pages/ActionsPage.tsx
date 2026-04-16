@@ -22,7 +22,7 @@ import { type ActionWithEntry } from '../services/actionsService'
 import { createOutcome } from '../services/outcomesService'
 import { useActions, useOutcomesByActionIds, useInvalidate } from '../hooks/queries'
 import { fetchChartData } from '../services/chartApiService'
-import MarkdownRender from '../components/MarkdownRender'
+import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import TickerLinks from '../components/TickerLinks'
 import RelativeDate from '../components/RelativeDate'
 import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
@@ -254,7 +254,7 @@ export default function ActionsPage() {
           if (!entryVal) return <span>—</span>
           return (
             <Link component={RouterLink} to={`/entries/${entryVal.id}`} underline="hover" color="inherit">
-              <MarkdownRender source={getEntryDisplayTitle({ title_markdown: entryVal.title_markdown }, [p.row])} inline dense />
+              <PlainTextWithTickers source={getEntryDisplayTitle({ title_markdown: entryVal.title_markdown }, [p.row])} inline dense tickerAsLink={false} />
             </Link>
           )
         },
@@ -287,8 +287,9 @@ export default function ActionsPage() {
 
   return (
     <Box>
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
-        Trades
+      <Typography variant="h1" sx={{ mb: 0.5, mt: 0.5 }}>Trades</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 2.5, fontStyle: 'italic' }}>
+        Every structured decision you've logged, across every entry and ticker.
       </Typography>
 
       <Box display="flex" gap={1} flexWrap="wrap" sx={{ mb: 1.5 }}>

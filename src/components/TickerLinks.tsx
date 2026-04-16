@@ -32,17 +32,28 @@ export default function TickerLinks({
       component={Component}
       sx={{
         display: 'inline',
+        // Match the chip styling used by PlainTextWithTickers so the same $TICKER
+        // looks identical across the app (entry body, decision reasons, notes).
         '& .ticker-chip': {
           mx: 0.25,
-          verticalAlign: 'middle',
+          verticalAlign: 'baseline',
           fontSize: 'inherit',
-          height: dense ? 20 : 24,
-          color: 'primary.main',
+          height: 'auto',
+          color: 'primary.dark',
           bgcolor: 'primary.50',
+          border: '1px solid',
           borderColor: 'primary.200',
-          '& .MuiChip-label': { px: 0.75 },
+          fontWeight: 700,
+          borderRadius: 1,
+          textDecoration: 'none',
+          '& .MuiChip-label': {
+            px: dense ? 0.75 : 1,
+            py: dense ? 0.2 : 0.35,
+            lineHeight: 1.2,
+            textDecoration: 'none',
+          },
           cursor: 'pointer',
-          '&:hover': { bgcolor: 'primary.100', color: 'primary.dark' },
+          '&:hover': { bgcolor: 'primary.100', color: 'primary.dark', borderColor: 'primary.main' },
         },
       }}
     >
@@ -56,7 +67,6 @@ export default function TickerLinks({
           return (
             <Chip
               key={i}
-              size="small"
               label={label}
               className="ticker-chip"
               clickable

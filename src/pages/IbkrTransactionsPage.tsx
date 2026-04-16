@@ -200,7 +200,7 @@ export default function IbkrTransactionsPage() {
                     {account.mtmStocks.map((row) => (
                       <TableRow key={row.symbol}>
                         <TableCell>
-                          <Link component={RouterLink} to={`/ideas/${encodeURIComponent(normalizeTickerToCompany(row.symbol) || row.symbol)}`} underline="hover">
+                          <Link component={RouterLink} to={`/tickers/${encodeURIComponent(normalizeTickerToCompany(row.symbol) || row.symbol)}`} underline="hover">
                             {row.symbol}
                           </Link>
                         </TableCell>
@@ -237,7 +237,7 @@ export default function IbkrTransactionsPage() {
                     {account.realizedUnrealizedStocks.map((row) => (
                       <TableRow key={row.symbol}>
                         <TableCell>
-                          <Link component={RouterLink} to={`/ideas/${encodeURIComponent(normalizeTickerToCompany(row.symbol) || row.symbol)}`} underline="hover">
+                          <Link component={RouterLink} to={`/tickers/${encodeURIComponent(normalizeTickerToCompany(row.symbol) || row.symbol)}`} underline="hover">
                             {row.symbol}
                           </Link>
                         </TableCell>

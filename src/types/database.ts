@@ -70,7 +70,10 @@ export type ActionType = (typeof ACTION_TYPES)[number]
 
 export interface Action {
   id: string
-  entry_id: string
+  /** Owning user — required for RLS even when entry_id is null (standalone decision). */
+  user_id: string
+  /** Optional: a decision can stand alone without belonging to a journal entry. */
+  entry_id: string | null
   type: ActionType
   ticker: string
   company_name: string | null
@@ -96,7 +99,7 @@ export type ActionInsert = Omit<Action, 'id' | 'created_at' | 'updated_at'> & {
   raw_snippet?: string | null
 }
 
-export type ActionUpdate = Partial<Omit<Action, 'id' | 'entry_id' | 'created_at'>>
+export type ActionUpdate = Partial<Omit<Action, 'id' | 'user_id' | 'created_at'>>
 
 export type OutcomeDriver = 'thesis' | 'other' | null
 

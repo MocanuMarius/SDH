@@ -42,7 +42,10 @@ data/test/secrets/
 data/test/*-auth*
 
 # LLM / Claude artifacts and one-time planning docs (not app code)
-docs/
+docs/*
+# …but keep the rolling principles + issues docs in version control.
+!docs/PRINCIPLES.md
+!docs/ISSUES.md
 FIX_PLAN.md
 SKILL_ENGINEERING_GUIDE.md
 WATCHLIST_SETUP.md

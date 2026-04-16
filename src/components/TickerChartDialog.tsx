@@ -289,10 +289,10 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
           <Button
             size="small"
             variant="outlined"
-            onClick={() => { navigate(`/ideas/${encodeURIComponent(ticker ?? '')}`); onClose() }}
+            onClick={() => { navigate(`/tickers/${encodeURIComponent(ticker ?? '')}`); onClose() }}
             sx={{ textTransform: 'none', fontSize: '0.75rem' }}
           >
-            Idea Page
+            Ticker Page
           </Button>
           <IconButton onClick={onClose} size="small" sx={{ ml: 0.5 }}>
             <CloseIcon />

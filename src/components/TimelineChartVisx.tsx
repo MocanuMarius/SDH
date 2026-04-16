@@ -11,6 +11,7 @@ import { Brush } from '@visx/brush'
 import { Box, Paper, Typography, CircularProgress } from '@mui/material'
 import type { ActionWithEntry } from '../services/actionsService'
 import { fetchChartData } from '../services/chartApiService'
+import { getDecisionTypeColor, getDecisionTypeConfig } from '../theme/decisionTypes'
 
 const CHART_LINE_COLOR = '#334155'
 const AXIS_COLOR = '#64748b'
@@ -602,6 +603,42 @@ function TimelineChartVisx({
                     style={{ pointerEvents: 'none', userSelect: 'none' }}>
                     {totalCount}
                   </text>
+                </g>
+              )
+            })
+
+            // ── Other-type decisions (pass / research / hold / watchlist / speculate)
+            // Render a colored diamond on the price line with a thin connector to the
+            // axis, so they're discoverable but don't steal focus from buys/sells.
+            data.forEach((pt, pi) => {
+              const others = (pt.decisions ?? []).filter((d) => d.type === 'other')
+              if (others.length === 0) return
+              const cx = dateScale(new Date(pt.date))
+              const cy = priceScale(pt.price)
+              const first = others[0].action
+              const color = getDecisionTypeColor(first.type)
+              const isGreyed = selectedTicker != null && !others.some((d) => (d.action.ticker ?? '').toUpperCase() === selectedTicker)
+              const fill = isGreyed ? ARROW_GREYED : color
+              const r = 7
+              els.push(
+                <g key={`other-${pi}`}
+                  onClick={(e) => { e.stopPropagation(); onSelectAction(first.id) }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <title>
+                    {others.map((o) => `${getDecisionTypeConfig(o.action.type).label} · ${o.action.ticker}`).join('\n')}
+                  </title>
+                  <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2}
+                    transform={`rotate(45 ${cx} ${cy})`}
+                    fill={fill} fillOpacity={isGreyed ? 0.35 : 0.95}
+                    stroke="rgba(255,255,255,0.85)" strokeWidth={1.25} />
+                  {others.length > 1 && (
+                    <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle"
+                      fontSize={10} fontWeight={800} fill="#fff"
+                      style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                      {others.length}
+                    </text>
+                  )}
                 </g>
               )
             })

@@ -50,7 +50,8 @@ export default function IdeasPage() {
     const all = actionsQ.data ?? []
     const entries = entriesQ.data ?? []
     const autoIds = new Set(entries.filter(isAutomatedEntry).map((e) => e.id))
-    return all.filter((act) => !autoIds.has(act.entry_id))
+    // Standalone actions (entry_id null) can never be from an automated entry — keep them.
+    return all.filter((act) => act.entry_id == null || !autoIds.has(act.entry_id))
   }, [actionsQ.data, entriesQ.data])
   const passedList = passedQ.data ?? []
 
@@ -163,8 +164,9 @@ export default function IdeasPage() {
 
   return (
     <Box>
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
-        Ideas
+      <Typography variant="h1" sx={{ mb: 0.5, mt: 0.5 }}>Tickers</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 2.5, fontStyle: 'italic' }}>
+        Every ticker you've journaled about. Click one for its full decision history, chart, and entries.
       </Typography>
 
       <TextField
@@ -197,8 +199,8 @@ export default function IdeasPage() {
       ) : ideas.length === 0 ? (
         <Typography color="text.secondary">
           {search.trim()
-            ? 'No ideas match your search.'
-            : 'No ideas yet. Add Buy, Sell, or Pass decisions in journal entries to track tickers here. You can also add passed ideas directly from the Passed tab.'}
+            ? 'No tickers match your search.'
+            : 'No tickers yet. Add Buy, Sell, or Pass decisions in journal entries to track tickers here.'}
         </Typography>
       ) : (
         <DataGrid
@@ -210,7 +212,7 @@ export default function IdeasPage() {
           pageSizeOptions={[25, 50, 100]}
           initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
           onRowClick={(params: GridRowParams<IdeaRow>) => {
-            navigate(`/ideas/${encodeURIComponent(params.row.ticker)}`)
+            navigate(`/tickers/${encodeURIComponent(params.row.ticker)}`)
           }}
           sx={{
             border: '1px solid',

@@ -563,7 +563,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
                               size="small"
                               label={getTickerDisplayLabel(p.ticker)}
                               clickable
-                              onClick={() => { onClose(); window.location.href = `/ideas/${encodeURIComponent(p.ticker)}` }}
+                              onClick={() => { onClose(); window.location.href = `/tickers/${encodeURIComponent(p.ticker)}` }}
                               sx={{ fontWeight: 700 }}
                             />
                             <Typography variant="caption" color={retColor} fontWeight={700}>
@@ -597,7 +597,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
                     const overdue = isOverdue(r.reminder_date)
                     const dueToday = isDueToday(r.reminder_date)
                     const borderColor = urgencyBorderColor(r.reminder_date)
-                    const navTo = r.entry_id ? `/entries/${r.entry_id}` : r.ticker ? `/ideas/${encodeURIComponent(normalizeTickerToCompany(r.ticker) || r.ticker)}` : null
+                    const navTo = r.entry_id ? `/entries/${r.entry_id}` : r.ticker ? `/tickers/${encodeURIComponent(normalizeTickerToCompany(r.ticker) || r.ticker)}` : null
                     return (
                       <SwipeableCard
                         key={r.id}
@@ -661,14 +661,14 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
             {/* ── Ideas to refresh ── */}
             {visibleIdeaAlerts.length > 0 && (
               <Box>
-                <SectionHeader title={`Stale ideas · ${IDEA_REFRESH_DAYS}+ days`} count={visibleIdeaAlerts.length} />
+                <SectionHeader title={`Stale tickers · ${IDEA_REFRESH_DAYS}+ days`} count={visibleIdeaAlerts.length} />
                 <Stack spacing={0.75}>
                   {visibleIdeaAlerts.map((a) => {
                     const realReturn = a.signedAlpha
                     const cagr = realReturn != null ? computeCagr(realReturn, a.days) : null
                     const realColor = realReturn == null ? '#64748b' : realReturn >= 0 ? '#16a34a' : '#dc2626'
                     const cagrColor = cagr == null ? '#64748b' : cagr >= 0 ? '#16a34a' : '#dc2626'
-                    const ideaUrl = `/ideas/${encodeURIComponent(normalizeTickerToCompany(a.ticker) || a.ticker)}`
+                    const ideaUrl = `/tickers/${encodeURIComponent(normalizeTickerToCompany(a.ticker) || a.ticker)}`
                     return (
                       <SwipeableCard
                         key={a.ticker}
@@ -682,7 +682,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
                         <Box sx={{ px: 1.25, py: 0.75, display: 'flex', gap: 0.75 }}>
                           <Box sx={{ flex: 1, minWidth: 0 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <Chip size="small" label={getTickerDisplayLabel(a.ticker)} clickable onClick={() => { onClose(); window.location.href = `/ideas/${encodeURIComponent(a.ticker)}` }} sx={{ fontWeight: 700, height: 22 }} />
+                              <Chip size="small" label={getTickerDisplayLabel(a.ticker)} clickable onClick={() => { onClose(); window.location.href = `/tickers/${encodeURIComponent(a.ticker)}` }} sx={{ fontWeight: 700, height: 22 }} />
                               {a.company && (
                                 <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 160, flex: 1 }}>
                                   {a.company}

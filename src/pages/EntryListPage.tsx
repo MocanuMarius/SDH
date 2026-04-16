@@ -41,7 +41,7 @@ import type { EntryWithActions } from '../services/entriesService'
 import { useDebounce } from '../hooks/useDebounce'
 import { useEntriesWithActions } from '../hooks/queries'
 import { getChartCategory } from '../theme/decisionTypes'
-import MarkdownRender from '../components/MarkdownRender'
+import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import RelativeDate from '../components/RelativeDate'
 import TagChip from '../components/TagChip'
 import { investmentScoreBadge } from '../utils/investmentScore'
@@ -354,7 +354,7 @@ const EntryGridCard = memo(function EntryGridCard({ entry }: { entry: EntryWithA
                   </Box>
                 ) : (
                   <Typography variant="body2" fontWeight={600} noWrap component="div" sx={{ mb: 0.25 }}>
-                    <MarkdownRender source={entry.title_markdown || '(Untitled)'} inline dense tickerAsLink={false} />
+                    <PlainTextWithTickers source={entry.title_markdown || '(Untitled)'} inline dense tickerAsLink={false} />
                   </Typography>
                 )}
                 <Typography variant="caption" color="text.secondary">
@@ -401,7 +401,7 @@ const EntryGridCard = memo(function EntryGridCard({ entry }: { entry: EntryWithA
             {/* Full title when tickers are shown in header */}
             {tickers.length > 0 && (
               <Typography variant="body2" fontWeight={600} component="div" sx={{ mb: 0.75 }}>
-                <MarkdownRender source={entry.title_markdown || '(Untitled)'} inline dense tickerAsLink={false} />
+                <PlainTextWithTickers source={entry.title_markdown || '(Untitled)'} inline dense tickerAsLink={false} />
               </Typography>
             )}
 
@@ -472,7 +472,7 @@ const EntryListRow = memo(function EntryListRow({ entry }: { entry: EntryWithAct
     <Box sx={{ px: 1.5, py: 1 }}>
       <Box display="flex" alignItems="flex-start" justifyContent="space-between" gap={1}>
         <Typography variant="body2" fontWeight={600} component="div" sx={{ flex: 1, minWidth: 0 }}>
-          <MarkdownRender source={entry.title_markdown || '(Untitled)'} inline dense tickerAsLink={false} />
+          <PlainTextWithTickers source={entry.title_markdown || '(Untitled)'} inline dense tickerAsLink={false} />
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
           <ProcessOutcomeBadge {...entryProcessOutcome(entry)} />
@@ -626,7 +626,7 @@ export default function EntryListPage() {
       >
         {/* Row 1: title + toggle + new */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
-          <Typography variant="subtitle1" fontWeight={700} sx={{ flex: 1 }}>Journal</Typography>
+          <Typography variant="h1" sx={{ flex: 1, fontSize: { xs: '1.5rem', sm: '1.875rem' }, mt: 0.5 }}>Journal</Typography>
           <ToggleButtonGroup
             value={gridView ? 'grid' : 'list'}
             exclusive

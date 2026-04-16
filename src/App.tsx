@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Link as RouterLink, useLocation, useSearchParams } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Link as RouterLink, useLocation, useSearchParams, useParams } from 'react-router-dom'
 import { ThemeProvider, useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import CssBaseline from '@mui/material/CssBaseline'
@@ -82,7 +82,7 @@ function Page({ children }: { children: ReactNode }) {
 // Primary nav items always visible on desktop
 const PRIMARY_NAV = [
   { to: '/', label: 'Journal', icon: ArticleOutlinedIcon },
-  { to: '/ideas', label: 'Ideas', icon: LightbulbOutlinedIcon },
+  { to: '/tickers', label: 'Tickers', icon: LightbulbOutlinedIcon },
   { to: '/timeline', label: 'Timeline', icon: TimelineIcon },
   { to: '/watchlist', label: 'Watchlist', icon: WatchlistIcon },
   { to: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
@@ -107,13 +107,18 @@ function NavButton({ to, label, icon: Icon }: { to: string; label: string; icon:
       to={to}
       startIcon={<Icon fontSize="small" />}
       sx={{
-        textTransform: 'none',
-        fontWeight: isActive ? 700 : 400,
-        borderBottom: isActive ? '2px solid rgba(255,255,255,0.9)' : '2px solid transparent',
+        textTransform: 'uppercase',
+        fontSize: '0.72rem',
+        letterSpacing: '0.10em',
+        fontWeight: isActive ? 700 : 500,
+        color: isActive ? '#fff' : 'rgba(255,255,255,0.65)',
+        borderBottom: isActive ? '2px solid #fff' : '2px solid transparent',
         borderRadius: 0,
         pb: '6px',
-        px: 1.5,
-        '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
+        px: 1.75,
+        minHeight: 0,
+        transition: 'color 140ms ease',
+        '&:hover': { bgcolor: 'transparent', color: '#fff' },
       }}
     >
       {label}
@@ -150,20 +155,46 @@ function AppBarNav({
 
   return (
     <>
-      <AppBar position="fixed" elevation={0} sx={{ borderBottom: '1px solid rgba(255,255,255,0.12)' }}>
-        <Toolbar sx={{ justifyContent: 'space-between', minHeight: { xs: 56, sm: 64 }, gap: 1 }}>
-          {/* Left: hamburger (mobile) + logo */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+      <AppBar position="fixed" elevation={0} sx={{ borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
+        <Toolbar sx={{ justifyContent: 'space-between', minHeight: { xs: 56, sm: 60 }, gap: 1 }}>
+          {/* Masthead — serif wordmark, newspaper-style kicker beneath. */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0, minWidth: 0 }}>
             {isMobile && (
               <IconButton color="inherit" onClick={() => setNavOpenVal(true)} aria-label="Open menu" edge="start">
                 <MenuIcon />
               </IconButton>
             )}
-            <Typography variant="subtitle1" component="span" fontWeight={800} noWrap sx={{ letterSpacing: '-0.3px' }}>
-              <RouterLink to="/" style={{ color: 'inherit', textDecoration: 'none' }}>
+            <RouterLink to="/" style={{ color: 'inherit', textDecoration: 'none', display: 'flex', flexDirection: 'column', lineHeight: 1, minWidth: 0 }}>
+              <Typography
+                component="span"
+                noWrap
+                sx={{
+                  fontFamily: '"Source Serif 4", Georgia, serif',
+                  fontWeight: 700,
+                  fontSize: { xs: '1.25rem', sm: '1.4rem' },
+                  letterSpacing: '-0.01em',
+                  lineHeight: 1,
+                }}
+              >
                 Deecide
-              </RouterLink>
-            </Typography>
+              </Typography>
+              {!isMobile && (
+                <Typography
+                  component="span"
+                  noWrap
+                  sx={{
+                    fontSize: '0.62rem',
+                    letterSpacing: '0.18em',
+                    textTransform: 'uppercase',
+                    fontWeight: 600,
+                    color: 'rgba(255,255,255,0.55)',
+                    mt: '2px',
+                  }}
+                >
+                  Investment Journal
+                </Typography>
+              )}
+            </RouterLink>
           </Box>
 
           {/* Center: primary nav (desktop only) */}
@@ -244,7 +275,7 @@ function MobileBottomNav({ onOpenNav, onOpenActivity, activityCount }: { onOpenN
   const location = useLocation()
   if (!isMobile) return null
   const path = location.pathname
-  const value = path === '/' ? '/journal' : path.startsWith('/ideas') ? '/ideas' : path.startsWith('/entries') ? '/journal' : path
+  const value = path === '/' ? '/journal' : path.startsWith('/tickers') ? '/tickers' : path.startsWith('/entries') ? '/journal' : path
   return (
     <BottomNavigation
       value={value}
@@ -254,17 +285,24 @@ function MobileBottomNav({ onOpenNav, onOpenActivity, activityCount }: { onOpenN
         bottom: 0,
         left: 0,
         right: 0,
-        bgcolor: '#0f172a',
-        borderTop: 'none',
+        bgcolor: 'text.primary',
+        borderTop: '1px solid rgba(255,255,255,0.10)',
         pb: 'env(safe-area-inset-bottom)',
-        '& .MuiBottomNavigationAction-root': { color: 'rgba(255,255,255,0.6)' },
-        '& .Mui-selected': { color: '#38bdf8 !important' },
+        '& .MuiBottomNavigationAction-root': {
+          color: 'rgba(255,255,255,0.62)',
+          fontSize: '0.68rem',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          minWidth: 0,
+        },
+        '& .Mui-selected': { color: '#fff !important' },
+        '& .Mui-selected .MuiBottomNavigationAction-label': { fontWeight: 700 },
         zIndex: (t) => t.zIndex.appBar - 1,
       }}
     >
       <BottomNavigationAction label="Journal" value="/journal" icon={<ArticleOutlinedIcon />} component={RouterLink} to="/" />
       <BottomNavigationAction label="Timeline" value="/timeline" icon={<TimelineIcon />} component={RouterLink} to="/timeline" />
-      <BottomNavigationAction label="Ideas" value="/ideas" icon={<LightbulbOutlinedIcon />} component={RouterLink} to="/ideas" />
+      <BottomNavigationAction label="Tickers" value="/tickers" icon={<LightbulbOutlinedIcon />} component={RouterLink} to="/tickers" />
       <BottomNavigationAction label="Watchlist" value="/watchlist" icon={<WatchlistIcon fontSize="small" />} component={RouterLink} to="/watchlist" />
       <BottomNavigationAction label="More" value="more" icon={<MoreHorizIcon />} onClick={(e) => { e.preventDefault(); onOpenNav() }} />
     </BottomNavigation>
@@ -282,6 +320,12 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
   }
   if (!user) return <Navigate to="/login" replace />
   return <>{children}</>
+}
+
+/** Legacy redirect: /ideas/:ticker → /tickers/:ticker (preserves bookmarks). */
+function LegacyIdeaRedirect() {
+  const { ticker } = useParams<{ ticker: string }>()
+  return <Navigate to={`/tickers/${ticker ?? ''}`} replace />
 }
 
 /** Fallback for Share Target when service worker doesn't intercept */
@@ -304,13 +348,15 @@ function AppRoutes() {
       <Route path="/entries/:id" element={<ProtectedLayout><Page><EntryDetailPage /></Page></ProtectedLayout>} />
       <Route path="/entries/:id/edit" element={<ProtectedLayout><Page><EntryFormPage /></Page></ProtectedLayout>} />
       <Route path="/actions" element={<ProtectedLayout><Page><ActionsPage /></Page></ProtectedLayout>} />
-      <Route path="/passed" element={<Navigate to="/ideas" replace />} />
+      <Route path="/passed" element={<Navigate to="/tickers" replace />} />
       <Route path="/analytics" element={<ProtectedLayout><Page><AnalyticsPage /></Page></ProtectedLayout>} />
       <Route path="/insights" element={<Navigate to="/analytics" replace />} />
       <Route path="/calibration" element={<Navigate to="/analytics" replace />} />
       <Route path="/decisions" element={<ProtectedLayout><Page><LongTermDecisionsPage /></Page></ProtectedLayout>} />
-      <Route path="/ideas" element={<ProtectedLayout><Page><IdeasPage /></Page></ProtectedLayout>} />
-      <Route path="/ideas/:ticker" element={<ProtectedLayout><Page><IdeaDetailPage /></Page></ProtectedLayout>} />
+      <Route path="/tickers" element={<ProtectedLayout><Page><IdeasPage /></Page></ProtectedLayout>} />
+      <Route path="/tickers/:ticker" element={<ProtectedLayout><Page><IdeaDetailPage /></Page></ProtectedLayout>} />
+      <Route path="/ideas" element={<Navigate to="/tickers" replace />} />
+      <Route path="/ideas/:ticker" element={<LegacyIdeaRedirect />} />
       <Route path="/timeline" element={<ProtectedLayout><Page><TimelinePage /></Page></ProtectedLayout>} />
       <Route path="/import" element={<ProtectedLayout><Page><ImportHub /></Page></ProtectedLayout>} />
       <Route path="/ibkr" element={<Navigate to="/import" replace />} />

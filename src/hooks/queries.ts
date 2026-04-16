@@ -160,17 +160,21 @@ export function useInvalidate() {
     /** Invalidate every entries query (list, withActions, single). */
     entries: () => {
       qc.invalidateQueries({ queryKey: ['entries'] })
+      qc.invalidateQueries({ queryKey: ['analytics'] })
     },
     /** Invalidate every actions query (list, by entry, by ticker). */
     actions: () => {
       qc.invalidateQueries({ queryKey: ['actions'] })
       // Actions appear in entries-with-actions too
       qc.invalidateQueries({ queryKey: ['entries', 'withActions'] })
+      // Analytics aggregates roll up actions; keep them in sync.
+      qc.invalidateQueries({ queryKey: ['analytics'] })
     },
     /** Invalidate outcomes queries. Outcomes also affect entries-with-actions badges. */
     outcomes: () => {
       qc.invalidateQueries({ queryKey: ['outcomes'] })
       qc.invalidateQueries({ queryKey: ['entries', 'withActions'] })
+      qc.invalidateQueries({ queryKey: ['analytics'] })
     },
     /** Invalidate predictions for a specific entry (or all if no id). */
     predictions: (entryId?: string) => {

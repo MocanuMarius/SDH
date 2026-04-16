@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, Fragment } from 'react'
 import { useParams, Link as RouterLink } from 'react-router-dom'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
@@ -40,6 +40,19 @@ import {
   formatDeltaPercent,
 } from '../utils/cagr'
 import type { ChartRange } from '../services/chartApiService'
+
+/** Whole calendar days between two ISO dates (rounded). */
+function daysBetween(fromIso: string, toIso: string): number {
+  const ms = new Date(toIso).getTime() - new Date(fromIso).getTime()
+  return Math.round(ms / 86400000)
+}
+
+/** Format an elapsed-days count into a compact human label (e.g. "47d", "3.2y"). */
+function formatElapsed(days: number): string {
+  if (days < 60) return `${days}d`
+  if (days < 365 * 2) return `${(days / 30).toFixed(1)}mo`
+  return `${(days / 365).toFixed(1)}y`
+}
 
 /** Pick the best chart range to show all decisions with padding before first and after last */
 function bestRangeForActions(actions: ActionWithEntry[]): ChartRange {
@@ -162,7 +175,7 @@ export default function IdeaDetailPage() {
 
   if (!ticker) {
     return (
-      <Alert severity="info">No ticker selected. Go to Ideas and click a ticker.</Alert>
+      <Alert severity="info">No ticker selected. Go to Tickers and click one.</Alert>
     )
   }
 
@@ -181,7 +194,7 @@ export default function IdeaDetailPage() {
     return (
       <Box>
         <Alert severity="error" onClose={() => setError(null)}>{errorMessage}</Alert>
-        <Button component={RouterLink} to="/ideas" sx={{ mt: 2 }}>Back to Ideas</Button>
+        <Button component={RouterLink} to="/tickers" sx={{ mt: 2 }}>Back to Tickers</Button>
       </Box>
     )
   }
@@ -189,24 +202,69 @@ export default function IdeaDetailPage() {
   return (
     <Box sx={{ minWidth: 0 }}>
       <Breadcrumbs sx={{ mb: 1.5, fontSize: '0.85rem' }}>
-        <Link component={RouterLink} to="/ideas" underline="hover" color="inherit">
-          Ideas
+        <Link component={RouterLink} to="/tickers" underline="hover" color="inherit">
+          Tickers
         </Link>
         <Typography fontSize="inherit" color="text.primary">
           ${decodedTicker}
         </Typography>
       </Breadcrumbs>
-      <Box display="flex" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 1.5 }}>
+      <Box display="flex" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 0.75 }}>
         <Chip
           label={`$${decodedTicker}`}
           sx={{ fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.1rem' } }}
         />
         {company && (
-          <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: { xs: '60vw', sm: 'none' } }}>
+          <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: { xs: '50vw', sm: 'none' } }}>
             {company}
           </Typography>
         )}
+        {(() => {
+          if (actions.length === 0) return null
+          const latest = [...actions].sort((a, b) => (b.action_date || '').localeCompare(a.action_date || ''))[0]
+          const t = latest.type
+          const status =
+            t === 'buy' || t === 'add_more' || t === 'cover' ? { label: 'Holding', color: 'success' as const } :
+            t === 'sell' || t === 'trim' || t === 'short' ? { label: 'Sold / reduced', color: 'error' as const } :
+            t === 'pass' ? { label: 'Passed', color: 'default' as const } :
+            t === 'hold' || t === 'watchlist' ? { label: 'Watching', color: 'warning' as const } :
+            t === 'research' ? { label: 'Researching', color: 'warning' as const } :
+            t === 'speculate' ? { label: 'Speculating', color: 'warning' as const } :
+            { label: t, color: 'default' as const }
+          return (
+            <Chip
+              size="small"
+              label={status.label}
+              color={status.color === 'default' ? undefined : status.color}
+              variant={status.color === 'default' ? 'outlined' : 'filled'}
+              sx={{ fontWeight: 600 }}
+            />
+          )
+        })()}
       </Box>
+      {actions.length > 0 && (() => {
+        const sortedAsc = [...actions].sort((a, b) => (a.action_date || '').localeCompare(b.action_date || ''))
+        const first = sortedAsc[0].action_date
+        const last = sortedAsc[sortedAsc.length - 1].action_date
+        const span = first && last && first !== last ? formatElapsed(daysBetween(first, last)) : null
+        return (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+            {actions.length} decision{actions.length === 1 ? '' : 's'}{span ? ` over ${span}` : ''}
+            {first && (
+              <>
+                {' · first '}
+                <RelativeDate date={first} variant="caption" sx={{ color: 'inherit' }} />
+              </>
+            )}
+            {last && first !== last && (
+              <>
+                {' · last '}
+                <RelativeDate date={last} variant="caption" sx={{ color: 'inherit' }} />
+              </>
+            )}
+          </Typography>
+        )
+      })()}
       {passActions.length > 0 && (
         <Paper variant="outlined" sx={{ p: 2, mb: 2, bgcolor: 'grey.50' }}>
           <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
@@ -283,113 +341,165 @@ export default function IdeaDetailPage() {
             No decisions for this ticker yet.
           </Typography>
         </Paper>
-      ) : isMobile ? (
-        /* Mobile: card layout instead of table */
-        <Stack spacing={1}>
-          {actions.map((a) => {
-            const delta = actionDeltas[a.id]
-            const hasDelta = delta != null && Number.isFinite(delta)
-            return (
-              <Paper key={a.id} variant="outlined" sx={{ p: 1.5 }}>
-                <Box display="flex" alignItems="center" gap={0.75} flexWrap="wrap" sx={{ mb: 0.5 }}>
-                  <DecisionChip type={a.type} size="small" />
-                  <OptionTypeChip ticker={a.ticker} />
-                  {a.price && (
-                    <Typography variant="body2" fontWeight={600}>
-                      {a.price}{a.currency ? ` ${a.currency}` : ''}
-                    </Typography>
-                  )}
-                  {chartLoading ? null : hasDelta ? (
-                    <Typography variant="body2" sx={{ color: delta >= 0 ? 'success.main' : 'error.main', fontWeight: 600 }}>
-                      {formatDeltaPercent(delta)}
-                    </Typography>
-                  ) : null}
-                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-                    <RelativeDate date={a.action_date} variant="caption" sx={{ color: 'inherit' }} />
-                  </Typography>
-                </Box>
-                {a.reason && (
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                    <TickerLinks text={a.reason} variant="chip" dense />
-                  </Typography>
-                )}
-                {a.entry && (
-                  <Button
-                    component={RouterLink}
-                    to={`/entries/${a.entry.id}`}
-                    size="small"
-                    sx={{ textTransform: 'none', px: 0, fontSize: '0.75rem' }}
-                  >
-                    {getEntryDisplayTitle(a.entry, [a]).slice(0, 50)}
-                    {getEntryDisplayTitle(a.entry, [a]).length > 50 ? '…' : ''}
-                  </Button>
-                )}
-              </Paper>
-            )
-          })}
-        </Stack>
-      ) : (
-        <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 520 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Type</TableCell>
-                <TableCell>Ticker</TableCell>
-                <TableCell>Date</TableCell>
-                <TableCell>Price</TableCell>
-                <TableCell>Δ</TableCell>
-                <TableCell>Reason</TableCell>
-                <TableCell>Entry</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {actions.map((a) => {
-                const delta = actionDeltas[a.id]
-                const hasDelta = delta != null && Number.isFinite(delta)
-                return (
-                <TableRow key={a.id}>
-                  <TableCell><DecisionChip type={a.type} size="small" /></TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-                      {a.ticker ? getTickerDisplayLabel(a.ticker) || `$${a.ticker}` : '—'}
+      ) : (() => {
+        // Newest-first ordering: top row = most recent decision.
+        // Each row's "between" pill describes the price change FROM the next-older
+        // decision shown right below it INTO that row's decision date.
+        const sortedActions = [...actions].sort((a, b) => (b.action_date || '').localeCompare(a.action_date || ''))
+        const renderBetween = (newer: ActionWithEntry, older: ActionWithEntry | 'now') => {
+          // Delta is precomputed chronologically from older.id → newer's date.
+          // For the "to today" pill above the newest row, use the newest action's own delta
+          // (older='now' means the newer action IS the most recent and we look forward to today).
+          const sourceId = older === 'now' ? newer.id : older.id
+          const delta = actionDeltas[sourceId]
+          if (delta == null || !Number.isFinite(delta)) return null
+          const days = older === 'now'
+            ? daysBetween(newer.action_date || '', new Date().toISOString().slice(0, 10))
+            : daysBetween(older.action_date || '', newer.action_date || '')
+          if (!Number.isFinite(days) || days < 0) return null
+          const arrow = delta >= 0 ? '▲' : '▼'
+          const color = delta >= 0 ? 'success.main' : 'error.main'
+          const label = older === 'now' ? `over the last ${formatElapsed(days)} (to today)` : `over ${formatElapsed(days)}`
+          return (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 1.25,
+                py: 0.5,
+                borderLeft: 3,
+                borderColor: color,
+                bgcolor: 'grey.50',
+                borderRadius: 0.5,
+              }}
+            >
+              <Typography variant="caption" fontWeight={700} sx={{ color }}>
+                {arrow} {formatDeltaPercent(delta)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {label}
+              </Typography>
+            </Box>
+          )
+        }
+        return isMobile ? (
+          /* Mobile: card layout, newest-first, with between-pill */
+          <Stack spacing={1}>
+            {sortedActions.map((a, idx) => {
+              const older = sortedActions[idx + 1]
+              const topPill = idx === 0 && !chartLoading ? renderBetween(a, 'now') : null
+              const between = !chartLoading && older ? renderBetween(a, older) : null
+              return (
+                <Fragment key={a.id}>
+                  {topPill}
+                  <Paper variant="outlined" sx={{ p: 1.5 }}>
+                    <Box display="flex" alignItems="center" gap={0.75} flexWrap="wrap" sx={{ mb: 0.5 }}>
+                      <DecisionChip type={a.type} size="small" />
                       <OptionTypeChip ticker={a.ticker} />
+                      {a.price && (
+                        <Typography variant="body2" fontWeight={600}>
+                          {a.price}{a.currency ? ` ${a.currency}` : ''}
+                        </Typography>
+                      )}
+                      <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                        <RelativeDate date={a.action_date} variant="caption" sx={{ color: 'inherit' }} />
+                      </Typography>
                     </Box>
-                  </TableCell>
-                  <TableCell><RelativeDate date={a.action_date} /></TableCell>
-                  <TableCell>
-                    {a.price}
-                    {a.currency ? ` ${a.currency}` : ''}
-                  </TableCell>
-                  <TableCell>
-                    {chartLoading ? '…' : hasDelta ? (
-                      <Box component="span" sx={{ color: delta >= 0 ? 'success.main' : 'error.main', fontWeight: 600 }}>
-                        {formatDeltaPercent(delta)}
-                      </Box>
-                    ) : '—'}
-                  </TableCell>
-                  <TableCell>{a.reason ? <TickerLinks text={a.reason} variant="chip" dense /> : '—'}</TableCell>
-                  <TableCell>
-                    {a.entry ? (
+                    {a.reason && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        <TickerLinks text={a.reason} variant="chip" dense />
+                      </Typography>
+                    )}
+                    {a.entry && (
                       <Button
                         component={RouterLink}
                         to={`/entries/${a.entry.id}`}
                         size="small"
-                        sx={{ textTransform: 'none' }}
+                        sx={{ textTransform: 'none', px: 0, fontSize: '0.75rem' }}
                       >
-                        {getEntryDisplayTitle(a.entry, [a]).slice(0, 40)}
-                        {getEntryDisplayTitle(a.entry, [a]).length > 40 ? '…' : ''}
+                        {getEntryDisplayTitle(a.entry, [a]).slice(0, 50)}
+                        {getEntryDisplayTitle(a.entry, [a]).length > 50 ? '…' : ''}
                       </Button>
-                    ) : (
-                      '—'
                     )}
-                  </TableCell>
+                  </Paper>
+                  {between}
+                </Fragment>
+              )
+            })}
+          </Stack>
+        ) : (
+          <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 520 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Ticker</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Price</TableCell>
+                  <TableCell>Reason</TableCell>
+                  <TableCell>Entry</TableCell>
                 </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+              </TableHead>
+              <TableBody>
+                {sortedActions.map((a, idx) => {
+                  const older = sortedActions[idx + 1]
+                  const topPill = idx === 0 && !chartLoading ? renderBetween(a, 'now') : null
+                  const between = !chartLoading && older ? renderBetween(a, older) : null
+                  return (
+                    <Fragment key={a.id}>
+                      {topPill && (
+                        <TableRow sx={{ '& td': { borderBottom: 'none', py: 0 } }}>
+                          <TableCell colSpan={6} sx={{ p: 0, pt: 0.5, pb: 0.5, px: 1 }}>
+                            {topPill}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      <TableRow>
+                        <TableCell><DecisionChip type={a.type} size="small" /></TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                            {a.ticker ? getTickerDisplayLabel(a.ticker) || `$${a.ticker}` : '—'}
+                            <OptionTypeChip ticker={a.ticker} />
+                          </Box>
+                        </TableCell>
+                        <TableCell><RelativeDate date={a.action_date} /></TableCell>
+                        <TableCell>
+                          {a.price}
+                          {a.currency ? ` ${a.currency}` : ''}
+                        </TableCell>
+                        <TableCell>{a.reason ? <TickerLinks text={a.reason} variant="chip" dense /> : '—'}</TableCell>
+                        <TableCell>
+                          {a.entry ? (
+                            <Button
+                              component={RouterLink}
+                              to={`/entries/${a.entry.id}`}
+                              size="small"
+                              sx={{ textTransform: 'none' }}
+                            >
+                              {getEntryDisplayTitle(a.entry, [a]).slice(0, 40)}
+                              {getEntryDisplayTitle(a.entry, [a]).length > 40 ? '…' : ''}
+                            </Button>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                      </TableRow>
+                      {between && (
+                        <TableRow sx={{ '& td': { borderBottom: 'none', py: 0 } }}>
+                          <TableCell colSpan={6} sx={{ p: 0, pt: 0.25, pb: 0.5, px: 1 }}>
+                            {between}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )
+      })()}
     </Box>
   )
 }

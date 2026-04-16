@@ -730,10 +730,10 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
   return (
     <Paper variant="outlined" sx={{ p: { xs: 1, sm: 2 }, mb: 2, minWidth: 0, overflow: 'hidden' }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5, mb: 1 }}>
-        <Typography variant="subtitle2" fontWeight={600} sx={{ mr: 0.5 }}>
-          Price & decisions
+        <Typography variant="subtitle2" fontWeight={600}>
+          Price &amp; decisions
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', ml: 'auto' }}>
           <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>Compare</Typography>
           {compareSymbols.map((s) => (
             <Chip
@@ -745,7 +745,7 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
             />
           ))}
           {compareSymbols.length < MAX_COMPARE_SYMBOLS && (
-            <FormControl size="small" sx={{ minWidth: 100 }} variant="outlined">
+            <FormControl size="small" sx={{ minWidth: 90 }} variant="outlined">
               <Select
                 value=""
                 displayEmpty
@@ -762,13 +762,35 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
             </FormControl>
           )}
         </Box>
+      </Box>
+      {/* Range selector — its own row so all buttons fit without scroll arrows on narrow viewports. */}
+      <Box sx={{ mb: 1, mx: -0.25 }}>
         <Tabs
           value={range}
           onChange={(_e, v) => { setRange(v as ChartRange); setUserChangedRange(true) }}
           variant="scrollable"
-          scrollButtons="auto"
-          allowScrollButtonsMobile
-          sx={{ minHeight: 30, flex: 1, '& .MuiTab-root': { minHeight: 30, py: 0.25, px: 0.75, fontSize: '0.75rem' } }}
+          scrollButtons={false}
+          sx={{
+            minHeight: 32,
+            '& .MuiTabs-flexContainer': { gap: 0.25, justifyContent: 'flex-start', flexWrap: 'wrap' },
+            '& .MuiTabs-indicator': { display: 'none' },
+            '& .MuiTab-root': {
+              minHeight: 28,
+              minWidth: 36,
+              py: 0.25,
+              px: 1,
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              textTransform: 'none',
+              borderRadius: 1,
+              border: 1,
+              borderColor: 'divider',
+              color: 'text.secondary',
+              '&.Mui-selected': { bgcolor: 'primary.main', color: 'primary.contrastText', borderColor: 'primary.main' },
+              '&:hover': { bgcolor: 'action.hover' },
+              '&.Mui-selected:hover': { bgcolor: 'primary.dark' },
+            },
+          }}
         >
           {RANGES.map((r) => (
             <Tab key={r.value} value={r.value} label={r.label} />

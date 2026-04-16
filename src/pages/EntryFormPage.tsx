@@ -12,22 +12,27 @@ import {
   Collapse,
   IconButton,
   Slider,
-  Tabs,
-  Tab,
+  Chip,
 } from '@mui/material'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import AddIcon from '@mui/icons-material/Add'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
+import CloseIcon from '@mui/icons-material/Close'
+import { AnimatePresence, motion } from 'motion/react'
 import { useAuth } from '../contexts/AuthContext'
 import { createEntry, updateEntry } from '../services/entriesService'
 import { createFeeling } from '../services/feelingsService'
 import { createPrediction } from '../services/predictionsService'
+import { createAction } from '../services/actionsService'
+import { ensurePassedForUser } from '../services/passedService'
+import { buildDecisionBlockMarkdown, type DecisionBlockFields } from '../utils/decisionBlockMarkdown'
+import { stripLegacyMarkdown } from '../utils/stripLegacyMarkdown'
+import type { ActionInsert } from '../types/database'
 import { generateEntryId } from '../utils/id'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { useEntry, useInvalidate } from '../hooks/queries'
 import InsertDecisionBlockDialog from '../components/InsertDecisionBlockDialog'
 import FeelingFormDialog from '../components/FeelingFormDialog'
 import TickerDollarField from '../components/TickerDollarField'
-import MarkdownRender from '../components/MarkdownRender'
 import { getTagPresets } from '../utils/tagPresets'
 import TagChip from '../components/TagChip'
 import type { FeelingType } from '../types/database'
@@ -41,6 +46,101 @@ const EMPTY = {
   title_markdown: '',
   body_markdown: '',
   market_context: '',
+}
+
+/**
+ * One-line row card with a `+` at the end — click to expand and reveal inputs.
+ * When the section has a value, shows an `×` to clear and collapse.
+ * Used in the new-entry form to keep optional fields out of the way until needed.
+ */
+function RowCard({
+  title,
+  description,
+  hasValue,
+  summary,
+  onClear,
+  children,
+}: {
+  title: string
+  description?: string
+  hasValue: boolean
+  /** Optional one-line preview shown when collapsed AND a value is present (rare since hasValue=true keeps it open). */
+  summary?: React.ReactNode
+  onClear: () => void
+  children: React.ReactNode
+}) {
+  const [manuallyOpen, setManuallyOpen] = useState(false)
+  const open = manuallyOpen || hasValue
+  const handleHeaderClick = () => {
+    if (!open) setManuallyOpen(true)
+  }
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (open) {
+      onClear()
+      setManuallyOpen(false)
+    } else {
+      setManuallyOpen(true)
+    }
+  }
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        overflow: 'hidden',
+        transition: 'background-color 120ms, border-color 120ms',
+        // Closed cards sit on a tinted background so they're not white-on-white;
+        // opening surfaces them as the active edit area (white + accent border).
+        bgcolor: open ? 'background.paper' : 'grey.50',
+        borderColor: open ? 'primary.light' : 'divider',
+      }}
+    >
+      <Box
+        onClick={handleHeaderClick}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 1.75,
+          py: 1,
+          cursor: open ? 'default' : 'pointer',
+          '&:hover': open ? undefined : { bgcolor: 'grey.100' },
+          transition: 'background-color 120ms',
+        }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" fontWeight={700} color="text.primary">{title}</Typography>
+          {!open && description && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.72rem', mt: 0.25 }}>
+              {description}
+            </Typography>
+          )}
+          {!open && summary && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              {summary}
+            </Typography>
+          )}
+        </Box>
+        <IconButton
+          size="small"
+          onClick={handleToggle}
+          aria-label={open ? `Remove ${title}` : `Add ${title}`}
+          sx={{
+            color: open ? 'text.secondary' : 'primary.contrastText',
+            bgcolor: open ? 'transparent' : 'primary.main',
+            '&:hover': { bgcolor: open ? 'action.hover' : 'primary.dark' },
+            width: 28,
+            height: 28,
+          }}
+        >
+          {open ? <CloseIcon fontSize="small" /> : <AddIcon fontSize="small" />}
+        </IconButton>
+      </Box>
+      <Collapse in={open} unmountOnExit>
+        <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5 }}>{children}</Box>
+      </Collapse>
+    </Paper>
+  )
 }
 
 const MARKET_CONDITIONS = [
@@ -75,17 +175,12 @@ export default function EntryFormPage() {
   const [error, setError] = useState<string | null>(null)
   const [feelingDialogOpen, setFeelingDialogOpen] = useState(false)
   const [pendingFeelingType, setPendingFeelingType] = useState<FeelingType>('market')
-  // Expand the trading-plan section by default for new entries so first-time
-  // users discover the pre-mortem fields. Existing entries default to collapsed.
-  const [tradingPlanExpanded, setTradingPlanExpanded] = useState(() => !id || id === 'new')
   const [entryRules, setEntryRules] = useState('')
   const [exitRules, setExitRules] = useState('')
-  const [riskLimit, setRiskLimit] = useState('')
-  const [profitTarget, setProfitTarget] = useState('')
   const [predictionPercent, setPredictionPercent] = useState('')
   const [predictionDate, setPredictionDate] = useState('')
   const [decision_horizon, setDecisionHorizon] = useState('')
-  const [bodyTab, setBodyTab] = useState<'write' | 'preview' | 'decision'>('write')
+  const [bodyTab, setBodyTab] = useState<'write' | 'decision'>('write')
   const formRef = useRef<HTMLFormElement>(null)
   const initialValuesRef = useRef({ title_markdown: '', body_markdown: '', tagsStr: '' })
 
@@ -196,16 +291,11 @@ export default function EntryFormPage() {
     setDecisionHorizon(entry.decision_horizon || '')
     initialValuesRef.current = { title_markdown: entry.title_markdown, body_markdown: entry.body_markdown, tagsStr: entry.tags.join(', ') }
     if (entry.trading_plan) {
-      setTradingPlanExpanded(true)
       const lines = entry.trading_plan.split('\n')
       const entryIdx = lines.findIndex((l) => l.startsWith('Entry:'))
       const exitIdx = lines.findIndex((l) => l.startsWith('Exit:'))
-      const riskIdx = lines.findIndex((l) => l.startsWith('Risk:'))
-      const profitIdx = lines.findIndex((l) => l.startsWith('Profit:'))
       if (entryIdx >= 0) setEntryRules(lines[entryIdx].replace('Entry:', '').trim())
       if (exitIdx >= 0) setExitRules(lines[exitIdx].replace('Exit:', '').trim())
-      if (riskIdx >= 0) setRiskLimit(lines[riskIdx].replace('Risk:', '').trim())
-      if (profitIdx >= 0) setProfitTarget(lines[profitIdx].replace('Profit:', '').trim())
     }
   }, [isNew, editEntryQ.data, editEntryQ.isLoading, editEntryQ.error])
 
@@ -252,9 +342,39 @@ export default function EntryFormPage() {
     .map((t) => t.trim())
     .filter(Boolean)
 
-  const handleInsertDecisionBlock = (markdown: string) => {
-    const sep = body_markdown.trim() ? '\n\n' : ''
-    setBodyMarkdown((prev) => prev + sep + markdown)
+  // First $TICKER mentioned in the title — used to pre-fill the decision form
+  // so users don't have to retype the ticker they already named the entry after.
+  const titleTickerHint = useMemo(() => {
+    const m = title_markdown.match(/\$([A-Z0-9.:]+)/i)
+    return m ? m[1].toUpperCase() : ''
+  }, [title_markdown])
+
+  const [pendingDecisions, setPendingDecisions] = useState<DecisionBlockFields[]>([])
+
+  // Decisions are NOT spliced into the body anymore — they stay structured.
+  // We collect them in `pendingDecisions` and persist as `actions` rows on save.
+  // The unused `markdown` arg keeps the dialog's onInsert signature stable.
+  const handleInsertDecisionBlock = (_markdown: string, block: DecisionBlockFields) => {
+    setPendingDecisions((prev) => [...prev, block])
+    setBodyTab('write')
+  }
+
+  /** Convert a decision block from the inline form into a structured `actions` row. */
+  function blockToActionInsert(userId: string, entryId: string | null, block: DecisionBlockFields): ActionInsert {
+    return {
+      user_id: userId,
+      entry_id: entryId,
+      type: block.type,
+      ticker: block.ticker.trim().toUpperCase(),
+      company_name: block.company_name.trim() || null,
+      action_date: block.action_date,
+      price: block.price.trim(),
+      currency: block.currency.trim() || null,
+      shares: block.shares,
+      reason: block.reason.trim(),
+      notes: block.notes.trim(),
+      raw_snippet: buildDecisionBlockMarkdown(block),
+    }
   }
 
   const handleFeelingSubmit = async (data: { score: number; label: string; type: FeelingType; ticker: string }) => {
@@ -286,12 +406,10 @@ export default function EntryFormPage() {
     setSaving(true)
     try {
       // Build trading plan string
-      const tradingPlan = entryRules || exitRules || riskLimit || profitTarget
+      const tradingPlan = entryRules || exitRules
         ? [
             entryRules && `Entry: ${entryRules}`,
             exitRules && `Exit: ${exitRules}`,
-            riskLimit && `Risk: ${riskLimit}`,
-            profitTarget && `Profit: ${profitTarget}`,
           ]
             .filter(Boolean)
             .join('\n')
@@ -301,8 +419,11 @@ export default function EntryFormPage() {
         date,
         author: author || (user.email ?? ''),
         tags,
-        title_markdown,
-        body_markdown,
+        // Strip residual markdown markers from any legacy content the user
+        // pasted or didn't bother editing — the source of truth on disk should
+        // be plain text now (per docs/PRINCIPLES.md).
+        title_markdown: stripLegacyMarkdown(title_markdown),
+        body_markdown: stripLegacyMarkdown(body_markdown),
         market_context: market_context || null,
         market_feeling: market_feeling ?? null,
         trading_plan: tradingPlan,
@@ -317,15 +438,37 @@ export default function EntryFormPage() {
         })
         entryId = entry.id
         clearDraft()
-        invalidate.entries()
-        showSuccess('Entry created')
-        navigate(`/entries/${entry.id}`)
       } else if (id) {
         await updateEntry(id, entryData)
-        invalidate.entries()
-        showSuccess('Entry saved')
-        navigate(`/entries/${id}`)
       }
+
+      // Auto-promote any decision blocks inserted via the "Decision" tab into
+      // structured `actions` rows so they show up in the Ticker page, Timeline,
+      // and analytics — not just as markdown in the body.
+      if (entryId && pendingDecisions.length > 0) {
+        for (const block of pendingDecisions) {
+          if (!block.ticker.trim()) continue
+          try {
+            await createAction(blockToActionInsert(user.id, entryId, block))
+            if (block.type === 'pass') {
+              await ensurePassedForUser(user.id, block.ticker.trim(), {
+                passed_date: block.action_date,
+                reason: block.reason,
+                notes: block.notes,
+              })
+            }
+          } catch (actionErr) {
+            console.warn('Failed to auto-promote decision block:', actionErr)
+          }
+        }
+        invalidate.actions()
+        invalidate.passed()
+        setPendingDecisions([])
+      }
+
+      invalidate.entries()
+      showSuccess(isNew ? 'Entry created' : 'Entry saved')
+      if (entryId) navigate(`/entries/${entryId}`)
 
       // Save prediction if one was entered
       if (entryId && predictionPercent && predictionDate) {
@@ -364,8 +507,17 @@ export default function EntryFormPage() {
 
   return (
     <Box component="form" ref={formRef} onSubmit={handleSubmit}>
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
-        {isNew ? 'New decision' : 'Edit decision'}
+      <Typography
+        component="h1"
+        sx={{
+          fontSize: { xs: '1.5rem', sm: '1.75rem' },
+          fontWeight: 700,
+          letterSpacing: '-0.01em',
+          mb: 2,
+          mt: 0.5,
+        }}
+      >
+        {isNew ? 'New journal entry' : 'Edit journal entry'}
       </Typography>
       {error && (
         <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>
@@ -393,85 +545,81 @@ export default function EntryFormPage() {
         />
       </Box>
 
-      {/* Editor area with tabs: Write | Preview | + Decision */}
-      <Paper variant="outlined" sx={{ mb: 1.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
-          {bodyTab === 'decision' ? (
-            <Button
-              size="small"
-              onClick={() => setBodyTab('write')}
-              sx={{ textTransform: 'none', fontSize: '0.8rem', minHeight: 34, px: 1.5, gap: 0.5 }}
-            >
-              ← Back to editor
-            </Button>
-          ) : (
-            <>
-              <Tabs
-                value={bodyTab}
-                onChange={(_, v) => setBodyTab(v as 'write' | 'preview')}
-                sx={{ flex: 1, minHeight: 34, '& .MuiTab-root': { minHeight: 34, py: 0.25, textTransform: 'none', fontSize: '0.8rem' } }}
-              >
-                <Tab label="Write" value="write" />
-                <Tab label="Preview" value="preview" />
-              </Tabs>
-              <Button
-                size="small"
-                startIcon={<AddCircleOutlineIcon sx={{ fontSize: 16 }} />}
-                onClick={() => setBodyTab('decision')}
-                sx={{ textTransform: 'none', fontSize: '0.75rem', mr: 0.5, whiteSpace: 'nowrap' }}
-              >
-                Decision
-              </Button>
-            </>
-          )}
-        </Box>
-        {bodyTab !== 'decision' && (
-          <>
-            {/* Tags row inside editor */}
-            <Autocomplete
-              multiple
-              freeSolo
-              size="small"
-              options={tagPresets}
-              value={tagValues}
-              onChange={(_, newVal) => setTagsStr(newVal.join(', '))}
-              renderTags={(value, getTagProps) =>
-                value.map((opt, idx) => (
-                  <TagChip key={opt} tag={opt} size="small" {...getTagProps({ index: idx })} />
-                ))
-              }
-              renderInput={(params) => (
-                <TextField {...params} placeholder="Tags" variant="standard"
-                  sx={{ '& .MuiInput-underline:before': { borderBottom: 'none' }, '& .MuiInput-underline:after': { borderBottom: 'none' }, '& .MuiInput-underline:hover:not(.Mui-disabled):before': { borderBottom: 'none' } }}
-                />
-              )}
-              sx={{ px: 1.5, py: 0.5, borderBottom: 1, borderColor: 'divider' }}
-            />
-            {bodyTab === 'write' ? (
-              <TickerDollarField
-                fullWidth
-                multiline
-                minRows={6}
-                value={body_markdown}
-                onChange={setBodyMarkdown}
-                placeholder="Write your thesis... (markdown supported, $ for tickers)"
+      {/* Tags row — entry-level metadata, lives above the body editor not inside it. */}
+      {bodyTab !== 'decision' && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
+          <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: '0.06em', minWidth: 44 }}>
+            Tags
+          </Typography>
+          <Autocomplete
+            multiple
+            freeSolo
+            size="small"
+            options={tagPresets}
+            value={tagValues}
+            onChange={(_, newVal) => setTagsStr(newVal.join(', '))}
+            renderTags={(value, getTagProps) =>
+              value.map((opt, idx) => {
+                const { key, ...rest } = getTagProps({ index: idx })
+                return <TagChip key={key} tag={opt} size="small" {...rest} />
+              })
+            }
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder={tagValues.length === 0 ? 'add a tag…' : ''}
+                variant="standard"
                 sx={{
-                  '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-                  '& .MuiInputBase-root': { borderRadius: 0 },
+                  '& .MuiInput-underline:before': { borderBottom: '1px dashed', borderColor: 'divider' },
+                  '& .MuiInput-underline:after': { borderBottom: '1px solid', borderColor: 'primary.main' },
+                  '& .MuiInput-underline:hover:not(.Mui-disabled):before': { borderBottom: '1px solid', borderColor: 'text.secondary' },
                 }}
               />
-            ) : (
-              <Box sx={{ p: 2, minHeight: 200 }}>
-                {body_markdown.trim() ? (
-                  <MarkdownRender source={body_markdown} />
-                ) : (
-                  <Typography color="text.secondary" variant="body2" fontStyle="italic">
-                    Nothing to preview yet — switch to Write and start typing.
-                  </Typography>
-                )}
-              </Box>
             )}
-          </>
+            sx={{ flex: 1, minWidth: 200 }}
+          />
+        </Box>
+      )}
+
+      {/* Body editor card. Decision-mode swaps the body for the structured form.
+          Header makes the primary "+ Add decision" action visible — it's NOT a quiet text link. */}
+      <Paper variant="outlined" sx={{ mb: 1.5, bgcolor: 'background.paper' }}>
+        {bodyTab === 'decision' ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider', px: 1.5, py: 1 }}>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
+              Add decision
+            </Typography>
+            <IconButton size="small" onClick={() => setBodyTab('write')} aria-label="Close decision form">
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        ) : (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', borderBottom: 1, borderColor: 'divider', px: 1, py: 0.5 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              color="primary"
+              startIcon={<AddCircleOutlineIcon sx={{ fontSize: 18 }} />}
+              onClick={() => setBodyTab('decision')}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              Add decision
+            </Button>
+          </Box>
+        )}
+        {bodyTab !== 'decision' && (
+          <TickerDollarField
+            fullWidth
+            multiline
+            minRows={6}
+            value={body_markdown}
+            onChange={setBodyMarkdown}
+            placeholder="Write your thesis…"
+            sx={{
+              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+              '& .MuiInputBase-root': { borderRadius: 0 },
+            }}
+          />
         )}
         {bodyTab === 'decision' && (
           <InsertDecisionBlockDialog
@@ -479,145 +627,194 @@ export default function EntryFormPage() {
             onClose={() => setBodyTab('write')}
             onInsert={handleInsertDecisionBlock}
             inline
+            defaultTicker={titleTickerHint}
           />
         )}
       </Paper>
 
-      {/* Collapsible advanced options — always visible (new + edit) */}
-      <Paper variant="outlined" sx={{ mb: 2, bgcolor: 'background.paper' }}>
-        <Box
-          display="flex"
-          alignItems="center"
-          justifyContent="space-between"
-          sx={{ p: 1.5, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
-          onClick={() => setTradingPlanExpanded(!tradingPlanExpanded)}
-        >
-          <Box>
-            <Typography variant="caption" fontWeight={700} color="text.primary" sx={{ display: 'block' }}>
-              Trading plan, predictions & market context
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.7rem' }}>
-              Pre-mortem fields — entry / exit rules, sentiment, decision horizon. Recommended for skill-building.
-            </Typography>
-          </Box>
-          <IconButton size="small" sx={{ transform: tradingPlanExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms' }}>
-            <ExpandMoreIcon />
-          </IconButton>
-        </Box>
-        <Collapse in={tradingPlanExpanded}>
-          <Box sx={{ p: 2, pt: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Market Sentiment */}
-            <Box>
-              <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Market Sentiment
-              </Typography>
-              {market_feeling === null ? (
-                <Button variant="outlined" size="small" onClick={() => setMarketFeeling(0)}>
-                  + Set sentiment score
-                </Button>
-              ) : (
-                <Box>
-                  <Box display="flex" alignItems="baseline" gap={1} sx={{ mb: 0.5 }}>
-                    <Typography variant="h6" fontWeight={700} sx={{ color: market_feeling > 0 ? '#16a34a' : market_feeling < 0 ? '#dc2626' : '#64748b' }}>
-                      {market_feeling > 0 ? '+' : ''}{market_feeling}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {market_feeling <= -7 ? 'Extreme Fear' : market_feeling <= -3 ? 'Fear' : market_feeling <= -1 ? 'Mild Fear' : market_feeling === 0 ? 'Neutral' : market_feeling <= 2 ? 'Mild Optimism' : market_feeling <= 6 ? 'Optimistic' : 'Extreme Greed'}
-                    </Typography>
-                    <Button size="small" variant="text" color="inherit" sx={{ fontSize: '0.7rem', p: 0, ml: 'auto' }} onClick={() => setMarketFeeling(null)}>
-                      Clear
-                    </Button>
-                  </Box>
-                  <Slider
-                    value={market_feeling} onChange={(_, v) => setMarketFeeling(v as number)}
-                    min={-10} max={10} step={1}
-                    marks={[{ value: -10, label: '-10' }, { value: 0, label: '0' }, { value: 10, label: '+10' }]}
-                    sx={{ color: market_feeling > 0 ? '#16a34a' : market_feeling < 0 ? '#dc2626' : '#64748b', '& .MuiSlider-markLabel': { fontSize: '0.7rem' } }}
-                  />
-                </Box>
-              )}
-            </Box>
-
-            {/* Market Conditions */}
-            <Box>
-              <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Market Conditions
+      {/* Pending decisions — added via the Decision form, persisted as structured
+          `actions` rows when the entry is saved. Animated so the chip pop-in is the
+          confirmation that "your decision was captured". */}
+      <AnimatePresence initial={false}>
+        {pendingDecisions.length > 0 && (
+          <motion.div
+            key="pending-decisions"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+          >
+            <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Typography variant="overline" color="text.secondary">
+                Decisions on this entry ({pendingDecisions.length})
               </Typography>
               <Box display="flex" gap={0.5} flexWrap="wrap">
-                {MARKET_CONDITIONS.map((condition) => {
-                  const isSelected = market_context.includes(condition)
-                  return (
-                    <Button key={condition} size="small" variant={isSelected ? 'contained' : 'outlined'}
-                      sx={{ fontSize: '0.75rem', py: 0.25, px: 1 }}
-                      onClick={() => {
-                        if (isSelected) {
-                          setMarketContext(market_context.split(',').map((c) => c.trim()).filter((c) => c !== condition).join(', '))
-                        } else {
-                          const contexts = market_context.split(',').map((c) => c.trim()).filter(Boolean)
-                          setMarketContext([...contexts, condition].join(', '))
-                        }
-                      }}
+                <AnimatePresence initial={false}>
+                  {pendingDecisions.map((d, i) => (
+                    <motion.div
+                      key={`${d.ticker}-${d.type}-${i}`}
+                      initial={{ opacity: 0, scale: 0.85 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.85 }}
+                      transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+                      style={{ display: 'inline-flex' }}
                     >
-                      {condition}
-                    </Button>
-                  )
-                })}
+                      <Chip
+                        size="small"
+                        label={`${d.type.toUpperCase()} · $${d.ticker}${d.reason ? ` — ${d.reason.slice(0, 30)}${d.reason.length > 30 ? '…' : ''}` : ''}`}
+                        onDelete={() => setPendingDecisions((prev) => prev.filter((_, idx) => idx !== i))}
+                        sx={{ fontWeight: 500 }}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </Box>
+              <Typography variant="caption" color="text.secondary">
+                Saves as structured rows when you {isNew ? 'create' : 'save'} the entry.
+              </Typography>
             </Box>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-            {/* Prediction + Horizon row */}
-            <Box display="flex" gap={2} flexWrap="wrap">
-              <TextField label="Prediction %" type="number" value={predictionPercent}
-                onChange={(e) => setPredictionPercent(e.target.value)} placeholder="e.g., 15"
-                inputProps={{ min: '-100', max: '200', step: '1' }} size="small" sx={{ minWidth: 110 }}
-              />
-              <TextField label="By Date" type="date" value={predictionDate}
-                onChange={(e) => setPredictionDate(e.target.value)}
-                InputLabelProps={{ shrink: true }} size="small" sx={{ minWidth: 140 }}
-              />
-              <TextField label="Decision Horizon" type="date" value={decision_horizon}
-                onChange={(e) => setDecisionHorizon(e.target.value)}
-                InputLabelProps={{ shrink: true }} size="small" sx={{ minWidth: 140 }}
-                helperText="Expected resolution"
+      {/* Optional context — each row is a mini card that expands on + click. */}
+      <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <RowCard
+          title="Market Sentiment"
+          description="How bullish or bearish the overall market feels to you"
+          hasValue={market_feeling !== null}
+          onClear={() => setMarketFeeling(null)}
+        >
+          {market_feeling !== null && (
+            <Box>
+              <Box display="flex" alignItems="baseline" gap={1} sx={{ mb: 0.5 }}>
+                <Typography variant="h6" fontWeight={700} sx={{ color: market_feeling > 0 ? '#16a34a' : market_feeling < 0 ? '#dc2626' : '#64748b' }}>
+                  {market_feeling > 0 ? '+' : ''}{market_feeling}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {market_feeling <= -7 ? 'Extreme Fear' : market_feeling <= -3 ? 'Fear' : market_feeling <= -1 ? 'Mild Fear' : market_feeling === 0 ? 'Neutral' : market_feeling <= 2 ? 'Mild Optimism' : market_feeling <= 6 ? 'Optimistic' : 'Extreme Greed'}
+                </Typography>
+              </Box>
+              <Slider
+                value={market_feeling ?? 0} onChange={(_, v) => setMarketFeeling(v as number)}
+                min={-10} max={10} step={1}
+                marks={[{ value: -10, label: '-10' }, { value: 0, label: '0' }, { value: 10, label: '+10' }]}
+                sx={{ color: market_feeling > 0 ? '#16a34a' : market_feeling < 0 ? '#dc2626' : '#64748b', '& .MuiSlider-markLabel': { fontSize: '0.7rem' } }}
               />
             </Box>
+          )}
+          {market_feeling === null && (
+            <Button variant="outlined" size="small" onClick={() => setMarketFeeling(0)}>
+              Set to neutral (0)
+            </Button>
+          )}
+        </RowCard>
 
-            {/* Trading Plan */}
-            <Box display="flex" gap={1.5} flexDirection="column">
-              <Typography variant="caption" fontWeight={600} color="text.secondary">Trading Plan</Typography>
-              <Box display="flex" gap={1.5} flexWrap="wrap">
-                <TextField label="Entry Rules" placeholder="e.g., Break above $100" value={entryRules}
-                  onChange={(e) => setEntryRules(e.target.value)} size="small" sx={{ flex: 1, minWidth: 200 }} />
-                <TextField label="Exit Rules" placeholder="e.g., Stop loss at $95" value={exitRules}
-                  onChange={(e) => setExitRules(e.target.value)} size="small" sx={{ flex: 1, minWidth: 200 }} />
-              </Box>
-              <Box display="flex" gap={1.5}>
-                <TextField label="Risk Limit" placeholder="e.g., 2%" value={riskLimit}
-                  onChange={(e) => setRiskLimit(e.target.value)} size="small" sx={{ flex: 1 }} />
-                <TextField label="Profit Target" placeholder="e.g., 15%" value={profitTarget}
-                  onChange={(e) => setProfitTarget(e.target.value)} size="small" sx={{ flex: 1 }} />
-              </Box>
-            </Box>
+        <RowCard
+          title="Market Conditions"
+          description="Tag the backdrop (bull / bear / earnings season / …)"
+          hasValue={market_context.trim().length > 0}
+          onClear={() => setMarketContext('')}
+        >
+          <Box display="flex" gap={0.5} flexWrap="wrap">
+            {MARKET_CONDITIONS.map((condition) => {
+              const isSelected = market_context.includes(condition)
+              return (
+                <Chip
+                  key={condition}
+                  label={condition}
+                  size="small"
+                  clickable
+                  color={isSelected ? 'primary' : 'default'}
+                  variant={isSelected ? 'filled' : 'outlined'}
+                  onClick={() => {
+                    if (isSelected) {
+                      setMarketContext(market_context.split(',').map((c) => c.trim()).filter((c) => c !== condition).join(', '))
+                    } else {
+                      const contexts = market_context.split(',').map((c) => c.trim()).filter(Boolean)
+                      setMarketContext([...contexts, condition].join(', '))
+                    }
+                  }}
+                  sx={{ fontWeight: isSelected ? 600 : 400 }}
+                />
+              )
+            })}
           </Box>
-        </Collapse>
-      </Paper>
+        </RowCard>
 
-      <Box display="flex" gap={1} alignItems="center">
+        <RowCard
+          title="Prediction"
+          description="A falsifiable forecast with a target date"
+          hasValue={Boolean(predictionPercent || predictionDate || decision_horizon)}
+          onClear={() => { setPredictionPercent(''); setPredictionDate(''); setDecisionHorizon('') }}
+        >
+          <Box display="flex" gap={2} flexWrap="wrap">
+            <TextField label="Prediction %" type="number" value={predictionPercent}
+              onChange={(e) => setPredictionPercent(e.target.value)} placeholder="e.g., 15"
+              inputProps={{ min: '-100', max: '200', step: '1' }} size="small" sx={{ minWidth: 110 }}
+            />
+            <TextField label="By Date" type="date" value={predictionDate}
+              onChange={(e) => setPredictionDate(e.target.value)}
+              InputLabelProps={{ shrink: true }} size="small" sx={{ minWidth: 140 }}
+            />
+            <TextField label="Decision Horizon" type="date" value={decision_horizon}
+              onChange={(e) => setDecisionHorizon(e.target.value)}
+              InputLabelProps={{ shrink: true }} size="small" sx={{ minWidth: 140 }}
+              helperText="Expected resolution"
+            />
+          </Box>
+        </RowCard>
+
+        <RowCard
+          title="Entry Rules"
+          description="When you'd enter the position"
+          hasValue={entryRules.trim().length > 0}
+          onClear={() => setEntryRules('')}
+        >
+          <TextField
+            placeholder="e.g., Break above $100 with volume"
+            value={entryRules}
+            onChange={(e) => setEntryRules(e.target.value)}
+            size="small"
+            fullWidth
+            multiline
+            minRows={2}
+          />
+        </RowCard>
+
+        <RowCard
+          title="Exit Rules"
+          description="When you'd reassess or close the position"
+          hasValue={exitRules.trim().length > 0}
+          onClear={() => setExitRules('')}
+        >
+          <TextField
+            placeholder="e.g., Stop loss at $95, or thesis broken"
+            value={exitRules}
+            onChange={(e) => setExitRules(e.target.value)}
+            size="small"
+            fullWidth
+            multiline
+            minRows={2}
+          />
+        </RowCard>
+      </Box>
+
+      <Box display="flex" gap={1.5} alignItems="center" sx={{ mt: 1 }}>
         <Button
           type="submit"
           variant="contained"
+          size="large"
           disabled={saving || (!title_markdown.trim() && !body_markdown.trim())}
           title="Save entry (Ctrl+S / Cmd+S or Ctrl+Enter / Cmd+Enter)"
+          sx={{ textTransform: 'none', fontWeight: 600, px: 3 }}
         >
-          {saving ? <CircularProgress size={24} /> : isNew ? 'Create' : 'Save'}
+          {saving ? <CircularProgress size={22} /> : isNew ? 'Create entry' : 'Save changes'}
         </Button>
-        {!saving && !title_markdown.trim() && !body_markdown.trim() && (
-          <Typography variant="caption" color="text.secondary">
-            Add a title or write a thesis to enable {isNew ? 'Create' : 'Save'}.
-          </Typography>
-        )}
         <Button
           component={RouterLink}
+          variant="text"
+          color="inherit"
           to={isNew ? '/' : `/entries/${id}`}
           onClick={(e: React.MouseEvent) => {
             const isDirty =
@@ -630,6 +827,7 @@ export default function EntryFormPage() {
             }
             if (isNew) clearDraft()
           }}
+          sx={{ textTransform: 'none', color: 'text.secondary' }}
         >
           Cancel
         </Button>

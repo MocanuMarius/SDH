@@ -48,9 +48,8 @@ import DecisionCard from '../components/DecisionCard'
 import ValuationWidget from '../components/ValuationWidget'
 import PredictionCard from '../components/PredictionCard'
 import FeelingCard from '../components/FeelingCard'
-import MarkdownRender from '../components/MarkdownRender'
+import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import AddReminderDialog from '../components/AddReminderDialog'
-import RelativeDate from '../components/RelativeDate'
 import TagChip from '../components/TagChip'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
@@ -193,7 +192,7 @@ export default function EntryDetailPage() {
       )}
       <Box display="flex" alignItems="flex-start" justifyContent="space-between" gap={1} sx={{ mb: 2 }}>
         <Box sx={{ flex: 1, minWidth: 0, fontSize: { xs: '1.25rem', sm: '1.5rem' }, fontWeight: 600, overflowWrap: 'break-word' }}>
-          <MarkdownRender source={getEntryDisplayTitle(entry, actions)} inline dense />
+          <PlainTextWithTickers source={getEntryDisplayTitle(entry, actions)} inline dense />
         </Box>
         {isMobile ? (
           <>
@@ -248,39 +247,35 @@ export default function EntryDetailPage() {
             </Menu>
           </>
         ) : (
-          <Box display="flex" gap={0.75} flexShrink={0}>
-            <Button
-              variant="outlined"
-              startIcon={<NotificationsActiveIcon />}
-              onClick={() => setReminderDialogOpen(true)}
-              sx={{ textTransform: 'none' }}
-            >
-              Add reminder
-            </Button>
+          <Box display="flex" gap={0.75} flexShrink={0} alignItems="center">
             <Button
               component={RouterLink}
               to={`/entries/${entry.id}/edit`}
-              variant="outlined"
+              variant="contained"
+              size="small"
               startIcon={<EditIcon />}
-              sx={{ textTransform: 'none' }}
             >
               Edit
             </Button>
             <Button
               variant="outlined"
-              color="error"
-              startIcon={<DeleteOutlineIcon />}
-              onClick={() => setConfirmDelete({ type: 'entry' })}
-              sx={{ textTransform: 'none' }}
+              size="small"
+              startIcon={<NotificationsActiveIcon />}
+              onClick={() => setReminderDialogOpen(true)}
             >
-              Delete entry
+              Remind me
             </Button>
+            <IconButton
+              aria-label="Delete entry"
+              onClick={() => setConfirmDelete({ type: 'entry' })}
+              sx={{ color: 'text.secondary', '&:hover': { color: 'error.main', bgcolor: 'rgba(185,28,28,0.06)' } }}
+              size="small"
+            >
+              <DeleteOutlineIcon fontSize="small" />
+            </IconButton>
           </Box>
         )}
       </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }} component="span">
-        <RelativeDate date={entry.date} sx={{ color: 'inherit' }} />{entry.author ? ` · ${entry.author}` : ''}
-      </Typography>
       {entry.tags.length > 0 && (
         <Box display="flex" flexWrap="wrap" gap={0.5} sx={{ mb: 2 }}>
           {entry.tags.map((t) => (
@@ -288,15 +283,30 @@ export default function EntryDetailPage() {
           ))}
         </Box>
       )}
-      <Box sx={{ '& p:first-of-type': { mt: 0 }, overflowWrap: 'break-word', wordBreak: 'break-word', maxWidth: '100%' }}>
-        <MarkdownRender source={entry.body_markdown} dense />
-      </Box>
+      {entry.body_markdown.trim() && (
+        <Paper
+          variant="outlined"
+          sx={{
+            p: { xs: 1.5, sm: 2 },
+            mb: 2,
+            borderLeft: 4,
+            borderLeftColor: 'primary.light',
+            bgcolor: 'background.paper',
+            '& p:first-of-type': { mt: 0 },
+            overflowWrap: 'break-word',
+            wordBreak: 'break-word',
+            maxWidth: '100%',
+          }}
+        >
+          <PlainTextWithTickers source={entry.body_markdown} dense />
+        </Paper>
+      )}
 
       {/* Quick note — append a timestamped note without editing the full entry.
           Multi-line auto-grow; Cmd/Ctrl+Enter or Enter (no shift) submits. */}
       <TextField
         size="small"
-        placeholder="Add a note... (markdown supported, Shift+Enter for newline)"
+        placeholder="Add a note…"
         value={quickNote}
         onChange={(e) => setQuickNote(e.target.value)}
         onKeyDown={(e) => {
@@ -451,7 +461,7 @@ export default function EntryDetailPage() {
               <Box sx={{ mt: 1.5 }}>
                 <Button
                   component={RouterLink}
-                  to={`/ideas/${encodeURIComponent(actions[0].ticker.trim().toUpperCase())}`}
+                  to={`/tickers/${encodeURIComponent(actions[0].ticker.trim().toUpperCase())}`}
                   variant="outlined"
                   size="small"
                   sx={{ textTransform: 'none' }}
@@ -519,8 +529,9 @@ export default function EntryDetailPage() {
         open={actionDialogOpen}
         onClose={() => setActionDialogOpen(false)}
         onSubmit={async (data) => {
-          if (!id) return
+          if (!id || !user?.id) return
           await createAction({
+            user_id: user.id,
             entry_id: id,
             type: data.type,
             ticker: data.ticker,

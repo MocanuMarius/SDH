@@ -21,7 +21,7 @@ import { Badge } from '@mui/material'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Journal', icon: MenuBookIcon },
-  { to: '/ideas', label: 'Ideas', icon: LightbulbIcon },
+  { to: '/tickers', label: 'Tickers', icon: LightbulbIcon },
   { to: '/timeline', label: 'Timeline', icon: TimelineIcon },
   { to: '/watchlist', label: 'Watchlist', icon: NotificationsActiveIcon },
   { to: '/analytics', label: 'Analytics', icon: AnalyticsIcon },

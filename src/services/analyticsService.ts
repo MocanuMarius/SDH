@@ -66,7 +66,7 @@ export async function fetchOutcomesWithContext(): Promise<OutcomeAnalytics[]> {
 
   for (const outcome of outcomes) {
     const action = actionMap.get(outcome.action_id)
-    const entry = action ? entryMap.get(action.entry_id) : null
+    const entry = action && action.entry_id ? entryMap.get(action.entry_id) : null
 
     if (!action || !entry) continue
 
@@ -638,7 +638,9 @@ export async function calculatePredictionCalibration(): Promise<PredictionCalibr
   // Build lookup maps — only include actions tied to real (non-automated) entries.
   const outcomeByActionId = new Map(outcomes.map((o) => [o.action_id, o]))
   const actionByEntryId = new Map(
-    actions.filter((a) => !automatedEntryIds.has(a.entry_id)).map((a) => [a.entry_id, a]),
+    actions
+      .filter((a): a is typeof a & { entry_id: string } => a.entry_id != null && !automatedEntryIds.has(a.entry_id))
+      .map((a) => [a.entry_id, a]),
   )
 
   const today = new Date().toISOString().split('T')[0]
@@ -827,7 +829,9 @@ export async function calculatePerSubSkillBrier(minSampleSize = 3): Promise<PerS
 
   const outcomeByActionId = new Map(outcomes.map((o) => [o.action_id, o]))
   const actionByEntryId = new Map(
-    actions.filter((a) => !automatedEntryIds.has(a.entry_id)).map((a) => [a.entry_id, a]),
+    actions
+      .filter((a): a is typeof a & { entry_id: string } => a.entry_id != null && !automatedEntryIds.has(a.entry_id))
+      .map((a) => [a.entry_id, a]),
   )
 
   type ScoredPrediction = { subSkill: string; forecast: number; correct: number }

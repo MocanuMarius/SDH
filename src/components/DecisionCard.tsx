@@ -3,7 +3,7 @@ import { Link as RouterLink } from 'react-router-dom'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import ShowChartIcon from '@mui/icons-material/ShowChart'
 import TickerLinks from './TickerLinks'
-import MarkdownRender from './MarkdownRender'
+import PlainTextWithTickers from './PlainTextWithTickers'
 import RelativeDate from './RelativeDate'
 import DecisionChip from './DecisionChip'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
@@ -71,7 +71,7 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
                 size="small"
                 label={tickerLabel}
                 component={RouterLink}
-                to={`/ideas/${encodeURIComponent(normalizeTickerToCompany(action.ticker) || action.ticker.toUpperCase())}`}
+                to={`/tickers/${encodeURIComponent(normalizeTickerToCompany(action.ticker) || action.ticker.toUpperCase())}`}
                 sx={{ fontWeight: 600, textDecoration: 'none' }}
                 clickable
               />
@@ -107,7 +107,7 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
               <Box sx={{ mt: 0.5 }}>
                 <Typography component="span" variant="body2" sx={{ fontWeight: 600 }}>Expanded reasoning: </Typography>
                 <Box sx={{ '& p': { m: 0 }, '& p + p': { mt: 0.5 }, display: 'inline-block', width: '100%' }}>
-                  <MarkdownRender source={action.notes} dense />
+                  <PlainTextWithTickers source={action.notes} dense />
                 </Box>
               </Box>
             )}
@@ -123,7 +123,7 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
               <Box sx={{ mt: 0.5 }}>
                 <Typography component="span" variant="body2" sx={{ fontWeight: 600 }}>Pre-mortem: </Typography>
                 <Box sx={{ '& p': { m: 0 }, '& p + p': { mt: 0.5 }, display: 'inline-block', width: '100%' }}>
-                  <MarkdownRender source={action.pre_mortem_text} dense />
+                  <PlainTextWithTickers source={action.pre_mortem_text} dense />
                 </Box>
               </Box>
             )}
@@ -172,7 +172,7 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
                 <Box sx={{ mt: 0.5 }}>
                   <Typography component="span" variant="body2" sx={{ fontWeight: 600 }}>Post-mortem: </Typography>
                   <Box sx={{ '& p': { m: 0 }, color: 'text.secondary' }}>
-                    <MarkdownRender source={outcome.post_mortem_notes} dense />
+                    <PlainTextWithTickers source={outcome.post_mortem_notes} dense />
                   </Box>
                 </Box>
               )}

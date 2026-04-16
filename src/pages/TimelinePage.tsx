@@ -720,8 +720,11 @@ export default function TimelinePage() {
 
   return (
     <Box>
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
-        Timeline — {symbol}
+      <Typography variant="h1" sx={{ mb: 0.5, mt: 0.5 }}>
+        Timeline <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>· {symbol}</Box>
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 2, fontStyle: 'italic' }}>
+        Every decision you've made plotted against a benchmark. For one ticker's full history, open its <Link component={RouterLink} to="/tickers" underline="hover">Ticker page</Link>.
       </Typography>
       <Box sx={{ mb: 1.5, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
         <FormControl size="small" sx={{ minWidth: 140 }} variant="outlined">

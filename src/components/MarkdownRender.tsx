@@ -16,16 +16,23 @@ const TICKER_STYLE = {
 
 const TICKER_CHIP_STYLE = {
   mx: 0.25,
-  verticalAlign: 'middle' as const,
+  verticalAlign: 'baseline' as const,
   fontSize: 'inherit',
-  height: 24,
+  height: 'auto',
   color: 'primary.dark',
   bgcolor: 'primary.50',
   border: '1px solid',
   borderColor: 'primary.200',
-  fontWeight: 600,
-  '& .MuiChip-label': { px: 0.75, textDecoration: 'underline', textUnderlineOffset: 2 },
+  fontWeight: 700,
+  borderRadius: 1,
   textDecoration: 'none',
+  transition: 'background-color 120ms, border-color 120ms',
+  '& .MuiChip-label': {
+    px: 1,
+    py: 0.35,
+    lineHeight: 1.2,
+    textDecoration: 'none',
+  },
   '&:hover': { bgcolor: 'primary.100', color: 'primary.dark', borderColor: 'primary.main' },
 }
 
@@ -57,7 +64,7 @@ function linkifyTickersInMarkdown(source: string): string {
     (_, before, tickerMatch) => {
       const raw = tickerMatch.slice(1).toUpperCase()
       const company = normalizeTickerToCompany(raw) || raw
-      return `${before}[${tickerMatch}](/ideas/${encodeURIComponent(company)})`
+      return `${before}[${tickerMatch}](/tickers/${encodeURIComponent(company)})`
     }
   )
 }
@@ -86,22 +93,24 @@ export default function MarkdownRender({ source, inline, dense, tickerAsLink = t
       if (TICKER_REGEX.test(text)) {
         const chipSx = {
           ...TICKER_CHIP_STYLE,
-          height: dense ? 20 : 24,
+          '& .MuiChip-label': {
+            ...TICKER_CHIP_STYLE['& .MuiChip-label'],
+            ...(dense && { px: 0.75, py: 0.2 }),
+          },
         }
         if (tickerAsLink) {
           const symbol = normalizeTickerToCompany(text.replace(/^\$/, '')) || text.replace(/^\$/, '').toUpperCase()
           return (
             <Chip
-              size="small"
               label={text}
               component={RouterLink}
-              to={`/ideas/${encodeURIComponent(symbol)}`}
+              to={`/tickers/${encodeURIComponent(symbol)}`}
               sx={chipSx}
               clickable
             />
           )
         }
-        return <Chip size="small" label={text} sx={chipSx} />
+        return <Chip label={text} sx={chipSx} />
       }
       return <strong>{children}</strong>
     },
@@ -149,7 +158,7 @@ export default function MarkdownRender({ source, inline, dense, tickerAsLink = t
     a: ({ href, children }) => {
       const hrefStr = typeof href === 'string' ? href : ''
       const childText = getTextContent(children).trim()
-      if (hrefStr.startsWith('/ideas/') && TICKER_REGEX.test(childText)) {
+      if (hrefStr.startsWith('/tickers/') && TICKER_REGEX.test(childText)) {
         const symbol = normalizeTickerToCompany(childText.replace(/^\$/, '')) || childText.replace(/^\$/, '').toUpperCase()
         if (!tickerAsLink) {
           return (
@@ -163,13 +172,15 @@ export default function MarkdownRender({ source, inline, dense, tickerAsLink = t
         }
         return (
           <Chip
-            size="small"
             label={childText}
             component={RouterLink}
-            to={`/ideas/${encodeURIComponent(symbol)}`}
+            to={`/tickers/${encodeURIComponent(symbol)}`}
             sx={{
               ...TICKER_CHIP_STYLE,
-              height: dense ? 20 : 24,
+              '& .MuiChip-label': {
+                ...TICKER_CHIP_STYLE['& .MuiChip-label'],
+                ...(dense && { px: 0.75, py: 0.2 }),
+              },
             }}
             clickable
           />

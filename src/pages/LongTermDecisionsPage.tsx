@@ -104,8 +104,9 @@ export default function LongTermDecisionsPage() {
 
   return (
     <Box>
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
-        Long-term horizons
+      <Typography variant="h1" sx={{ mb: 0.5, mt: 0.5 }}>Long-term horizons</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 2.5, fontStyle: 'italic' }}>
+        Entries you've explicitly committed to revisit by a target date. Set a horizon when creating an entry to track the decision here.
       </Typography>
 
       {/* Summary Cards */}
@@ -149,9 +150,19 @@ export default function LongTermDecisionsPage() {
       </Box>
 
       {decisions.length === 0 ? (
-        <Alert severity="info">
-          No decisions with a resolution date yet. Add a decision horizon when creating/editing entries to track long-term decisions.
-        </Alert>
+        <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            No long-term horizons yet
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            This page tracks entries with an explicit "I expect this to play out by ___" date.
+            To put something here: open the entry form and tick <strong>+ Add prediction</strong>,
+            then set a Decision Horizon date.
+          </Typography>
+          <Button component={RouterLink} to="/entries/new" variant="contained" size="small">
+            New entry
+          </Button>
+        </Paper>
       ) : (
         <TableContainer component={Paper}>
           <Table>

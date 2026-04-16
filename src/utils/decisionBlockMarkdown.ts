@@ -3,7 +3,9 @@
  * Format: ### Buy Decision 2/21/26 **$TICKER** - Company Name\nPrice: $123.00\nReason: ...
  */
 
-export type DecisionType = 'buy' | 'sell' | 'short' | 'trim' | 'hold' | 'pass' | 'speculate' | 'add_more'
+import type { ActionType } from '../types/database'
+
+export type DecisionType = ActionType
 
 export interface DecisionBlockFields {
   type: DecisionType
