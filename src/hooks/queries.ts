@@ -180,6 +180,8 @@ export function useInvalidate() {
     predictions: (entryId?: string) => {
       if (entryId) qc.invalidateQueries({ queryKey: queryKeys.predictions(entryId) })
       else qc.invalidateQueries({ queryKey: ['predictions'] })
+      // Calibration analytics roll up predictions — keep that in sync.
+      qc.invalidateQueries({ queryKey: ['analytics'] })
     },
     /** Invalidate feelings for a specific entry (or all if no id). */
     feelings: (entryId?: string) => {

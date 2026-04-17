@@ -44,6 +44,7 @@ import ImportIcon from '@mui/icons-material/FileDownload'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import PsychologyIcon from '@mui/icons-material/Psychology'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { useRealtimeSync } from './hooks/useRealtimeSync'
 import { SnackbarProvider } from './contexts/SnackbarContext'
 import { TickerChartProvider } from './contexts/TickerChartContext'
 import ActivityDrawer, { useActivityBadge } from './components/ActivityDrawer'
@@ -374,8 +375,12 @@ function AppLayout() {
   const [navOpen, setNavOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
   const { count: activityCount, refresh: refreshActivity } = useActivityBadge()
+  const { user } = useAuth()
   const muiTheme = useTheme()
   const isMobile = !useMediaQuery(muiTheme.breakpoints.up('md'))
+  // Subscribe to Postgres changes for this user — pushes from another tab/device
+  // invalidate the matching React Query keys so every open page refetches live.
+  useRealtimeSync(user?.id)
   // Auto-close any open drawer/menu on navigation. The drawer is over the main
   // content, so a route change without auto-close leaves it covering the new page.
   const location = useLocation()

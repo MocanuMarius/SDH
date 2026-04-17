@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import {
   Box,
   Typography,
@@ -17,39 +16,19 @@ import {
   TableRow,
 } from '@mui/material'
 import InfoIcon from '@mui/icons-material/Info'
-import { calculatePredictionCalibration, type PredictionCalibrationSnapshot } from '../services/analyticsService'
+import { useQuery } from '@tanstack/react-query'
+import { calculatePredictionCalibration } from '../services/analyticsService'
 
 export default function CalibrationDashboardPage() {
-  const [snapshot, setSnapshot] = useState<PredictionCalibrationSnapshot | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-
-    calculatePredictionCalibration()
-      .then((data) => {
-        if (!cancelled) {
-          setSnapshot(data)
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Failed to calculate calibration')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  // Wired to react-query so the page reflects new predictions / outcomes the
+  // moment they're added — the global `['analytics']` invalidation reaches us.
+  const calQ = useQuery({
+    queryKey: ['analytics', 'calibration'],
+    queryFn: () => calculatePredictionCalibration(),
+  })
+  const snapshot = calQ.data ?? null
+  const loading = calQ.isLoading
+  const error = calQ.error ? (calQ.error as Error).message : null
 
   if (loading) {
     return (
