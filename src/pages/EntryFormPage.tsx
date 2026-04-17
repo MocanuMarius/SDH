@@ -27,14 +27,13 @@ import { ensurePassedForUser } from '../services/passedService'
 import { buildDecisionBlockMarkdown, type DecisionBlockFields } from '../utils/decisionBlockMarkdown'
 import { stripLegacyMarkdown } from '../utils/stripLegacyMarkdown'
 import type { ActionInsert } from '../types/database'
-import { PageHeader } from '../components/system'
+import { PageHeader, ListCard, ItemRow } from '../components/system'
 import { generateEntryId } from '../utils/id'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { useEntry, useInvalidate } from '../hooks/queries'
 import InsertDecisionBlockDialog from '../components/InsertDecisionBlockDialog'
 import TickerDollarField from '../components/TickerDollarField'
 import DecisionChip from '../components/DecisionChip'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { getTagPresets } from '../utils/tagPresets'
 import TagChip from '../components/TagChip'
 
@@ -141,94 +140,6 @@ function RowCard({
         <Box sx={{ px: 1.5, pb: 1.5, pt: 0.5 }}>{children}</Box>
       </Collapse>
     </Paper>
-  )
-}
-
-/**
- * Card that shows a list of items + an inline "Add another" affordance. Same
- * visual language as `RowCard` but optimised for the "Decisions / Predictions /
- * Rules" pattern: always-on header (count + description), then rendered
- * children which contain the rows and the inline add form.
- */
-function ListCard({
-  title,
-  description,
-  count,
-  hasValue,
-  children,
-}: {
-  title: string
-  description?: string
-  count: number
-  hasValue: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <Paper
-      variant="outlined"
-      sx={{
-        overflow: 'hidden',
-        transition: 'background-color 120ms, border-color 120ms',
-        bgcolor: hasValue ? 'background.paper' : 'grey.50',
-        borderColor: hasValue ? 'primary.light' : 'divider',
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, py: 1 }}>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box display="flex" alignItems="baseline" gap={0.75}>
-            <Typography variant="body2" fontWeight={700} color="text.primary">{title}</Typography>
-            {count > 0 && (
-              <Typography variant="caption" color="text.secondary" fontWeight={600}>({count})</Typography>
-            )}
-          </Box>
-          {!hasValue && description && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.72rem', mt: 0.25 }}>
-              {description}
-            </Typography>
-          )}
-        </Box>
-      </Box>
-      <Box sx={{ px: 1.5, pb: 1.5, pt: 0.25, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-        {children}
-      </Box>
-    </Paper>
-  )
-}
-
-/**
- * A single row inside a `ListCard` — children on the left (chip + label stack),
- * a trash icon on the right. Matches the Decisions row aesthetic.
- */
-function ItemRow({
-  children,
-  onDelete,
-  ariaLabel,
-}: {
-  children: React.ReactNode
-  onDelete: () => void
-  ariaLabel: string
-}) {
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        px: 1,
-        py: 0.75,
-        bgcolor: 'grey.50',
-        borderRadius: 1,
-        border: '1px solid',
-        borderColor: 'divider',
-      }}
-    >
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-        {children}
-      </Box>
-      <IconButton size="small" onClick={onDelete} aria-label={ariaLabel}>
-        <DeleteOutlineIcon fontSize="small" />
-      </IconButton>
-    </Box>
   )
 }
 
@@ -704,35 +615,13 @@ export default function EntryFormPage() {
 
       {/* Optional context — each row is a mini card that expands on + click. */}
       <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {/* Decisions — first-class card, always visible, inline list + "+ Add" button.
-            Replaces the old top-right corner Add Decision button. */}
-        <Paper
-          variant="outlined"
-          sx={{
-            overflow: 'hidden',
-            bgcolor: pendingDecisions.length > 0 ? 'background.paper' : 'grey.50',
-            borderColor: pendingDecisions.length > 0 ? 'primary.light' : 'divider',
-            transition: 'background-color 120ms, border-color 120ms',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, py: 1 }}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Box display="flex" alignItems="baseline" gap={0.75}>
-                <Typography variant="body2" fontWeight={700} color="text.primary">
-                  Decisions
-                </Typography>
-                {pendingDecisions.length > 0 && (
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                    ({pendingDecisions.length})
-                  </Typography>
-                )}
-              </Box>
-              {pendingDecisions.length === 0 && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.72rem', mt: 0.25 }}>
-                  Buys, sells, passes, research notes — what you did or decided.
-                </Typography>
-              )}
-            </Box>
+        {/* Decisions — first-class card. Same pattern as all the ListCards below;
+            the + button on the header opens the InsertDecisionBlockDialog modal. */}
+        <ListCard
+          title="Decisions"
+          description="Buys, sells, passes, research notes — what you did or decided."
+          count={pendingDecisions.length}
+          headerAction={
             <IconButton
               size="small"
               onClick={() => setDecisionDialogOpen(true)}
@@ -747,69 +636,54 @@ export default function EntryFormPage() {
             >
               <AddIcon fontSize="small" />
             </IconButton>
-          </Box>
-          {pendingDecisions.length > 0 && (
-            <Box sx={{ px: 1.5, pb: 1.5, pt: 0.25, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-              <AnimatePresence initial={false}>
-                {pendingDecisions.map((d, i) => (
-                  <motion.div
-                    key={`${d.ticker}-${d.type}-${d.action_date}-${i}`}
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.16, ease: 'easeOut' }}
-                  >
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                        px: 1,
-                        py: 0.75,
-                        bgcolor: 'grey.50',
-                        borderRadius: 1,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                      }}
-                    >
-                      <DecisionChip type={d.type} size="small" />
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Box display="flex" alignItems="baseline" gap={0.75} flexWrap="wrap">
-                          <Typography variant="body2" fontWeight={700} color="primary.main">
-                            ${d.ticker}
-                          </Typography>
-                          {d.price && (
-                            <Typography variant="caption" color="text.secondary">
-                              {d.price}{d.currency ? ` ${d.currency}` : ''}
-                            </Typography>
-                          )}
-                          {d.action_date && (
-                            <Typography variant="caption" color="text.secondary">
-                              · {d.action_date}
-                            </Typography>
-                          )}
-                        </Box>
-                        {d.reason && (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                          >
-                            {d.reason}
-                          </Typography>
-                        )}
-                      </Box>
-                      <IconButton
-                        size="small"
-                        onClick={() => setPendingDecisions((prev) => prev.filter((_, idx) => idx !== i))}
-                        aria-label="Remove decision"
-                      >
-                        <DeleteOutlineIcon fontSize="small" />
-                      </IconButton>
+          }
+        >
+          <AnimatePresence initial={false}>
+            {pendingDecisions.map((d, i) => (
+              <motion.div
+                key={`${d.ticker}-${d.type}-${d.action_date}-${i}`}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.16, ease: 'easeOut' }}
+              >
+                <ItemRow
+                  onDelete={() => setPendingDecisions((prev) => prev.filter((_, idx) => idx !== i))}
+                  ariaLabel="Remove decision"
+                >
+                  <DecisionChip type={d.type} size="small" />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Box display="flex" alignItems="baseline" gap={0.75} flexWrap="wrap">
+                      <Typography variant="body2" fontWeight={700} color="primary.main">
+                        ${d.ticker}
+                      </Typography>
+                      {d.price && (
+                        <Typography variant="caption" color="text.secondary">
+                          {d.price}{d.currency ? ` ${d.currency}` : ''}
+                        </Typography>
+                      )}
+                      {d.action_date && (
+                        <Typography variant="caption" color="text.secondary">
+                          · {d.action_date}
+                        </Typography>
+                      )}
                     </Box>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+                    {d.reason && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      >
+                        {d.reason}
+                      </Typography>
+                    )}
+                  </Box>
+                </ItemRow>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          {pendingDecisions.length > 0 && (
+            <>
               <Button
                 size="small"
                 variant="text"
@@ -822,9 +696,9 @@ export default function EntryFormPage() {
               <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>
                 Saves as structured rows when you {isNew ? 'create' : 'save'} the entry.
               </Typography>
-            </Box>
+            </>
           )}
-        </Paper>
+        </ListCard>
 
         <RowCard
           title="Market Sentiment"

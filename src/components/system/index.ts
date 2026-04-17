@@ -20,3 +20,6 @@ export type { StatusChipProps, StatusKind } from './StatusChip'
 
 export { default as MetricTile } from './MetricTile'
 export type { MetricTileProps } from './MetricTile'
+
+export { default as ListCard, ItemRow } from './ListCard'
+export type { ListCardProps, ItemRowProps } from './ListCard'

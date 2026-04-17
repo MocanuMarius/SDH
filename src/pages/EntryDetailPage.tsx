@@ -9,7 +9,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import { deleteEntry, updateEntry } from '../services/entriesService'
-import { createReminder } from '../services/remindersService'
+import { createReminder, deleteReminder } from '../services/remindersService'
 import { fetchChartData } from '../services/chartApiService'
 import { useAuth } from '../contexts/AuthContext'
 import {
@@ -32,8 +32,10 @@ import {
   useActionsByEntry,
   useOutcomesByActionIds,
   usePredictions,
+  useReminders,
   useInvalidate,
 } from '../hooks/queries'
+import { ListCard, ItemRow } from '../components/system'
 import ActionFormDialog from '../components/ActionFormDialog'
 import OutcomeFormDialog from '../components/OutcomeFormDialog'
 import PredictionFormDialog from '../components/PredictionFormDialog'
@@ -70,6 +72,11 @@ export default function EntryDetailPage() {
   }, [outcomesQ.data])
   const predictionsQ = usePredictions(id)
   const predictions = predictionsQ.data ?? []
+  const remindersQ = useReminders(true)
+  const entryReminders = useMemo(
+    () => (remindersQ.data ?? []).filter((r) => r.entry_id === id),
+    [remindersQ.data, id]
+  )
 
   const entry = entryQ.data ?? null
   const loading = entryQ.isLoading
@@ -138,6 +145,15 @@ export default function EntryDetailPage() {
       // silently fail
     } finally {
       setSavingNote(false)
+    }
+  }
+
+  const handleDeleteReminder = async (reminderId: string) => {
+    try {
+      await deleteReminder(reminderId)
+      invalidate.reminders()
+    } catch (err) {
+      console.error('delete reminder failed', err)
     }
   }
 
@@ -356,17 +372,99 @@ export default function EntryDetailPage() {
                 <Typography variant="body2" sx={{ mt: 0.25 }}>{entry.decision_horizon}</Typography>
               </Box>
             )}
-            {entry.trading_plan && (
-              <Box>
-                <Typography variant="caption" color="text.secondary" fontWeight={500}>Trading Plan</Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mt: 0.25, fontFamily: 'monospace', fontSize: '0.8rem', bgcolor: 'grey.50', p: 1, borderRadius: 1 }}>
-                  {entry.trading_plan}
-                </Typography>
-              </Box>
-            )}
+            {entry.trading_plan && (() => {
+              // Parse the structured trading plan into entry/exit rule lists so
+              // they render as proper bullets instead of a raw <pre> block.
+              const lines = entry.trading_plan.split('\n')
+              const entryLine = lines.find((l) => l.startsWith('Entry:'))?.replace('Entry:', '').trim() ?? ''
+              const exitLine = lines.find((l) => l.startsWith('Exit:'))?.replace('Exit:', '').trim() ?? ''
+              const splitRules = (s: string) => s.split(/\s*\n\s*|\s*;\s*|\s*·\s*/).map((r) => r.trim()).filter(Boolean)
+              const entryRulesDisp = splitRules(entryLine)
+              const exitRulesDisp = splitRules(exitLine)
+              if (!entryRulesDisp.length && !exitRulesDisp.length) return null
+              return (
+                <>
+                  {entryRulesDisp.length > 0 && (
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" fontWeight={500}>Entry Rules</Typography>
+                      <Box component="ul" sx={{ m: 0, mt: 0.25, pl: 2.5 }}>
+                        {entryRulesDisp.map((r, i) => (
+                          <Box component="li" key={`er-${i}`} sx={{ fontSize: '0.85rem' }}>{r}</Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                  {exitRulesDisp.length > 0 && (
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" fontWeight={500}>Exit Rules</Typography>
+                      <Box component="ul" sx={{ m: 0, mt: 0.25, pl: 2.5 }}>
+                        {exitRulesDisp.map((r, i) => (
+                          <Box component="li" key={`xr-${i}`} sx={{ fontSize: '0.85rem' }}>{r}</Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                </>
+              )
+            })()}
           </Stack>
         </Paper>
       )}
+
+      {/* Reminders on this entry — list of active ones with an "+ Add" in the header.
+          Mirrors the entry form's ListCard pattern so the vocabulary stays consistent. */}
+      <Box sx={{ mt: 2 }}>
+        <ListCard
+          title="Reminders"
+          description="Nudges you'll get back on the activity drawer — for follow-ups, reviews, or decision horizons."
+          count={entryReminders.length}
+          headerAction={
+            <IconButton
+              size="small"
+              onClick={() => setReminderDialogOpen(true)}
+              aria-label="Add reminder"
+              sx={{
+                color: 'primary.contrastText',
+                bgcolor: 'primary.main',
+                '&:hover': { bgcolor: 'primary.dark' },
+                width: 28,
+                height: 28,
+              }}
+            >
+              <AddIcon fontSize="small" />
+            </IconButton>
+          }
+        >
+          {entryReminders.map((r) => {
+            const when = r.reminder_date
+            const typeLabel = r.type === 'idea_refresh' ? 'Refresh idea' : r.type === 'decision_horizon' ? 'Decision horizon' : 'Review'
+            return (
+              <ItemRow
+                key={r.id}
+                onDelete={() => handleDeleteReminder(r.id)}
+                ariaLabel="Remove reminder"
+              >
+                <NotificationsActiveIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Box display="flex" alignItems="baseline" gap={0.75} flexWrap="wrap">
+                    <Typography variant="body2" fontWeight={600}>{when}</Typography>
+                    <Typography variant="caption" color="text.secondary">· {typeLabel}</Typography>
+                  </Box>
+                  {r.note && (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                      {r.note}
+                    </Typography>
+                  )}
+                </Box>
+              </ItemRow>
+            )
+          })}
+        </ListCard>
+      </Box>
 
       {/* Quick actions row — visible on mobile */}
       {isMobile && (
