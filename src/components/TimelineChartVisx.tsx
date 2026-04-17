@@ -32,14 +32,46 @@ const TICKER_COLORS = [
   '#a16207', // yellow-dark
 ]
 
-// Arrow geometry
-const AW = 22
-const AH = 14
-const SW = 10
-const SH = 20
-const ARROW_TOTAL = AH + SH
-const BASE_GAP = 19
-const CORNER_R = 4
+// Arrow geometry — defaults for wider viewports. On xs widths we derive a
+// 15% smaller version via getArrowGeom() so arrows don't overwhelm the plot.
+interface ArrowGeom {
+  AW: number  // arrow head width (half-span from centre)
+  AH: number  // arrow head height
+  SW: number  // shaft half-width
+  SH: number  // shaft height
+  ARROW_TOTAL: number
+  BASE_GAP: number
+  FONT: number
+  CORNER_R: number
+}
+
+const ARROW_GEOM_DEFAULT: ArrowGeom = {
+  AW: 22, AH: 14, SW: 10, SH: 20,
+  ARROW_TOTAL: 14 + 20,
+  BASE_GAP: 19,
+  FONT: 13,
+  CORNER_R: 4,
+}
+
+function getArrowGeom(width: number): ArrowGeom {
+  // xs: scale ~15% smaller, drop the label font to 11.
+  if (width < 480) {
+    const scale = 0.85
+    const AH = Math.round(ARROW_GEOM_DEFAULT.AH * scale)
+    const SH = Math.round(ARROW_GEOM_DEFAULT.SH * scale)
+    return {
+      AW: Math.round(ARROW_GEOM_DEFAULT.AW * scale),
+      AH,
+      SW: Math.round(ARROW_GEOM_DEFAULT.SW * scale),
+      SH,
+      ARROW_TOTAL: AH + SH,
+      BASE_GAP: Math.round(ARROW_GEOM_DEFAULT.BASE_GAP * scale),
+      FONT: 11,
+      CORNER_R: 3,
+    }
+  }
+  return ARROW_GEOM_DEFAULT
+}
 
 function _getDecisionCountsByType(decisions: Array<{ type: string }> | undefined) {
   const counts = { buy: 0, sell: 0, other: 0 }
@@ -73,20 +105,20 @@ function roundedPolyPath(pts: [number, number][], r: number): string {
   return d + ' Z'
 }
 
-function upArrowPath(cx: number, baseY: number): string {
-  const tipY = baseY - ARROW_TOTAL
+function upArrowPath(cx: number, baseY: number, g: ArrowGeom): string {
+  const tipY = baseY - g.ARROW_TOTAL
   return roundedPolyPath([
-    [cx, tipY], [cx + AW, tipY + AH], [cx + SW, tipY + AH],
-    [cx + SW, baseY], [cx - SW, baseY], [cx - SW, tipY + AH], [cx - AW, tipY + AH],
-  ], CORNER_R)
+    [cx, tipY], [cx + g.AW, tipY + g.AH], [cx + g.SW, tipY + g.AH],
+    [cx + g.SW, baseY], [cx - g.SW, baseY], [cx - g.SW, tipY + g.AH], [cx - g.AW, tipY + g.AH],
+  ], g.CORNER_R)
 }
 
-function downArrowPath(cx: number, baseY: number): string {
-  const tipY = baseY + ARROW_TOTAL
+function downArrowPath(cx: number, baseY: number, g: ArrowGeom): string {
+  const tipY = baseY + g.ARROW_TOTAL
   return roundedPolyPath([
-    [cx, tipY], [cx + AW, tipY - AH], [cx + SW, tipY - AH],
-    [cx + SW, baseY], [cx - SW, baseY], [cx - SW, tipY - AH], [cx - AW, tipY - AH],
-  ], CORNER_R)
+    [cx, tipY], [cx + g.AW, tipY - g.AH], [cx + g.SW, tipY - g.AH],
+    [cx + g.SW, baseY], [cx - g.SW, baseY], [cx - g.SW, tipY - g.AH], [cx - g.AW, tipY - g.AH],
+  ], g.CORNER_R)
 }
 
 export interface TimelineChartPoint {
@@ -168,6 +200,8 @@ function TimelineChartVisx({
   const axisLabelFontSize = isMobile ? 10 : 11
   const leftAxisLabelFontSize = isMobile ? 12 : 14
   const numBottomTicks = width > 400 ? 8 : 5
+  const arrowGeom = useMemo(() => getArrowGeom(width), [width])
+  const { AW, ARROW_TOTAL, BASE_GAP, FONT: ARROW_FONT } = arrowGeom
 
   const dateScale = useMemo(
     () =>
@@ -332,7 +366,7 @@ function TimelineChartVisx({
     top = Math.max(4, top)
 
     return { left, top }
-  }, [activeArrow, width, height, responsiveMargin])
+  }, [activeArrow, width, height, responsiveMargin, ARROW_TOTAL])
 
   if (width < 10 || height < 10) return null
 
@@ -524,7 +558,7 @@ function TimelineChartVisx({
                   ))}
                   {/* Hover/active ring */}
                   {(isHovered || isActive) && (
-                    <path d={upArrowPath(avgCx, baseY)}
+                    <path d={upArrowPath(avgCx, baseY, arrowGeom)}
                       fill="none"
                       stroke={isActive ? '#0f172a' : '#475569'}
                       strokeWidth={isActive ? 2.5 : 2}
@@ -532,10 +566,10 @@ function TimelineChartVisx({
                       style={{ pointerEvents: 'none' }}
                     />
                   )}
-                  <path d={upArrowPath(avgCx, baseY)} fill={fill} fillOpacity={isGreyed ? 0.35 : 0.9}
+                  <path d={upArrowPath(avgCx, baseY, arrowGeom)} fill={fill} fillOpacity={isGreyed ? 0.35 : 0.9}
                     stroke="rgba(255,255,255,0.6)" strokeWidth={1} strokeLinejoin="round" />
                   <text x={avgCx} y={midY + 1} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={13} fontWeight={800} fill="#fff"
+                    fontSize={ARROW_FONT} fontWeight={800} fill="#fff"
                     style={{ pointerEvents: 'none', userSelect: 'none' }}>
                     {totalCount}
                   </text>
@@ -588,7 +622,7 @@ function TimelineChartVisx({
                   ))}
                   {/* Hover/active ring */}
                   {(isHovered || isActive) && (
-                    <path d={downArrowPath(avgCx, baseY)}
+                    <path d={downArrowPath(avgCx, baseY, arrowGeom)}
                       fill="none"
                       stroke={isActive ? '#0f172a' : '#475569'}
                       strokeWidth={isActive ? 2.5 : 2}
@@ -596,10 +630,10 @@ function TimelineChartVisx({
                       style={{ pointerEvents: 'none' }}
                     />
                   )}
-                  <path d={downArrowPath(avgCx, baseY)} fill={fill} fillOpacity={isGreyed ? 0.35 : 0.9}
+                  <path d={downArrowPath(avgCx, baseY, arrowGeom)} fill={fill} fillOpacity={isGreyed ? 0.35 : 0.9}
                     stroke="rgba(255,255,255,0.6)" strokeWidth={1} strokeLinejoin="round" />
                   <text x={avgCx} y={midY - 1} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={13} fontWeight={800} fill="#fff"
+                    fontSize={ARROW_FONT} fontWeight={800} fill="#fff"
                     style={{ pointerEvents: 'none', userSelect: 'none' }}>
                     {totalCount}
                   </text>
