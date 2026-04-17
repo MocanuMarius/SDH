@@ -3,7 +3,6 @@ import {
   Box,
   Typography,
   Button,
-  Paper,
   Stack,
   TextField,
   Dialog,
@@ -14,7 +13,6 @@ import {
   Tooltip,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import { Reorder } from 'motion/react'
 import { getReasonPresets, setReasonPresets, removeReasonPresetAtIndex, updateReasonPresetColor } from '../utils/reasonPresets'
@@ -23,6 +21,7 @@ import { getTagPresets, setTagPresets, removeTagPresetAtIndex, updateTagPresetCo
 import type { TagPreset } from '../utils/tagPresets'
 import {
   getCustomDecisionTypes,
+  setCustomDecisionTypes,
   addCustomDecisionType,
   removeCustomDecisionType,
   updateCustomDecisionType,
@@ -30,9 +29,33 @@ import {
 import type { CustomDecisionType } from '../utils/customDecisionTypes'
 import TagChip from '../components/TagChip'
 import DecisionChip from '../components/DecisionChip'
-import { PageHeader } from '../components/system'
+import { PageHeader, ListCard, ItemRow } from '../components/system'
 
 const DEFAULT_COLOR = '#6366f1'
+
+/**
+ * The "+" IconButton that sits in a ListCard's header — same style across
+ * Decisions on the entry form, Reminders on the entry detail, and the three
+ * preset sections here.
+ */
+function AddPlusButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <IconButton
+      size="small"
+      onClick={onClick}
+      aria-label={label}
+      sx={{
+        color: 'primary.contrastText',
+        bgcolor: 'primary.main',
+        '&:hover': { bgcolor: 'primary.dark' },
+        width: 28,
+        height: 28,
+      }}
+    >
+      <AddIcon fontSize="small" />
+    </IconButton>
+  )
+}
 
 function ColorSwatch({ color, onChange, label }: { color?: string; onChange: (c: string) => void; label: string }) {
   return (
@@ -152,186 +175,114 @@ export default function SettingsPage() {
         dense
       />
 
-      {/* Custom Decision Types */}
-      <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, mb: 2 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' },
-            alignItems: { xs: 'stretch', sm: 'center' },
-            justifyContent: 'space-between',
-            gap: 1,
-            mb: 1.5,
-          }}
+      <Stack spacing={1.5}>
+        {/* Custom Decision Types */}
+        <ListCard
+          title="Custom Decision Types"
+          description="Add your own decision types beyond the built-in ones — Hedge, Rebalance, Earnings play, etc. Drag to reorder, click the dot for a colour."
+          count={customTypes.length}
+          headerAction={<AddPlusButton label="Add custom decision type" onClick={() => setNewTypeDialogOpen(true)} />}
         >
-          <Box>
-            <Typography variant="subtitle1" fontWeight={600}>Custom Decision Types</Typography>
-            <Typography variant="caption" color="text.secondary">Add your own decision types beyond the built-in ones</Typography>
-          </Box>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => setNewTypeDialogOpen(true)}
-            sx={{ textTransform: 'none', whiteSpace: 'nowrap', alignSelf: { xs: 'flex-start', sm: 'auto' }, flexShrink: 0 }}
-          >
-            Add type
-          </Button>
-        </Box>
-        {customTypes.length === 0 ? (
-          <Typography color="text.secondary" variant="body2">
-            No custom types yet. Add types like "Hedge", "Rebalance", "Earnings play", etc.
-          </Typography>
-        ) : (
-          <Reorder.Group
-            axis="y"
-            values={customTypes}
-            onReorder={(newOrder) => {
-              setLocalCustomTypes(newOrder)
-              setCustomDecisionTypes(newOrder)
-            }}
-            as="div"
-            style={{ listStyle: 'none', padding: 0, margin: 0 }}
-          >
-            {customTypes.map((ct) => (
-              <Reorder.Item key={ct.id} value={ct} as="div" style={{ listStyle: 'none' }}>
-                <Box display="flex" alignItems="center" gap={1} sx={{ py: 0.25, cursor: 'grab', '&:active': { cursor: 'grabbing' } }}>
-                  <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled', flexShrink: 0 }} />
-                  <ColorSwatch color={ct.color} onChange={(c) => handleTypeColor(ct.id, c)} label={ct.label} />
-                  <DecisionChip type={ct.id} size="small" sx={{ pointerEvents: 'none' }} />
-                  <Box flex={1} />
-                  <Tooltip title="Remove">
-                    <IconButton size="small" onClick={() => handleRemoveType(ct.id)}>
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-              </Reorder.Item>
-            ))}
-          </Reorder.Group>
-        )}
-      </Paper>
+          {customTypes.length === 0 ? (
+            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>
+              None yet. Click + to add one.
+            </Typography>
+          ) : (
+            <Reorder.Group
+              axis="y"
+              values={customTypes}
+              onReorder={(newOrder) => {
+                setLocalCustomTypes(newOrder)
+                setCustomDecisionTypes(newOrder)
+              }}
+              as="div"
+              style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}
+            >
+              {customTypes.map((ct) => (
+                <Reorder.Item key={ct.id} value={ct} as="div" style={{ listStyle: 'none' }}>
+                  <ItemRow onDelete={() => handleRemoveType(ct.id)} ariaLabel="Remove decision type">
+                    <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled', flexShrink: 0, cursor: 'grab', '&:active': { cursor: 'grabbing' } }} />
+                    <ColorSwatch color={ct.color} onChange={(c) => handleTypeColor(ct.id, c)} label={ct.label} />
+                    <DecisionChip type={ct.id} size="small" sx={{ pointerEvents: 'none' }} />
+                  </ItemRow>
+                </Reorder.Item>
+              ))}
+            </Reorder.Group>
+          )}
+        </ListCard>
 
-      {/* Decision Reason Presets */}
-      <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, mb: 2 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' },
-            alignItems: { xs: 'stretch', sm: 'center' },
-            justifyContent: 'space-between',
-            gap: 1,
-            mb: 1.5,
-          }}
+        {/* Decision Reason Presets */}
+        <ListCard
+          title="Decision Reason Presets"
+          description="Quick-select reasons when adding decisions. Drag to reorder, click the dot for a colour."
+          count={reasonPresets.length}
+          headerAction={<AddPlusButton label="Add reason preset" onClick={() => setNewReasonDialogOpen(true)} />}
         >
-          <Box>
-            <Typography variant="subtitle1" fontWeight={600}>Decision Reason Presets</Typography>
-            <Typography variant="caption" color="text.secondary">Quick-select reasons when adding decisions. Click the dot to set a color.</Typography>
-          </Box>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => setNewReasonDialogOpen(true)}
-            sx={{ textTransform: 'none', whiteSpace: 'nowrap', alignSelf: { xs: 'flex-start', sm: 'auto' }, flexShrink: 0 }}
-          >
-            Add preset
-          </Button>
-        </Box>
-        {reasonPresets.length === 0 ? (
-          <Typography color="text.secondary" variant="body2">
-            No presets yet. Add reason presets to quickly select from your shortlist when adding decisions.
-          </Typography>
-        ) : (
-          <Reorder.Group
-            axis="y"
-            values={reasonPresets}
-            onReorder={(newOrder) => {
-              setLocalReasonPresets(newOrder)
-              setReasonPresets(newOrder)
-            }}
-            as="div"
-            style={{ listStyle: 'none', padding: 0, margin: 0 }}
-          >
-            {reasonPresets.map((r, idx) => (
-              <Reorder.Item key={`${r.label}-${idx}`} value={r} as="div" style={{ listStyle: 'none' }}>
-                <Box display="flex" alignItems="center" gap={1} sx={{ py: 0.25, cursor: 'grab', '&:active': { cursor: 'grabbing' } }}>
-                  <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled', flexShrink: 0 }} />
-                  <ColorSwatch color={r.color} onChange={(c) => handleReasonColor(r.label, c)} label={r.label} />
-                  <Typography variant="body2" sx={{ flex: 1, ...(r.color ? { color: r.color, fontWeight: 500 } : {}) }}>
-                    {r.label}
-                  </Typography>
-                  <Tooltip title="Remove">
-                    <IconButton size="small" onClick={() => handleRemoveReason(idx)}>
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-              </Reorder.Item>
-            ))}
-          </Reorder.Group>
-        )}
-      </Paper>
+          {reasonPresets.length === 0 ? (
+            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>
+              None yet. Click + to add one.
+            </Typography>
+          ) : (
+            <Reorder.Group
+              axis="y"
+              values={reasonPresets}
+              onReorder={(newOrder) => {
+                setLocalReasonPresets(newOrder)
+                setReasonPresets(newOrder)
+              }}
+              as="div"
+              style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}
+            >
+              {reasonPresets.map((r, idx) => (
+                <Reorder.Item key={`${r.label}-${idx}`} value={r} as="div" style={{ listStyle: 'none' }}>
+                  <ItemRow onDelete={() => handleRemoveReason(idx)} ariaLabel="Remove reason preset">
+                    <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled', flexShrink: 0, cursor: 'grab', '&:active': { cursor: 'grabbing' } }} />
+                    <ColorSwatch color={r.color} onChange={(c) => handleReasonColor(r.label, c)} label={r.label} />
+                    <Typography variant="body2" sx={{ ...(r.color ? { color: r.color, fontWeight: 500 } : {}) }}>
+                      {r.label}
+                    </Typography>
+                  </ItemRow>
+                </Reorder.Item>
+              ))}
+            </Reorder.Group>
+          )}
+        </ListCard>
 
-      {/* Entry Tag Presets */}
-      <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, mb: 2 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' },
-            alignItems: { xs: 'stretch', sm: 'center' },
-            justifyContent: 'space-between',
-            gap: 1,
-            mb: 1.5,
-          }}
+        {/* Entry Tag Presets */}
+        <ListCard
+          title="Entry Tag Presets"
+          description="Tags for categorising journal entries. Drag to reorder, click the dot for a colour."
+          count={tagPresets.length}
+          headerAction={<AddPlusButton label="Add tag preset" onClick={() => setNewTagDialogOpen(true)} />}
         >
-          <Box>
-            <Typography variant="subtitle1" fontWeight={600}>Entry Tag Presets</Typography>
-            <Typography variant="caption" color="text.secondary">Tags for categorizing journal entries. Click the dot to set a color.</Typography>
-          </Box>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => setNewTagDialogOpen(true)}
-            sx={{ textTransform: 'none', whiteSpace: 'nowrap', alignSelf: { xs: 'flex-start', sm: 'auto' }, flexShrink: 0 }}
-          >
-            Add preset
-          </Button>
-        </Box>
-        {tagPresets.length === 0 ? (
-          <Typography color="text.secondary" variant="body2">
-            No presets yet. Add tag presets to quickly label your journal entries.
-          </Typography>
-        ) : (
-          <Reorder.Group
-            axis="y"
-            values={tagPresets}
-            onReorder={(newOrder) => {
-              setLocalTagPresets(newOrder)
-              setTagPresets(newOrder)
-            }}
-            as="div"
-            style={{ listStyle: 'none', padding: 0, margin: 0 }}
-          >
-            {tagPresets.map((t, idx) => (
-              <Reorder.Item key={`${t.label}-${idx}`} value={t} as="div" style={{ listStyle: 'none' }}>
-                <Box display="flex" alignItems="center" gap={1} sx={{ py: 0.25, cursor: 'grab', '&:active': { cursor: 'grabbing' } }}>
-                  <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled', flexShrink: 0 }} />
-                  <ColorSwatch color={t.color} onChange={(c) => handleTagColor(t.label, c)} label={t.label} />
-                  <TagChip tag={t.label} colorOverride={t.color} />
-                  <Box flex={1} />
-                  <Tooltip title="Remove">
-                    <IconButton size="small" onClick={() => handleRemoveTag(idx)}>
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-              </Reorder.Item>
-            ))}
-          </Reorder.Group>
-        )}
-      </Paper>
+          {tagPresets.length === 0 ? (
+            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>
+              None yet. Click + to add one.
+            </Typography>
+          ) : (
+            <Reorder.Group
+              axis="y"
+              values={tagPresets}
+              onReorder={(newOrder) => {
+                setLocalTagPresets(newOrder)
+                setTagPresets(newOrder)
+              }}
+              as="div"
+              style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}
+            >
+              {tagPresets.map((t, idx) => (
+                <Reorder.Item key={`${t.label}-${idx}`} value={t} as="div" style={{ listStyle: 'none' }}>
+                  <ItemRow onDelete={() => handleRemoveTag(idx)} ariaLabel="Remove tag preset">
+                    <DragIndicatorIcon fontSize="small" sx={{ color: 'text.disabled', flexShrink: 0, cursor: 'grab', '&:active': { cursor: 'grabbing' } }} />
+                    <ColorSwatch color={t.color} onChange={(c) => handleTagColor(t.label, c)} label={t.label} />
+                    <TagChip tag={t.label} colorOverride={t.color} />
+                  </ItemRow>
+                </Reorder.Item>
+              ))}
+            </Reorder.Group>
+          )}
+        </ListCard>
+      </Stack>
 
       {/* Add Reason Dialog */}
       <Dialog open={newReasonDialogOpen} onClose={() => setNewReasonDialogOpen(false)} maxWidth="xs" fullWidth>
