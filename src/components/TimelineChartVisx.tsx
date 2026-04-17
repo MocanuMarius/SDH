@@ -875,6 +875,43 @@ function TimelineChartVisx({
         </Group>
       </svg>
 
+      {/* Full-chart loading veil — instant feedback when an overlay is being
+          fetched. Covers the chart with a subtle translucent layer plus a
+          spinner so the user knows something's happening right after the
+          click, even if the tooltip hasn't finalized yet. */}
+      {fetchingOverlay && (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: 'rgba(255, 255, 255, 0.45)',
+            zIndex: 10,
+            pointerEvents: 'none',
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.5,
+              py: 0.75,
+              bgcolor: 'rgba(15, 23, 42, 0.82)',
+              color: '#fff',
+              borderRadius: 1,
+              fontSize: '0.8rem',
+              fontWeight: 600,
+            }}
+          >
+            <CircularProgress size={14} sx={{ color: '#fff' }} />
+            Loading overlay…
+          </Box>
+        </Box>
+      )}
+
       {/* Tooltip — shown when arrow is clicked */}
       {activeArrow && (
         <Box

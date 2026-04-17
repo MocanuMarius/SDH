@@ -214,11 +214,11 @@ export default function ActionFormDialog({
               </Alert>
             )}
 
-            <Box>
-              <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                Decision type
-              </Typography>
-              <FormControl size="small" fullWidth>
+            {/* Type + Ticker on one row — both are required and the section
+                was taking two full rows with redundant sub-captions. The
+                inputs carry their own labels; no subtitle needed. */}
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <FormControl size="small" sx={{ width: { xs: '100%', sm: 150 } }}>
                 <InputLabel>Type</InputLabel>
                 <Select
                   value={type}
@@ -241,24 +241,23 @@ export default function ActionFormDialog({
                   ]}
                 </Select>
               </FormControl>
+              <Box sx={{ flex: 1, minWidth: 180 }}>
+                <TickerAutocomplete
+                  value={ticker}
+                  onChange={setTicker}
+                  label="Ticker"
+                  placeholder="$SYMBOL or company name"
+                  size="small"
+                  onSelectResult={handleTickerSelect}
+                />
+              </Box>
             </Box>
 
             <Box>
-              <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                Symbol
-              </Typography>
-              <TickerAutocomplete
-                value={ticker}
-                onChange={setTicker}
-                label="Ticker"
-                placeholder="$SYMBOL or type company/symbol"
-                size="small"
-                onSelectResult={handleTickerSelect}
-              />
               <FormControlLabel
                 control={<Checkbox size="small" checked={isOption} onChange={(_, v) => setIsOption(v)} />}
                 label={<Typography variant="caption">This is an option</Typography>}
-                sx={{ mt: 0.5, ml: 0 }}
+                sx={{ ml: -0.75 }}
               />
               {isOption && (
                 <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
@@ -439,20 +438,15 @@ export default function ActionFormDialog({
               </Box>
             )}
 
-            <Box>
-              <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                Reason
-              </Typography>
-              <ReasonField
-                value={reason}
-                onChange={setReason}
-                label="Reason"
-                placeholder="e.g. Cheap, Too expensive, or pick / type"
-                size="small"
-                fullWidth
-                showManagePresets
-              />
-            </Box>
+            <ReasonField
+              value={reason}
+              onChange={setReason}
+              label="Reason"
+              placeholder="e.g. Cheap, Too expensive, or pick / type"
+              size="small"
+              fullWidth
+              showManagePresets
+            />
 
             {isNewBuy && (
               <Box>
