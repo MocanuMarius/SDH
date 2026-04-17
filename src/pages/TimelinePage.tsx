@@ -939,7 +939,15 @@ export default function TimelinePage() {
             }}
           >
             <Box sx={{ width: '100%', height: '100%', pointerEvents: dragActive ? 'none' : 'auto', outline: 'none' }}>
-              <ParentSize>
+              <ParentSize
+                // React 19 + strict mode trips a race where ParentSize's
+                // ResizeObserver misses the initial measurement and freezes
+                // at 0x0. Seeding an initialSize + a short debounce lets the
+                // chart render immediately at a sensible size while still
+                // updating correctly on subsequent resizes.
+                initialSize={{ width: 600, height: 400 }}
+                debounceTime={40}
+              >
                 {({ width, height }) =>
                   width > 0 && height > 0 && yAxisDomain ? (
                     <TimelineChartVisx
