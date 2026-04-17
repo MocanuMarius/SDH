@@ -44,6 +44,54 @@ land. Reorder if priority shifts.
 
 ---
 
+## Round 4 — 2026-04-17 (later)
+
+### Design system primitives extracted
+- [x] **PageHeader, SectionTitle, EmptyState, StatusChip, MetricTile** in
+  `src/components/system/`. Covers the 90% of repeated page-level patterns.
+  See [docs/PRINCIPLES.md](PRINCIPLES.md) for usage guidance.
+- [x] Pages refactored to use the primitives: Tickers, Trades, Long-term
+  horizons, Timeline, Analytics, Ticker detail (status chip), Journal,
+  EntryForm.
+- [x] `MetricCard` (legacy) now delegates to `MetricTile` so existing
+  Analytics dashboard tiles pick up the newspaper styling without API churn.
+
+### Cross-tab realtime sync
+- [x] `useRealtimeSync` hook subscribed to `postgres_changes` for actions,
+  entries, outcomes, passed, predictions, feelings, reminders. Wired in
+  `AppLayout`. SQL to enable Supabase realtime publication shipped at
+  `supabase/migrations/20260417130000_enable_realtime.sql` (user applied).
+
+### Calibration tab
+- [x] Wired to react-query (`['analytics', 'calibration']`). Predictions
+  invalidations bubble through.
+
+### Bulk markdown cleanup
+- [x] One-shot SQL migration `20260417120000_strip_legacy_markdown.sql`
+  applied. Source-of-truth on disk is now plain text; the render-time
+  stripper in `PlainTextWithTickers` is now a belt-and-braces fallback.
+
+---
+
+## Still open / next round
+
+- [ ] **Activity drawer** still uses pre-newspaper styling — has stale
+  references to old chrome (deletes / archive / etc.). Audit + reskin.
+- [ ] **Watchlist page** — never reviewed; likely needs the same PageHeader +
+  EmptyState + MetricTile treatment.
+- [ ] **Settings page** — same.
+- [ ] **DecisionCard** (entry detail action cards) — visual hierarchy works
+  but could use the new theme tokens more consistently. Worth a polish pass
+  when we touch entry detail again.
+- [ ] **`MetricCard` deprecation** — once we're confident `MetricTile` covers
+  all use cases, delete `MetricCard.tsx` and switch every Analytics caller
+  to import `MetricTile` directly.
+- [ ] **Date inputs** — native `<input type="date">` is still the chunky OS
+  widget in several forms. Either accept it or pull in MUI's
+  `DatePicker` from `@mui/x-date-pickers`.
+
+---
+
 ## Notes
 
 - Once a fix lands and is verified in the preview, mark the box `[x]` and

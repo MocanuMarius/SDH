@@ -1,10 +1,9 @@
 /**
- * Reusable metric card for dashboards and analytics pages.
+ * MetricCard — thin wrapper around the design-system `MetricTile` so existing
+ * dashboard call sites keep their API while picking up the newspaper styling.
  */
 
-import { Card, CardContent, Box, Typography } from '@mui/material'
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'
-import TrendingDownIcon from '@mui/icons-material/TrendingDown'
+import MetricTile from './system/MetricTile'
 
 interface MetricCardProps {
   label: string
@@ -15,34 +14,25 @@ interface MetricCardProps {
 }
 
 export default function MetricCard({ label, value, unit = '', trend, subtitle }: MetricCardProps) {
-  const color = trend === 'positive' ? '#16a34a' : trend === 'negative' ? '#dc2626' : '#64748b'
-  const Icon = trend === 'positive' ? TrendingUpIcon : trend === 'negative' ? TrendingDownIcon : null
-
+  const tone: 'positive' | 'negative' | 'default' =
+    trend === 'positive' ? 'positive' : trend === 'negative' ? 'negative' : 'default'
   return (
-    <Card variant="outlined">
-      <CardContent>
-        <Box display="flex" justifyContent="space-between" alignItems="flex-start">
-          <Box flex={1} minWidth={0}>
-            <Typography variant="caption" color="text.secondary" fontWeight={500} display="block" noWrap>
-              {label}
-            </Typography>
-            <Typography variant="h5" fontWeight={700} sx={{ color, mt: 0.5 }}>
-              {value}
-              {unit && (
-                <Typography component="span" variant="body2" sx={{ ml: 0.5, color: 'text.secondary' }}>
-                  {unit}
-                </Typography>
-              )}
-            </Typography>
-            {subtitle && (
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: 'block' }}>
-                {subtitle}
-              </Typography>
-            )}
-          </Box>
-          {Icon && <Icon sx={{ color, fontSize: 22, opacity: 0.6, flexShrink: 0 }} />}
-        </Box>
-      </CardContent>
-    </Card>
+    <MetricTile
+      label={label}
+      value={
+        unit ? (
+          <>
+            {value}
+            <span style={{ marginLeft: 6, fontSize: '0.6em', color: 'rgba(15,23,42,0.55)', fontFamily: 'inherit' }}>
+              {unit}
+            </span>
+          </>
+        ) : (
+          value
+        )
+      }
+      hint={subtitle}
+      tone={tone}
+    />
   )
 }

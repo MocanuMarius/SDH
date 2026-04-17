@@ -27,7 +27,7 @@ import { ensurePassedForUser } from '../services/passedService'
 import { buildDecisionBlockMarkdown, type DecisionBlockFields } from '../utils/decisionBlockMarkdown'
 import { stripLegacyMarkdown } from '../utils/stripLegacyMarkdown'
 import type { ActionInsert } from '../types/database'
-import { PageHeader } from '../components/system'
+import { PageHeader, SectionTitle } from '../components/system'
 import { generateEntryId } from '../utils/id'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { useEntry, useInvalidate } from '../hooks/queries'
@@ -637,10 +637,10 @@ export default function EntryFormPage() {
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
           >
-            <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-              <Typography variant="overline" color="text.secondary">
-                Decisions on this entry ({pendingDecisions.length})
-              </Typography>
+            <Box sx={{ mb: 2 }}>
+              <SectionTitle count={pendingDecisions.length} mb={0.75}>
+                Decisions on this entry
+              </SectionTitle>
               <Box display="flex" gap={0.5} flexWrap="wrap">
                 <AnimatePresence initial={false}>
                   {pendingDecisions.map((d, i) => (
