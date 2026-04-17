@@ -762,10 +762,17 @@ function TimelineChartVisx({
               els.push(
                 <rect
                   key={`hit-${clusterKey}`}
+                  className="timeline-decision-marker"
                   x={xStart} y={yStart}
                   width={xEnd - xStart} height={ySize}
                   fill="transparent"
                   style={{ cursor: 'pointer' }}
+                  onMouseDown={(e) => {
+                    // Stop the TimelinePage wrapper's onMouseDown from firing
+                    // and starting a range-select drag — on desktop that was
+                    // swallowing the click and the overlay never opened.
+                    e.stopPropagation()
+                  }}
                   onClick={(e) => {
                     e.stopPropagation()
                     if (firstId) onSelectAction(firstId)

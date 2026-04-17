@@ -96,8 +96,13 @@ export default function ActionFormDialog({
   const [optionType, setOptionType] = useState<'C' | 'P'>('C')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [readyCheckOpen, setReadyCheckOpen] = useState(false)
+  // Notes / Kill criteria / Pre-mortem each get their own collapse now.
+  // Auto-open if the field already has content so editing existing rows
+  // doesn't hide anything.
+  const [notesOpen, setNotesOpen] = useState(Boolean(initial?.notes))
+  const [killOpen, setKillOpen] = useState(Boolean((initial as { kill_criteria?: string })?.kill_criteria))
+  const [premortemOpen, setPremortemOpen] = useState(Boolean((initial as { pre_mortem_text?: string | null })?.pre_mortem_text))
   // Collapsed-by-default sections. When editing an existing row, open the
   // sections that already have a value so nothing is hidden.
   const initiallyTakenToday = (initial?.action_date ?? getToday()) === getToday()
@@ -139,6 +144,9 @@ export default function ActionFormDialog({
     setDecisionTakenToday(takenToday)
     setPriceOpen(Boolean(initial?.price || initial?.currency || initial?.shares))
     setSizeOpen(false)
+    setNotesOpen(Boolean(initial?.notes))
+    setKillOpen(Boolean((initial as { kill_criteria?: string })?.kill_criteria))
+    setPremortemOpen(Boolean((initial as { pre_mortem_text?: string | null })?.pre_mortem_text))
   }, [open, initial])
 
   const isNewBuy = !initial?.id && type === 'buy'
@@ -473,45 +481,93 @@ export default function ActionFormDialog({
               </Box>
             )}
 
+            {/* Notes, Kill criteria, Pre-mortem — each its own expandable
+                card. Header shows "+" or "−" + the field name; when the
+                field has content the card stays open on re-open. Matches
+                the Price / Size / "Decision taken today" disclosures above
+                so the whole dialog speaks one UI vocabulary. */}
             <Box>
-              <Button
-                size="small"
-                onClick={() => setAdvancedOpen((o) => !o)}
-                sx={{ p: 0, minHeight: 0, textTransform: 'none', color: 'text.secondary' }}
+              <Link
+                component="button"
+                type="button"
+                underline="hover"
+                onClick={() => setNotesOpen((v) => !v)}
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.85rem', color: 'text.secondary' }}
               >
-                {advancedOpen ? 'Hide' : 'Show'} optional fields (notes, kill criteria, pre-mortem)
-              </Button>
-              <Collapse in={advancedOpen}>
-                <Stack spacing={2} sx={{ pt: 1.5 }}>
-                  <TextField
-                    size="small"
-                    label="Notes (optional)"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    multiline
-                    minRows={2}
-                  />
-                  <TextField
-                    size="small"
-                    label="Kill criteria (optional)"
-                    value={kill_criteria}
-                    onChange={(e) => setKillCriteria(e.target.value)}
-                    placeholder="If [X], I reassess or sell"
-                    helperText="Pre-commit exit conditions"
-                    multiline
-                    minRows={1}
-                  />
-                  <TextField
-                    size="small"
-                    label="Pre-mortem (optional)"
-                    value={pre_mortem_text}
-                    onChange={(e) => setPreMortemText(e.target.value)}
-                    placeholder="If this decision fails, what is the most likely reason?"
-                    helperText="Assume it fails — why?"
-                    multiline
-                    minRows={2}
-                  />
-                </Stack>
+                {notesOpen ? '−' : '+'} Notes
+                {notes && !notesOpen && (
+                  <Typography component="span" variant="caption" color="text.primary" sx={{ ml: 0.25, fontStyle: 'italic' }}>
+                    · {notes.slice(0, 40)}{notes.length > 40 ? '…' : ''}
+                  </Typography>
+                )}
+              </Link>
+              <Collapse in={notesOpen} unmountOnExit>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="Notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  multiline
+                  minRows={2}
+                  sx={{ mt: 1 }}
+                />
+              </Collapse>
+            </Box>
+
+            <Box>
+              <Link
+                component="button"
+                type="button"
+                underline="hover"
+                onClick={() => setKillOpen((v) => !v)}
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.85rem', color: 'text.secondary' }}
+              >
+                {killOpen ? '−' : '+'} Kill criteria
+                <Typography component="span" variant="caption" color="text.disabled" sx={{ ml: 0.25, fontWeight: 400 }}>
+                  — if [X], reassess or sell
+                </Typography>
+              </Link>
+              <Collapse in={killOpen} unmountOnExit>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="Kill criteria"
+                  value={kill_criteria}
+                  onChange={(e) => setKillCriteria(e.target.value)}
+                  placeholder="If thesis breaks or stop hits, close the position"
+                  multiline
+                  minRows={2}
+                  sx={{ mt: 1 }}
+                />
+              </Collapse>
+            </Box>
+
+            <Box>
+              <Link
+                component="button"
+                type="button"
+                underline="hover"
+                onClick={() => setPremortemOpen((v) => !v)}
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.85rem', color: 'text.secondary' }}
+              >
+                {premortemOpen ? '−' : '+'} Pre-mortem
+                <Typography component="span" variant="caption" color="text.disabled" sx={{ ml: 0.25, fontWeight: 400 }}>
+                  — assume it fails, why?
+                </Typography>
+              </Link>
+              <Collapse in={premortemOpen} unmountOnExit>
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="Pre-mortem"
+                  value={pre_mortem_text}
+                  onChange={(e) => setPreMortemText(e.target.value)}
+                  placeholder="If this decision fails in 2 years, what went wrong?"
+                  multiline
+                  minRows={2}
+                  sx={{ mt: 1 }}
+                />
               </Collapse>
             </Box>
           </Stack>
