@@ -626,7 +626,7 @@ export default function EntryListPage() {
       >
         {/* Row 1: title + toggle + new */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
-          <Typography variant="h1" sx={{ flex: 1, fontSize: { xs: '1.5rem', sm: '1.875rem' }, mt: 0.5 }}>Journal</Typography>
+          <Typography variant="h1" sx={{ flex: 1, mt: 0.5 }}>Journal</Typography>
           <ToggleButtonGroup
             value={gridView ? 'grid' : 'list'}
             exclusive

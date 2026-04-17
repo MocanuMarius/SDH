@@ -19,6 +19,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { useEntries, useActions, useOutcomes } from '../hooks/queries'
 import { isAutomatedEntry } from '../utils/entryTitle'
 import type { Entry, Action, Outcome } from '../types/database'
+import { PageHeader, EmptyState, MetricTile } from '../components/system'
 
 interface LongTermDecision {
   entry: Entry
@@ -104,65 +105,42 @@ export default function LongTermDecisionsPage() {
 
   return (
     <Box>
-      <Typography variant="h1" sx={{ mb: 0.5, mt: 0.5 }}>Long-term horizons</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 2.5, fontStyle: 'italic' }}>
-        Entries you've explicitly committed to revisit by a target date. Set a horizon when creating an entry to track the decision here.
-      </Typography>
+      <PageHeader
+        title="Long-term horizons"
+        dek="Entries you've explicitly committed to revisit by a target date. Set a horizon when creating an entry to track the decision here."
+      />
 
-      {/* Summary Cards */}
-      <Box display="flex" gap={2} sx={{ mb: 3 }} flexWrap="wrap">
-        <Paper sx={{ p: 2, flex: '1 1 100px', minWidth: 120 }}>
-          <Typography color="textSecondary" gutterBottom>
-            Total Decisions
-          </Typography>
-          <Typography variant="h6">{decisions.length}</Typography>
-        </Paper>
-        {overdue.length > 0 && (
-          <Paper sx={{ p: 2, flex: '1 1 100px', minWidth: 120, bgcolor: '#fee2e2' }}>
-            <Typography color="error" gutterBottom>
-              Overdue
-            </Typography>
-            <Typography variant="h6" sx={{ color: '#dc2626' }}>
-              {overdue.length}
-            </Typography>
-          </Paper>
-        )}
-        {upcoming.length > 0 && (
-          <Paper sx={{ p: 2, flex: '1 1 100px', minWidth: 120, bgcolor: '#fef3c7' }}>
-            <Typography sx={{ color: '#f59e0b' }} gutterBottom>
-              Upcoming
-            </Typography>
-            <Typography variant="h6" sx={{ color: '#f59e0b' }}>
-              {upcoming.length}
-            </Typography>
-          </Paper>
-        )}
-        {resolved.length > 0 && (
-          <Paper sx={{ p: 2, flex: '1 1 100px', minWidth: 120, bgcolor: '#dcfce7' }}>
-            <Typography sx={{ color: '#16a34a' }} gutterBottom>
-              Resolved
-            </Typography>
-            <Typography variant="h6" sx={{ color: '#16a34a' }}>
-              {resolved.length}
-            </Typography>
-          </Paper>
-        )}
-      </Box>
+      {decisions.length > 0 && (
+        <Box display="flex" gap={1.5} sx={{ mb: 3 }} flexWrap="wrap">
+          <MetricTile label="Total" value={decisions.length} />
+          {overdue.length > 0 && (
+            <MetricTile label="Overdue" value={overdue.length} tone="negative" />
+          )}
+          {upcoming.length > 0 && (
+            <MetricTile label="Upcoming" value={upcoming.length} tone="default" />
+          )}
+          {resolved.length > 0 && (
+            <MetricTile label="Resolved" value={resolved.length} tone="positive" />
+          )}
+        </Box>
+      )}
 
       {decisions.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>
-            No long-term horizons yet
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            This page tracks entries with an explicit "I expect this to play out by ___" date.
-            To put something here: open the entry form and tick <strong>+ Add prediction</strong>,
-            then set a Decision Horizon date.
-          </Typography>
-          <Button component={RouterLink} to="/entries/new" variant="contained" size="small">
-            New entry
-          </Button>
-        </Paper>
+        <EmptyState
+          title="No long-term horizons yet"
+          description={
+            <>
+              This page tracks entries with an explicit "I expect this to play out by ___" date.
+              To put something here: open the entry form and tick <strong>+ Add prediction</strong>,
+              then set a Decision Horizon date.
+            </>
+          }
+          action={
+            <Button component={RouterLink} to="/entries/new" variant="contained" size="small">
+              New entry
+            </Button>
+          }
+        />
       ) : (
         <TableContainer component={Paper}>
           <Table>

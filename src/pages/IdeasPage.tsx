@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Box,
-  Typography,
   Alert,
   Chip,
   TextField,
@@ -18,6 +17,7 @@ import RelativeDate from '../components/RelativeDate'
 import DecisionChip from '../components/DecisionChip'
 import { useTickerChart } from '../contexts/TickerChartContext'
 import { useActions, useEntries, usePassed } from '../hooks/queries'
+import { PageHeader, EmptyState } from '../components/system'
 
 interface IdeaRow {
   id: string // DataGrid requires an id field
@@ -164,10 +164,11 @@ export default function IdeasPage() {
 
   return (
     <Box>
-      <Typography variant="h1" sx={{ mb: 0.5, mt: 0.5 }}>Tickers</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 2.5, fontStyle: 'italic' }}>
-        Every ticker you've journaled about. Click one for its full decision history, chart, and entries.
-      </Typography>
+      <PageHeader
+        title="Tickers"
+        dek="Every ticker you've journaled about. Click one for its full decision history, chart, and entries."
+        dense
+      />
 
       <TextField
         size="small"
@@ -197,11 +198,14 @@ export default function IdeasPage() {
           ))}
         </Box>
       ) : ideas.length === 0 ? (
-        <Typography color="text.secondary">
-          {search.trim()
-            ? 'No tickers match your search.'
-            : 'No tickers yet. Add Buy, Sell, or Pass decisions in journal entries to track tickers here.'}
-        </Typography>
+        <EmptyState
+          title={search.trim() ? 'No tickers match your search' : 'No tickers yet'}
+          description={
+            search.trim()
+              ? 'Try a different ticker or company name.'
+              : 'Log a Buy, Sell, or Pass decision inside a journal entry — the ticker will land here automatically.'
+          }
+        />
       ) : (
         <DataGrid
           rows={ideas}

@@ -28,6 +28,7 @@ import RelativeDate from '../components/RelativeDate'
 import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
 import { getTickerDisplayLabel, isOptionSymbol } from '../utils/tickerCompany'
 import { normalizeTicker } from '../utils/tickerNormalization'
+import { PageHeader } from '../components/system'
 import OptionTypeChip from '../components/OptionTypeChip'
 import { ACTION_TYPES } from '../types/database'
 import DecisionChip from '../components/DecisionChip'
@@ -287,10 +288,10 @@ export default function ActionsPage() {
 
   return (
     <Box>
-      <Typography variant="h1" sx={{ mb: 0.5, mt: 0.5 }}>Trades</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 2.5, fontStyle: 'italic' }}>
-        Every structured decision you've logged, across every entry and ticker.
-      </Typography>
+      <PageHeader
+        title="Trades"
+        dek="Every structured decision you've logged, across every entry and ticker."
+      />
 
       <Box display="flex" gap={1} flexWrap="wrap" sx={{ mb: 1.5 }}>
         <FormControl size="small" sx={{ minWidth: 120 }} variant="outlined">

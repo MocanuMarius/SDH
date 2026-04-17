@@ -27,6 +27,7 @@ import { ensurePassedForUser } from '../services/passedService'
 import { buildDecisionBlockMarkdown, type DecisionBlockFields } from '../utils/decisionBlockMarkdown'
 import { stripLegacyMarkdown } from '../utils/stripLegacyMarkdown'
 import type { ActionInsert } from '../types/database'
+import { PageHeader } from '../components/system'
 import { generateEntryId } from '../utils/id'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { useEntry, useInvalidate } from '../hooks/queries'
@@ -507,18 +508,10 @@ export default function EntryFormPage() {
 
   return (
     <Box component="form" ref={formRef} onSubmit={handleSubmit}>
-      <Typography
-        component="h1"
-        sx={{
-          fontSize: { xs: '1.5rem', sm: '1.75rem' },
-          fontWeight: 700,
-          letterSpacing: '-0.01em',
-          mb: 2,
-          mt: 0.5,
-        }}
-      >
-        {isNew ? 'New journal entry' : 'Edit journal entry'}
-      </Typography>
+      <PageHeader
+        title={isNew ? 'New journal entry' : 'Edit journal entry'}
+        dense
+      />
       {error && (
         <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>
           {error}

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams, Link as RouterLink } from 'react-router-dom'
+import { PageHeader } from '../components/system'
 import {
   Box,
   Typography,
@@ -720,12 +721,20 @@ export default function TimelinePage() {
 
   return (
     <Box>
-      <Typography variant="h1" sx={{ mb: 0.5, mt: 0.5 }}>
-        Timeline <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>· {symbol}</Box>
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 2, fontStyle: 'italic' }}>
-        Every decision you've made plotted against a benchmark. For one ticker's full history, open its <Link component={RouterLink} to="/tickers" underline="hover">Ticker page</Link>.
-      </Typography>
+      <PageHeader
+        title={
+          <>
+            Timeline <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>· {symbol}</Box>
+          </>
+        }
+        dek={
+          <>
+            Every decision you've made plotted against a benchmark. For one ticker's full history, open its{' '}
+            <Link component={RouterLink} to="/tickers" underline="hover">Ticker page</Link>.
+          </>
+        }
+        dense
+      />
       <Box sx={{ mb: 1.5, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
         <FormControl size="small" sx={{ minWidth: 140 }} variant="outlined">
           <InputLabel>Benchmark</InputLabel>

@@ -32,6 +32,7 @@ import DecisionChip from '../components/DecisionChip'
 import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import OptionTypeChip from '../components/OptionTypeChip'
+import { StatusChip, statusFromLatestActionType } from '../components/system'
 import {
   computeCagrFromChart,
   formatCagrPercent,
@@ -219,27 +220,9 @@ export default function IdeaDetailPage() {
             {company}
           </Typography>
         )}
-        {(() => {
-          if (actions.length === 0) return null
+        {actions.length > 0 && (() => {
           const latest = [...actions].sort((a, b) => (b.action_date || '').localeCompare(a.action_date || ''))[0]
-          const t = latest.type
-          const status =
-            t === 'buy' || t === 'add_more' || t === 'cover' ? { label: 'Holding', color: 'success' as const } :
-            t === 'sell' || t === 'trim' || t === 'short' ? { label: 'Sold / reduced', color: 'error' as const } :
-            t === 'pass' ? { label: 'Passed', color: 'default' as const } :
-            t === 'hold' || t === 'watchlist' ? { label: 'Watching', color: 'warning' as const } :
-            t === 'research' ? { label: 'Researching', color: 'warning' as const } :
-            t === 'speculate' ? { label: 'Speculating', color: 'warning' as const } :
-            { label: t, color: 'default' as const }
-          return (
-            <Chip
-              size="small"
-              label={status.label}
-              color={status.color === 'default' ? undefined : status.color}
-              variant={status.color === 'default' ? 'outlined' : 'filled'}
-              sx={{ fontWeight: 600 }}
-            />
-          )
+          return <StatusChip kind={statusFromLatestActionType(latest.type)} />
         })()}
       </Box>
       {actions.length > 0 && (() => {

@@ -4,7 +4,8 @@
  * Each tab remounts on switch to ensure fresh data.
  */
 import { useState, lazy, Suspense } from 'react'
-import { Box, Typography, Tabs, Tab, CircularProgress } from '@mui/material'
+import { Box, Tabs, Tab, CircularProgress } from '@mui/material'
+import { PageHeader } from '../components/system'
 
 const AnalyticsDashboardPage = lazy(() => import('./AnalyticsDashboardPage'))
 const InsightsPage = lazy(() => import('./InsightsPage'))
@@ -30,7 +31,11 @@ export default function AnalyticsPage() {
 
   return (
     <Box>
-      <Typography variant="h1" sx={{ mb: 1, mt: 0.5 }}>Analytics</Typography>
+      <PageHeader
+        title="Analytics"
+        dek="Performance, calibration, and overall journaling stats — all live from your structured decisions."
+        dense
+      />
       <Tabs
         value={tab}
         onChange={handleTabChange}
