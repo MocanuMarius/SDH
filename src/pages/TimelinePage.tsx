@@ -737,7 +737,17 @@ export default function TimelinePage() {
         }
         dense
       />
-      <Box sx={{ mb: 1.5, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+      {/* Filter row — every control is 36px tall so the bar reads as one line. */}
+      <Box
+        sx={{
+          mb: 1.5,
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 1,
+          '& .MuiOutlinedInput-root': { minHeight: 36 },
+        }}
+      >
         <FormControl size="small" sx={{ minWidth: 140 }} variant="outlined">
           <InputLabel>Benchmark</InputLabel>
           <Select
@@ -792,10 +802,11 @@ export default function TimelinePage() {
         </FormControl>
         <Chip
           size="small"
-          label={hideAutomated ? 'Auto off' : 'Auto on'}
-          onClick={() => setHideAutomated((v) => !v)}
+          label={hideAutomated ? 'Hide broker imports' : 'Show broker imports'}
+          onClick={() => setHideAutomated(!hideAutomated)}
           variant={hideAutomated ? 'filled' : 'outlined'}
-          sx={{ height: 28, fontSize: '0.7rem' }}
+          color={hideAutomated ? 'primary' : 'default'}
+          sx={{ height: 36, fontSize: '0.75rem', borderRadius: 1, fontWeight: 600, px: 0.5 }}
         />
       </Box>
 

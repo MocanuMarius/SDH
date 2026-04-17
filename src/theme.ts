@@ -158,6 +158,20 @@ const theme = createTheme({
           fontVariantNumeric: 'tabular-nums',
         },
         html: { overflowX: 'clip' },
+        // Tone the native date picker calendar icon to match body ink so it
+        // doesn't glare in white-blue on warm-paper backgrounds.
+        'input[type="date"]::-webkit-calendar-picker-indicator': {
+          opacity: 0.55,
+          cursor: 'pointer',
+          filter: 'grayscale(1)',
+        },
+        'input[type="date"]:hover::-webkit-calendar-picker-indicator': {
+          opacity: 0.85,
+        },
+        'input[type="date"]': {
+          fontFamily: 'inherit',
+          fontVariantNumeric: 'tabular-nums',
+        },
         // Numbers feel newspaper-y in mono — apply to anything tagged `mono`.
         '.mono, code, pre, kbd, samp': { fontFamily: fontMono },
         // Prevent the chart wrapper from showing focus outlines.
