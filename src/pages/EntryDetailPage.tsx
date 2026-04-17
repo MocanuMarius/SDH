@@ -340,76 +340,72 @@ export default function EntryDetailPage() {
         }}
       />
 
-      {/* Market Context Display */}
-      {(entry.market_feeling || entry.market_context || entry.trading_plan || entry.decision_horizon) && (
-        <Paper variant="outlined" sx={{ mt: 3, p: 2 }}>
-          <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }} color="text.secondary">
-            Decision Context
-          </Typography>
-          <Stack spacing={1.5}>
+      {/* Decision Context — each field renders as its own ListCard so the
+          detail view uses the same visual vocabulary as the edit form and
+          the Reminders section. Only shows cards for fields that have a
+          value; the whole block is skipped if every field is empty. */}
+      {(() => {
+        // Parse trading_plan once into entry/exit rule lists.
+        const splitRules = (s: string) => s.split(/\s*\n\s*|\s*;\s*|\s*·\s*/).map((r) => r.trim()).filter(Boolean)
+        const lines = (entry.trading_plan || '').split('\n')
+        const entryRulesDisp = splitRules(lines.find((l) => l.startsWith('Entry:'))?.replace('Entry:', '').trim() ?? '')
+        const exitRulesDisp = splitRules(lines.find((l) => l.startsWith('Exit:'))?.replace('Exit:', '').trim() ?? '')
+        const hasAny = entry.market_feeling != null || entry.market_context || entry.decision_horizon || entryRulesDisp.length > 0 || exitRulesDisp.length > 0
+        if (!hasAny) return null
+        const sentimentLabel = (v: number) =>
+          v <= -7 ? 'Extreme Fear' : v <= -3 ? 'Fear' : v <= -1 ? 'Mild Fear' : v === 0 ? 'Neutral' : v <= 2 ? 'Mild Optimism' : v <= 6 ? 'Optimistic' : 'Extreme Greed'
+        return (
+          <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
             {entry.market_feeling != null && (
-              <Box>
-                <Typography variant="caption" color="text.secondary" fontWeight={500}>Market Sentiment</Typography>
-                <Typography variant="body2" sx={{ mt: 0.25, color: entry.market_feeling > 0 ? 'success.main' : entry.market_feeling < 0 ? 'error.main' : 'text.secondary', fontWeight: 600 }}>
-                  {entry.market_feeling > 0 ? '+' : ''}{entry.market_feeling} — {entry.market_feeling <= -7 ? 'Extreme Fear' : entry.market_feeling <= -3 ? 'Fear' : entry.market_feeling <= -1 ? 'Mild Fear' : entry.market_feeling === 0 ? 'Neutral' : entry.market_feeling <= 2 ? 'Mild Optimism' : entry.market_feeling <= 6 ? 'Optimistic' : 'Extreme Greed'}
+              <ListCard title="Market Sentiment" hasValue>
+                <Typography
+                  variant="body2"
+                  fontWeight={600}
+                  sx={{ color: entry.market_feeling > 0 ? 'success.main' : entry.market_feeling < 0 ? 'error.main' : 'text.secondary' }}
+                >
+                  {entry.market_feeling > 0 ? '+' : ''}{entry.market_feeling}
+                  <Typography component="span" variant="body2" color="text.secondary" fontWeight={500} sx={{ ml: 0.75 }}>
+                    · {sentimentLabel(entry.market_feeling)}
+                  </Typography>
                 </Typography>
-              </Box>
+              </ListCard>
             )}
             {entry.market_context && (
-              <Box>
-                <Typography variant="caption" color="text.secondary" fontWeight={500}>Market Conditions</Typography>
-                <Box display="flex" gap={0.5} flexWrap="wrap" sx={{ mt: 0.25 }}>
+              <ListCard title="Market Conditions" hasValue>
+                <Box display="flex" gap={0.5} flexWrap="wrap">
                   {entry.market_context.split(',').map((cond) => {
                     const trimmed = cond.trim()
                     return trimmed ? <Chip key={trimmed} label={trimmed} size="small" variant="outlined" /> : null
                   })}
                 </Box>
-              </Box>
+              </ListCard>
             )}
             {entry.decision_horizon && (
-              <Box>
-                <Typography variant="caption" color="text.secondary" fontWeight={500}>Expected Resolution</Typography>
-                <Typography variant="body2" sx={{ mt: 0.25 }}>{entry.decision_horizon}</Typography>
-              </Box>
+              <ListCard title="Expected Resolution" hasValue>
+                <Typography variant="body2">{entry.decision_horizon}</Typography>
+              </ListCard>
             )}
-            {entry.trading_plan && (() => {
-              // Parse the structured trading plan into entry/exit rule lists so
-              // they render as proper bullets instead of a raw <pre> block.
-              const lines = entry.trading_plan.split('\n')
-              const entryLine = lines.find((l) => l.startsWith('Entry:'))?.replace('Entry:', '').trim() ?? ''
-              const exitLine = lines.find((l) => l.startsWith('Exit:'))?.replace('Exit:', '').trim() ?? ''
-              const splitRules = (s: string) => s.split(/\s*\n\s*|\s*;\s*|\s*·\s*/).map((r) => r.trim()).filter(Boolean)
-              const entryRulesDisp = splitRules(entryLine)
-              const exitRulesDisp = splitRules(exitLine)
-              if (!entryRulesDisp.length && !exitRulesDisp.length) return null
-              return (
-                <>
-                  {entryRulesDisp.length > 0 && (
-                    <Box>
-                      <Typography variant="caption" color="text.secondary" fontWeight={500}>Entry Rules</Typography>
-                      <Box component="ul" sx={{ m: 0, mt: 0.25, pl: 2.5 }}>
-                        {entryRulesDisp.map((r, i) => (
-                          <Box component="li" key={`er-${i}`} sx={{ fontSize: '0.85rem' }}>{r}</Box>
-                        ))}
-                      </Box>
-                    </Box>
-                  )}
-                  {exitRulesDisp.length > 0 && (
-                    <Box>
-                      <Typography variant="caption" color="text.secondary" fontWeight={500}>Exit Rules</Typography>
-                      <Box component="ul" sx={{ m: 0, mt: 0.25, pl: 2.5 }}>
-                        {exitRulesDisp.map((r, i) => (
-                          <Box component="li" key={`xr-${i}`} sx={{ fontSize: '0.85rem' }}>{r}</Box>
-                        ))}
-                      </Box>
-                    </Box>
-                  )}
-                </>
-              )
-            })()}
-          </Stack>
-        </Paper>
-      )}
+            {entryRulesDisp.length > 0 && (
+              <ListCard title="Entry Rules" count={entryRulesDisp.length} hasValue>
+                {entryRulesDisp.map((r, i) => (
+                  <ItemRow key={`er-${i}`}>
+                    <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>{r}</Typography>
+                  </ItemRow>
+                ))}
+              </ListCard>
+            )}
+            {exitRulesDisp.length > 0 && (
+              <ListCard title="Exit Rules" count={exitRulesDisp.length} hasValue>
+                {exitRulesDisp.map((r, i) => (
+                  <ItemRow key={`xr-${i}`}>
+                    <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>{r}</Typography>
+                  </ItemRow>
+                ))}
+              </ListCard>
+            )}
+          </Box>
+        )
+      })()}
 
       {/* Reminders on this entry — list of active ones with an "+ Add" in the header.
           Mirrors the entry form's ListCard pattern so the vocabulary stays consistent. */}
