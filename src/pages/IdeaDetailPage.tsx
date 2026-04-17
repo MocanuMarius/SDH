@@ -38,7 +38,8 @@ import DecisionChip from '../components/DecisionChip'
 import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import OptionTypeChip from '../components/OptionTypeChip'
-import { StatusChip, statusFromLatestActionType } from '../components/system'
+import { StatusChip, statusFromLatestActionType, EmptyState } from '../components/system'
+import TimelineIcon from '@mui/icons-material/Timeline'
 import {
   computeCagrFromChart,
   formatCagrPercent,
@@ -338,11 +339,12 @@ export default function IdeaDetailPage() {
         Decisions ({actions.length})
       </Typography>
       {actions.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 3 }}>
-          <Typography color="text.secondary">
-            No decisions for this ticker yet.
-          </Typography>
-        </Paper>
+        <EmptyState
+          dense
+          icon={<TimelineIcon />}
+          title={`No decisions on $${(ticker ?? '').toUpperCase()} yet`}
+          description="Use the Log decision button above to record a buy, sell, pass or research note for this ticker."
+        />
       ) : (() => {
         // Newest-first ordering: top row = most recent decision.
         // Each row's "between" pill describes the price change FROM the next-older

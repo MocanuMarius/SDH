@@ -22,7 +22,9 @@ import CloseIcon from '@mui/icons-material/Close'
 import Grid from '@mui/material/Grid2'
 import { useQuery } from '@tanstack/react-query'
 import { generateAnalyticsSnapshot, type AnalyticsFilter } from '../services/analyticsService'
-import { MetricTile } from '../components/system'
+import { MetricTile, EmptyState } from '../components/system'
+import BarChartIcon from '@mui/icons-material/BarChart'
+import { Link as RouterLink } from 'react-router-dom'
 
 export default function AnalyticsDashboardPage() {
   // Filter state is applied on click; fed into the query key so changing it
@@ -69,7 +71,16 @@ export default function AnalyticsDashboardPage() {
   if (!snapshot) {
     return (
       <Box p={2}>
-        <Alert severity="info">No analytics data available yet. Add entries with recorded outcomes to see performance analytics.</Alert>
+        <EmptyState
+          icon={<BarChartIcon />}
+          title="No analytics data yet"
+          description="Win rate, CAGR, and calibration metrics appear once you've recorded outcomes on at least a handful of decisions. Add a journal entry with a buy/sell, then record the outcome."
+          action={
+            <Button component={RouterLink} to="/entries/new" variant="contained" size="small" sx={{ textTransform: 'none' }}>
+              New journal entry
+            </Button>
+          }
+        />
       </Box>
     )
   }

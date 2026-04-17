@@ -15,6 +15,7 @@ import {
   Link,
   Skeleton,
   Chip,
+  Button,
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams, GridColumnVisibilityModel } from '@mui/x-data-grid'
@@ -28,7 +29,8 @@ import RelativeDate from '../components/RelativeDate'
 import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
 import { getTickerDisplayLabel, isOptionSymbol } from '../utils/tickerCompany'
 import { normalizeTicker } from '../utils/tickerNormalization'
-import { PageHeader } from '../components/system'
+import { PageHeader, EmptyState } from '../components/system'
+import InsightsIcon from '@mui/icons-material/Insights'
 import OptionTypeChip from '../components/OptionTypeChip'
 import { ACTION_TYPES } from '../types/database'
 import DecisionChip from '../components/DecisionChip'
@@ -335,11 +337,22 @@ export default function ActionsPage() {
           ))}
         </Box>
       ) : rows.length === 0 ? (
-        <Box sx={{ py: 3, textAlign: 'center' }}>
-          <Typography color="text.secondary" variant="body2">
-            No actions yet. Start by creating a journal entry and adding a Buy/Sell decision.
-          </Typography>
-        </Box>
+        <EmptyState
+          icon={<InsightsIcon />}
+          title="No trades logged yet"
+          description="Every structured decision you log — a buy, sell, pass, trim — lands here. Create a journal entry and attach decisions, or use the global + to log a standalone one."
+          action={
+            <Button
+              component={RouterLink}
+              to="/entries/new"
+              variant="contained"
+              size="small"
+              sx={{ textTransform: 'none' }}
+            >
+              New journal entry
+            </Button>
+          }
+        />
       ) : (
         <DataGrid
           rows={rows}

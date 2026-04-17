@@ -42,7 +42,8 @@ import SearchIcon from '@mui/icons-material/Search'
 import { supabase } from '../services/supabaseClient'
 import TickerAutocomplete from '../components/TickerAutocomplete'
 import SwipeableCard from '../components/SwipeableCard'
-import { PageHeader } from '../components/system'
+import { PageHeader, EmptyState } from '../components/system'
+import BookmarksIcon from '@mui/icons-material/Bookmarks'
 
 interface WatchlistItem {
   id: string
@@ -436,9 +437,13 @@ export default function WatchlistPage() {
             />
 
             {items.length === 0 ? (
-              <Typography color="textSecondary">No alerts yet. Add one to get started!</Typography>
+              <EmptyState
+                icon={<BookmarksIcon />}
+                title="No alerts yet"
+                description="Add a price trigger for any ticker you're watching. When it crosses your threshold you'll get a Telegram ping and the alert lands in the Triggered tab."
+              />
             ) : filteredItems.length === 0 ? (
-              <Typography color="textSecondary">No alerts match your search.</Typography>
+              <EmptyState dense title="No alerts match your search" />
             ) : isMobile ? (
               /* ── Mobile: swipeable cards — swipe left to reveal actions ── */
               <Stack spacing={1}>

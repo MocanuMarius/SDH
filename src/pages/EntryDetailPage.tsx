@@ -35,7 +35,9 @@ import {
   useReminders,
   useInvalidate,
 } from '../hooks/queries'
-import { ListCard, ItemRow } from '../components/system'
+import { ListCard, ItemRow, EmptyState } from '../components/system'
+import TimelineIcon from '@mui/icons-material/Timeline'
+import QueryStatsIcon from '@mui/icons-material/QueryStats'
 import ActionFormDialog from '../components/ActionFormDialog'
 import OutcomeFormDialog from '../components/OutcomeFormDialog'
 import PredictionFormDialog from '../components/PredictionFormDialog'
@@ -517,9 +519,17 @@ export default function EntryDetailPage() {
         {detailTab === 0 && (
           <Box sx={{ pt: 1.5 }}>
             {actions.length === 0 ? (
-              <Typography color="text.secondary" variant="body2">
-                No actions yet. Add a Buy/Sell decision.
-              </Typography>
+              <EmptyState
+                dense
+                icon={<TimelineIcon />}
+                title="No decisions on this entry yet"
+                description="Log what you did — a buy, sell, pass, or research note — and it lines up with this thesis for later review."
+                action={
+                  <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setActionDialogOpen(true)} sx={{ textTransform: 'none' }}>
+                    Add decision
+                  </Button>
+                }
+              />
             ) : (
               <Stack spacing={1}>
                 {actions.map((a) => (
@@ -556,9 +566,17 @@ export default function EntryDetailPage() {
         {detailTab === 1 && (
           <Box sx={{ pt: 1.5 }}>
             {predictions.length === 0 ? (
-              <Typography color="text.secondary" variant="body2">
-                Add a time-bound prediction (probability, end date).
-              </Typography>
+              <EmptyState
+                dense
+                icon={<QueryStatsIcon />}
+                title="No predictions on this entry yet"
+                description="A falsifiable forecast — percent move by a specific date — gives your thesis something to fail cleanly against."
+                action={
+                  <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setEditingPrediction(null); setPredictionDialogOpen(true); }} sx={{ textTransform: 'none' }}>
+                    Add prediction
+                  </Button>
+                }
+              />
             ) : (
               <Stack spacing={1}>
                 {predictions.map((p) => (
