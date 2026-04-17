@@ -22,7 +22,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import Grid from '@mui/material/Grid2'
 import { useQuery } from '@tanstack/react-query'
 import { generateAnalyticsSnapshot, type AnalyticsFilter } from '../services/analyticsService'
-import MetricCard from '../components/MetricCard'
+import { MetricTile } from '../components/system'
 
 export default function AnalyticsDashboardPage() {
   // Filter state is applied on click; fed into the query key so changing it
@@ -141,10 +141,14 @@ export default function AnalyticsDashboardPage() {
       {/* Key Metrics Grid — count-based only, no dollar amounts */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 6, md: 4 }}>
-          <MetricCard label="Win Rate" value={`${metrics.winRate.toFixed(1)}%`} trend={metrics.winRate > 60 ? 'positive' : metrics.winRate < 40 ? 'negative' : null} />
+          <MetricTile
+            label="Win Rate"
+            value={`${metrics.winRate.toFixed(1)}%`}
+            tone={metrics.winRate > 60 ? 'positive' : metrics.winRate < 40 ? 'negative' : 'default'}
+          />
         </Grid>
         <Grid size={{ xs: 6, sm: 6, md: 4 }}>
-          <MetricCard label="Total Decisions" value={metrics.totalTrades} />
+          <MetricTile label="Total Decisions" value={metrics.totalTrades} />
         </Grid>
       </Grid>
 

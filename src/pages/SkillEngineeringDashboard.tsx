@@ -1,4 +1,4 @@
-import { Box, Tab, Tabs, Paper, Typography, FormControl, InputLabel, Select, MenuItem, useMediaQuery, Tooltip } from '@mui/material'
+import { Box, Tab, Tabs, Paper, FormControl, InputLabel, Select, MenuItem, useMediaQuery, Tooltip } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { useState } from 'react'
 import PerSubSkillBrier from '../components/skill-engineering/PerSubSkillBrier'
@@ -7,6 +7,7 @@ import ErrorTaxonomy from '../components/skill-engineering/ErrorTaxonomy'
 import BaseRateDatabase from '../components/skill-engineering/BaseRateDatabase'
 import CaseLibrary from '../components/skill-engineering/CaseLibrary'
 import ErrorBoundary from '../components/ErrorBoundary'
+import { PageHeader } from '../components/system'
 
 // Tab order — "Per Sub-Skill Brier" is now tab 0 (the old "Calibration & Brier Score"
 // component was a never-finished scaffold that used a random placeholder for outcomes
@@ -67,9 +68,11 @@ export default function SkillEngineeringDashboard() {
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
-        Practice
-      </Typography>
+      <PageHeader
+        title="Practice"
+        dek="Deliberate-practice tools — pick a sub-skill, drill it, get feedback. The repetitions you don't do in markets, you do here."
+        dense
+      />
 
       {/* Session training focus — moved here from Journal page */}
       <SessionFocusCard />

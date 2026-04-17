@@ -73,22 +73,25 @@ land. Reorder if priority shifts.
 
 ---
 
-## Still open / next round
+## Round 5 — 2026-04-17 (later)
 
-- [ ] **Activity drawer** still uses pre-newspaper styling — has stale
-  references to old chrome (deletes / archive / etc.). Audit + reskin.
-- [ ] **Watchlist page** — never reviewed; likely needs the same PageHeader +
-  EmptyState + MetricTile treatment.
-- [ ] **Settings page** — same.
-- [ ] **DecisionCard** (entry detail action cards) — visual hierarchy works
-  but could use the new theme tokens more consistently. Worth a polish pass
-  when we touch entry detail again.
-- [ ] **`MetricCard` deprecation** — once we're confident `MetricTile` covers
-  all use cases, delete `MetricCard.tsx` and switch every Analytics caller
-  to import `MetricTile` directly.
-- [ ] **Date inputs** — native `<input type="date">` is still the chunky OS
-  widget in several forms. Either accept it or pull in MUI's
-  `DatePicker` from `@mui/x-date-pickers`.
+- [x] **Activity drawer** — header now uses the serif `h4` "Activity",
+  section labels via `SectionTitle`, all-clear empty state via `EmptyState`.
+- [x] **Watchlist page** — `PageHeader` with dek explaining what it is.
+- [x] **Settings page** — same.
+- [x] **DecisionCard** — date moved into the header row next to the type
+  chip (less visual noise), redundant "Decision" label removed.
+- [x] **Import + Practice (SkillEngineering) pages** — `PageHeader` with deks.
+- [x] **`MetricCard` deleted** — every caller now imports `MetricTile`
+  directly. One source of truth for the metric primitive.
+
+## Still open
+
+- [ ] **Date inputs** — native `<input type="date">` still in several forms.
+  Either accept it (it's not bad on modern browsers) or pull in
+  `@mui/x-date-pickers` — adds ~200 KB gz + a date-lib dep. Deferred until
+  asked.
+- [ ] Keep iterating on flows as they come up. Add new items here.
 
 ---
 

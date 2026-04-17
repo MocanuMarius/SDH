@@ -3,7 +3,8 @@
  * under one tabbed layout.
  */
 import { useState, lazy, Suspense } from 'react'
-import { Box, Typography, Tabs, Tab, CircularProgress } from '@mui/material'
+import { Box, Tabs, Tab, CircularProgress } from '@mui/material'
+import { PageHeader } from '../components/system'
 
 const BrokerImportPage = lazy(() => import('./BrokerImportPage'))
 const ImportPage = lazy(() => import('./ImportPage'))
@@ -22,9 +23,11 @@ export default function ImportHub() {
 
   return (
     <Box>
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>
-        Import
-      </Typography>
+      <PageHeader
+        title="Import"
+        dek="Bring in decisions and transactions from outside sources — IBKR, CSV exports, etc."
+        dense
+      />
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v)}
