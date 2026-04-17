@@ -934,6 +934,52 @@ export default function EntryFormPage() {
         >
           {saving ? <CircularProgress size={22} /> : isNew ? 'Create entry' : 'Save changes'}
         </Button>
+        {/* Visible keyboard-shortcut hint — saves a hover. */}
+        <Box
+          sx={{
+            display: { xs: 'none', sm: 'inline-flex' },
+            alignItems: 'center',
+            gap: 0.5,
+            color: 'text.secondary',
+            fontSize: '0.72rem',
+          }}
+        >
+          <Box
+            component="kbd"
+            sx={{
+              px: 0.5, py: 0.125,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 0.5,
+              bgcolor: 'background.paper',
+              fontFamily: 'monospace',
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              color: 'text.primary',
+              lineHeight: 1.4,
+            }}
+          >
+            ⌘S
+          </Box>
+          <Box component="span">or</Box>
+          <Box
+            component="kbd"
+            sx={{
+              px: 0.5, py: 0.125,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 0.5,
+              bgcolor: 'background.paper',
+              fontFamily: 'monospace',
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              color: 'text.primary',
+              lineHeight: 1.4,
+            }}
+          >
+            ⌘↵
+          </Box>
+        </Box>
         <Button
           component={RouterLink}
           variant="text"
