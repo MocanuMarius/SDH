@@ -18,7 +18,7 @@ import {
   AccordionSummary,
   AccordionDetails,
 } from '@mui/material'
-import { FormGroup, FormControlLabel, Checkbox } from '@mui/material'
+import { FormGroup, FormControlLabel, Checkbox, Alert } from '@mui/material'
 import CheckIcon from '@mui/icons-material/Check'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import BottomSheet from './BottomSheet'
@@ -110,6 +110,7 @@ export default function OutcomeFormDialog({
   const [error_type, setErrorType] = useState<ErrorType[]>(((initial as Outcome & { error_type?: ErrorType[] | null })?.error_type) ?? [])
   const [what_i_remember_now, setWhatIRememberNow] = useState((initial as Outcome & { what_i_remember_now?: string | null })?.what_i_remember_now ?? '')
   const [saving, setSaving] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => {
     if (open && initial) {
@@ -149,6 +150,7 @@ export default function OutcomeFormDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
+    setSubmitError(null)
     try {
       const pnl = realized_pnl.trim() === '' ? null : Number(realized_pnl)
       await onSubmit({
@@ -167,6 +169,10 @@ export default function OutcomeFormDialog({
         what_i_remember_now: what_i_remember_now.trim(),
       })
       onClose()
+    } catch (err) {
+      // Surface the error inline instead of leaving the dialog stuck with no feedback.
+      const msg = err instanceof Error ? err.message : 'Could not save the outcome'
+      setSubmitError(msg)
     } finally {
       setSaving(false)
     }
@@ -409,6 +415,15 @@ export default function OutcomeFormDialog({
               />
             </AccordionDetails>
           </Accordion>
+          {submitError && (
+            <Alert
+              severity="error"
+              onClose={() => setSubmitError(null)}
+              sx={{ mt: 1 }}
+            >
+              {submitError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 2, pb: 1.5, pt: 0 }}>
           <Button onClick={onClose} variant="outlined">Cancel</Button>
