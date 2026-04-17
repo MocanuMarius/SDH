@@ -26,12 +26,14 @@ import { ensurePassedForUser } from '../services/passedService'
 import { buildDecisionBlockMarkdown, type DecisionBlockFields } from '../utils/decisionBlockMarkdown'
 import { stripLegacyMarkdown } from '../utils/stripLegacyMarkdown'
 import type { ActionInsert } from '../types/database'
-import { PageHeader, SectionTitle } from '../components/system'
+import { PageHeader } from '../components/system'
 import { generateEntryId } from '../utils/id'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { useEntry, useInvalidate } from '../hooks/queries'
 import InsertDecisionBlockDialog from '../components/InsertDecisionBlockDialog'
 import TickerDollarField from '../components/TickerDollarField'
+import DecisionChip from '../components/DecisionChip'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { getTagPresets } from '../utils/tagPresets'
 import TagChip from '../components/TagChip'
 
@@ -176,7 +178,7 @@ export default function EntryFormPage() {
   const [predictionPercent, setPredictionPercent] = useState('')
   const [predictionDate, setPredictionDate] = useState('')
   const [decision_horizon, setDecisionHorizon] = useState('')
-  const [bodyTab, setBodyTab] = useState<'write' | 'decision'>('write')
+  const [decisionDialogOpen, setDecisionDialogOpen] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
   const initialValuesRef = useRef({ title_markdown: '', body_markdown: '', tagsStr: '' })
 
@@ -344,7 +346,7 @@ export default function EntryFormPage() {
   // The unused `markdown` arg keeps the dialog's onInsert signature stable.
   const handleInsertDecisionBlock = (_markdown: string, block: DecisionBlockFields) => {
     setPendingDecisions((prev) => [...prev, block])
-    setBodyTab('write')
+    setDecisionDialogOpen(false)
   }
 
   /** Convert a decision block from the inline form into a structured `actions` row. */
@@ -511,8 +513,7 @@ export default function EntryFormPage() {
       </Box>
 
       {/* Tags row — entry-level metadata, lives above the body editor not inside it. */}
-      {bodyTab !== 'decision' && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
           <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: '0.06em', minWidth: 44 }}>
             Tags
           </Typography>
@@ -543,107 +544,149 @@ export default function EntryFormPage() {
             )}
             sx={{ flex: 1, minWidth: 200 }}
           />
-        </Box>
-      )}
+      </Box>
 
-      {/* Body editor card. Decision-mode swaps the body for the structured form.
-          Header makes the primary "+ Add decision" action visible — it's NOT a quiet text link. */}
+      {/* Body editor — pure thesis textarea. The decision entry lives in its own
+          Decisions card below, alongside the other structured fields. */}
       <Paper variant="outlined" sx={{ mb: 1.5, bgcolor: 'background.paper' }}>
-        {bodyTab === 'decision' ? (
-          <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider', px: 1.5, py: 1 }}>
-            <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>
-              Add decision
-            </Typography>
-            <IconButton size="small" onClick={() => setBodyTab('write')} aria-label="Close decision form">
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          </Box>
-        ) : (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', borderBottom: 1, borderColor: 'divider', px: 1, py: 0.5 }}>
-            <Button
-              size="small"
-              variant="outlined"
-              color="primary"
-              startIcon={<AddCircleOutlineIcon sx={{ fontSize: 18 }} />}
-              onClick={() => setBodyTab('decision')}
-              sx={{ textTransform: 'none', fontWeight: 600 }}
-            >
-              Add decision
-            </Button>
-          </Box>
-        )}
-        {bodyTab !== 'decision' && (
-          <TickerDollarField
-            fullWidth
-            multiline
-            minRows={6}
-            value={body_markdown}
-            onChange={setBodyMarkdown}
-            placeholder="Write your thesis…"
-            sx={{
-              '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-              '& .MuiInputBase-root': { borderRadius: 0 },
-            }}
-          />
-        )}
-        {bodyTab === 'decision' && (
-          <InsertDecisionBlockDialog
-            open={true}
-            onClose={() => setBodyTab('write')}
-            onInsert={handleInsertDecisionBlock}
-            inline
-            defaultTicker={titleTickerHint}
-          />
-        )}
+        <TickerDollarField
+          fullWidth
+          multiline
+          minRows={6}
+          value={body_markdown}
+          onChange={setBodyMarkdown}
+          placeholder="Write your thesis…"
+          sx={{
+            '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+            '& .MuiInputBase-root': { borderRadius: 0 },
+          }}
+        />
       </Paper>
-
-      {/* Pending decisions — added via the Decision form, persisted as structured
-          `actions` rows when the entry is saved. Animated so the chip pop-in is the
-          confirmation that "your decision was captured". */}
-      <AnimatePresence initial={false}>
-        {pendingDecisions.length > 0 && (
-          <motion.div
-            key="pending-decisions"
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-          >
-            <Box sx={{ mb: 2 }}>
-              <SectionTitle count={pendingDecisions.length} mb={0.75}>
-                Decisions on this entry
-              </SectionTitle>
-              <Box display="flex" gap={0.5} flexWrap="wrap">
-                <AnimatePresence initial={false}>
-                  {pendingDecisions.map((d, i) => (
-                    <motion.div
-                      key={`${d.ticker}-${d.type}-${i}`}
-                      initial={{ opacity: 0, scale: 0.85 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.85 }}
-                      transition={{ type: 'spring', stiffness: 360, damping: 26 }}
-                      style={{ display: 'inline-flex' }}
-                    >
-                      <Chip
-                        size="small"
-                        label={`${d.type.toUpperCase()} · $${d.ticker}${d.reason ? ` — ${d.reason.slice(0, 30)}${d.reason.length > 30 ? '…' : ''}` : ''}`}
-                        onDelete={() => setPendingDecisions((prev) => prev.filter((_, idx) => idx !== i))}
-                        sx={{ fontWeight: 500 }}
-                      />
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </Box>
-              <Typography variant="caption" color="text.secondary">
-                Saves as structured rows when you {isNew ? 'create' : 'save'} the entry.
-              </Typography>
-            </Box>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Optional context — each row is a mini card that expands on + click. */}
       <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {/* Decisions — first-class card, always visible, inline list + "+ Add" button.
+            Replaces the old top-right corner Add Decision button. */}
+        <Paper
+          variant="outlined"
+          sx={{
+            overflow: 'hidden',
+            bgcolor: pendingDecisions.length > 0 ? 'background.paper' : 'grey.50',
+            borderColor: pendingDecisions.length > 0 ? 'primary.light' : 'divider',
+            transition: 'background-color 120ms, border-color 120ms',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, py: 1 }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Box display="flex" alignItems="baseline" gap={0.75}>
+                <Typography variant="body2" fontWeight={700} color="text.primary">
+                  Decisions
+                </Typography>
+                {pendingDecisions.length > 0 && (
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    ({pendingDecisions.length})
+                  </Typography>
+                )}
+              </Box>
+              {pendingDecisions.length === 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.72rem', mt: 0.25 }}>
+                  Buys, sells, passes, research notes — what you did or decided.
+                </Typography>
+              )}
+            </Box>
+            <IconButton
+              size="small"
+              onClick={() => setDecisionDialogOpen(true)}
+              aria-label="Add decision"
+              sx={{
+                color: 'primary.contrastText',
+                bgcolor: 'primary.main',
+                '&:hover': { bgcolor: 'primary.dark' },
+                width: 28,
+                height: 28,
+              }}
+            >
+              <AddIcon fontSize="small" />
+            </IconButton>
+          </Box>
+          {pendingDecisions.length > 0 && (
+            <Box sx={{ px: 1.5, pb: 1.5, pt: 0.25, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <AnimatePresence initial={false}>
+                {pendingDecisions.map((d, i) => (
+                  <motion.div
+                    key={`${d.ticker}-${d.type}-${d.action_date}-${i}`}
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.16, ease: 'easeOut' }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        px: 1,
+                        py: 0.75,
+                        bgcolor: 'grey.50',
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <DecisionChip type={d.type} size="small" />
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box display="flex" alignItems="baseline" gap={0.75} flexWrap="wrap">
+                          <Typography variant="body2" fontWeight={700} color="primary.main">
+                            ${d.ticker}
+                          </Typography>
+                          {d.price && (
+                            <Typography variant="caption" color="text.secondary">
+                              {d.price}{d.currency ? ` ${d.currency}` : ''}
+                            </Typography>
+                          )}
+                          {d.action_date && (
+                            <Typography variant="caption" color="text.secondary">
+                              · {d.action_date}
+                            </Typography>
+                          )}
+                        </Box>
+                        {d.reason && (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
+                            {d.reason}
+                          </Typography>
+                        )}
+                      </Box>
+                      <IconButton
+                        size="small"
+                        onClick={() => setPendingDecisions((prev) => prev.filter((_, idx) => idx !== i))}
+                        aria-label="Remove decision"
+                      >
+                        <DeleteOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<AddCircleOutlineIcon sx={{ fontSize: 18 }} />}
+                onClick={() => setDecisionDialogOpen(true)}
+                sx={{ alignSelf: 'flex-start', textTransform: 'none', fontWeight: 600, mt: 0.25 }}
+              >
+                Add another decision
+              </Button>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>
+                Saves as structured rows when you {isNew ? 'create' : 'save'} the entry.
+              </Typography>
+            </Box>
+          )}
+        </Paper>
+
         <RowCard
           title="Market Sentiment"
           description="How bullish or bearish the overall market feels to you"
@@ -798,6 +841,13 @@ export default function EntryFormPage() {
         </Button>
       </Box>
 
+      {/* Decision dialog — opens from the Decisions card's + button. */}
+      <InsertDecisionBlockDialog
+        open={decisionDialogOpen}
+        onClose={() => setDecisionDialogOpen(false)}
+        onInsert={handleInsertDecisionBlock}
+        defaultTicker={titleTickerHint}
+      />
     </Box>
   )
 }

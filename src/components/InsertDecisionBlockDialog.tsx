@@ -118,6 +118,11 @@ export default function InsertDecisionBlockDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    // Stop React synthetic event bubbling: the dialog is often rendered inside
+    // another <form> (EntryFormPage), and without this the outer form's
+    // onSubmit fires alongside the dialog's — creating the entry before the
+    // decision is added to pendingDecisions.
+    e.stopPropagation()
     const block: DecisionBlockFields = {
       type: type as DecisionType,
       ticker: ticker.trim(),
@@ -323,7 +328,7 @@ export default function InsertDecisionBlockDialog({
           onClick={inline ? (e) => handleSubmit(e as unknown as React.FormEvent) : undefined}
           disabled={!ticker.trim()}
         >
-          Insert into body
+          Add decision
         </Button>
         {inline && (
           <Button onClick={onClose} variant="outlined" size="small">
@@ -347,7 +352,7 @@ export default function InsertDecisionBlockDialog({
   return (
     <BottomSheet open={open} onClose={onClose} maxWidth="sm">
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1.5 }}>
-        Insert decision block
+        Add decision
         <IconButton size="small" onClick={onClose} edge="end"><CloseIcon fontSize="small" /></IconButton>
       </DialogTitle>
       <form onSubmit={handleSubmit}>
