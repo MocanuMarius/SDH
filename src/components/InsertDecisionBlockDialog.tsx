@@ -32,7 +32,8 @@ import {
 import TickerAutocomplete from './TickerAutocomplete'
 import DecisionChip from './DecisionChip'
 import ReasonField from './ReasonField'
-import { ACTION_TYPES } from '../types/database'
+import { ACTION_TYPES, ACTION_SIZES, isDirectionalAction } from '../types/database'
+import type { ActionSize } from '../types/database'
 import { getCustomDecisionTypes } from '../utils/customDecisionTypes'
 
 const getToday = () => new Date().toISOString().slice(0, 10)
@@ -94,6 +95,8 @@ export default function InsertDecisionBlockDialog({
   const [shares, setShares] = useState<number | ''>('')
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState('')
+  const [size, setSize] = useState<ActionSize>('medium')
+  const [sizeOpen, setSizeOpen] = useState(false)
   const customTypes = getCustomDecisionTypes()
 
   // Keep action_date glued to "today" while the "decision taken today" checkbox is on.
@@ -133,6 +136,7 @@ export default function InsertDecisionBlockDialog({
       shares: shares === '' ? null : shares,
       reason: reason.trim(),
       notes: notes.trim(),
+      size: isDirectionalAction(type) ? size : null,
     }
     const markdown = buildDecisionBlockMarkdown(block)
     onInsert(markdown, block)
@@ -147,6 +151,8 @@ export default function InsertDecisionBlockDialog({
     setActionDate(getToday())
     setDecisionToday(true)
     setShowOptionalDetails(false)
+    setSize('medium')
+    setSizeOpen(false)
     setType('buy')
   }
 
@@ -220,6 +226,55 @@ export default function InsertDecisionBlockDialog({
         minRows={2}
         fullWidth
       />
+
+      {/* Size — collapsed, shows current choice in the header. Only
+          meaningful for directional types. Matches ActionFormDialog. */}
+      {isDirectionalAction(type) && (
+        <Box>
+          <Link
+            component="button"
+            type="button"
+            underline="hover"
+            onClick={() => setSizeOpen((v) => !v)}
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.85rem', color: 'text.secondary' }}
+          >
+            {sizeOpen ? '− Size' : '+ Size'}
+            <Typography component="span" variant="caption" color="text.primary" fontWeight={600} sx={{ textTransform: 'capitalize' }}>
+              · {size === 'xl' ? 'Very big' : size}
+            </Typography>
+          </Link>
+          <Collapse in={sizeOpen} unmountOnExit>
+            <Box sx={{ mt: 0.75 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.72rem' }}>
+                Scales the glow on the timeline.
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                {ACTION_SIZES.map((s) => {
+                  const selected = size === s
+                  return (
+                    <Button
+                      key={s}
+                      size="small"
+                      variant={selected ? 'contained' : 'outlined'}
+                      onClick={() => setSize(s)}
+                      sx={{
+                        textTransform: 'none',
+                        minWidth: 0,
+                        px: 1.25,
+                        py: 0.25,
+                        fontSize: '0.75rem',
+                        fontWeight: selected ? 700 : 500,
+                      }}
+                    >
+                      {s === 'tiny' ? 'Tiny' : s === 'small' ? 'Small' : s === 'medium' ? 'Medium' : s === 'large' ? 'Large' : 'Very big'}
+                    </Button>
+                  )
+                })}
+              </Box>
+            </Box>
+          </Collapse>
+        </Box>
+      )}
 
       {/* Date — collapsed behind a checkbox; default is "today" */}
       <Box>

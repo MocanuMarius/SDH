@@ -3,7 +3,7 @@
  * Format: ### Buy Decision 2/21/26 **$TICKER** - Company Name\nPrice: $123.00\nReason: ...
  */
 
-import type { ActionType } from '../types/database'
+import type { ActionType, ActionSize } from '../types/database'
 
 export type DecisionType = ActionType
 
@@ -17,6 +17,9 @@ export interface DecisionBlockFields {
   shares: number | null
   reason: string
   notes: string
+  /** Optional relative size (tiny / small / medium / large / xl). Only
+   * meaningful for directional types — non-directional actions ignore it. */
+  size?: ActionSize | null
 }
 
 /** Format date as M/D/YY for the decision line */

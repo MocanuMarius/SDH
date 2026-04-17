@@ -400,6 +400,7 @@ export default function EntryFormPage() {
       shares: block.shares,
       reason: block.reason.trim(),
       notes: block.notes.trim(),
+      size: block.size ?? null,
       raw_snippet: buildDecisionBlockMarkdown(block),
     }
   }
@@ -665,6 +666,11 @@ export default function EntryFormPage() {
                       {d.action_date && (
                         <Typography variant="caption" color="text.secondary">
                           · {d.action_date}
+                        </Typography>
+                      )}
+                      {d.size && d.size !== 'medium' && (
+                        <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+                          · {d.size === 'xl' ? 'Very big' : d.size} size
                         </Typography>
                       )}
                     </Box>
