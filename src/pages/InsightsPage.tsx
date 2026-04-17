@@ -1130,36 +1130,38 @@ export default function InsightsPage() {
               </BarChart>
             </ResponsiveContainer>
           </Box>
-          <Table size="small" sx={{ '& td, & th': { py: 0.5, borderColor: 'divider' } }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Reason</TableCell>
-                <TableCell align="right">Count</TableCell>
-                <TableCell align="right">%</TableCell>
-                <TableCell align="right">Avg return</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {reasonData.map((r) => (
-                <TableRow key={r.reason}>
-                  <TableCell sx={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.reason}>
-                    {r.reason}
-                  </TableCell>
-                  <TableCell align="right">{r.count}</TableCell>
-                  <TableCell align="right">{r.pct}%</TableCell>
-                  <TableCell align="right">
-                    {r.avgReturnPct != null ? (
-                      <Typography component="span" variant="body2" color={r.avgReturnPct >= 0 ? 'success.main' : 'error.main'}>
-                        {r.avgReturnPct >= 0 ? '+' : ''}{r.avgReturnPct.toFixed(1)}%
-                      </Typography>
-                    ) : (
-                      '—'
-                    )}
-                  </TableCell>
+          <Box sx={{ overflowX: 'auto', width: '100%' }}>
+            <Table size="small" sx={{ '& td, & th': { py: 0.5, borderColor: 'divider' } }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Reason</TableCell>
+                  <TableCell align="right">Count</TableCell>
+                  <TableCell align="right">%</TableCell>
+                  <TableCell align="right">Avg return</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {reasonData.map((r) => (
+                  <TableRow key={r.reason}>
+                    <TableCell sx={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.reason}>
+                      {r.reason}
+                    </TableCell>
+                    <TableCell align="right">{r.count}</TableCell>
+                    <TableCell align="right">{r.pct}%</TableCell>
+                    <TableCell align="right">
+                      {r.avgReturnPct != null ? (
+                        <Typography component="span" variant="body2" color={r.avgReturnPct >= 0 ? 'success.main' : 'error.main'}>
+                          {r.avgReturnPct >= 0 ? '+' : ''}{r.avgReturnPct.toFixed(1)}%
+                        </Typography>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
         </Paper>
       )}
 
@@ -1196,28 +1198,30 @@ export default function InsightsPage() {
               </BarChart>
             </ResponsiveContainer>
           </Box>
-          <Table size="small" sx={{ '& td, & th': { py: 0.5, borderColor: 'divider' } }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Pass reason</TableCell>
-                <TableCell align="right">Passes</TableCell>
-                <TableCell align="right">Avg CAGR</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {reasonOpportunityData.map((r) => (
-                <TableRow key={r.reason}>
-                  <TableCell sx={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.reason}>
-                    {r.reason}
-                  </TableCell>
-                  <TableCell align="right">{r.count}</TableCell>
-                  <TableCell align="right" sx={{ color: r.avgCagr >= 0 ? 'success.main' : 'text.secondary' }}>
-                    {formatCagrPercent(r.avgCagr)}
-                  </TableCell>
+          <Box sx={{ overflowX: 'auto', width: '100%' }}>
+            <Table size="small" sx={{ '& td, & th': { py: 0.5, borderColor: 'divider' } }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Pass reason</TableCell>
+                  <TableCell align="right">Passes</TableCell>
+                  <TableCell align="right">Avg CAGR</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {reasonOpportunityData.map((r) => (
+                  <TableRow key={r.reason}>
+                    <TableCell sx={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.reason}>
+                      {r.reason}
+                    </TableCell>
+                    <TableCell align="right">{r.count}</TableCell>
+                    <TableCell align="right" sx={{ color: r.avgCagr >= 0 ? 'success.main' : 'text.secondary' }}>
+                      {formatCagrPercent(r.avgCagr)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
         </Paper>
       )}
 
@@ -1264,36 +1268,38 @@ export default function InsightsPage() {
               {reasonOppOverall >= 0 ? '+' : ''}{reasonOppOverall.toFixed(1)}% overall (n={reasonOppFiltered.length})
             </Typography>
           )}
-          <Table size="small" sx={{ '& td, & th': { py: 0.5, borderColor: 'divider' } }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Type</TableCell>
-                <TableCell>Symbol</TableCell>
-                <TableCell>Date</TableCell>
-                <TableCell align="right">Return</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {reasonOppPaginated.map((row) => {
-                const action = row.closingAction
-                return (
-                <TableRow key={row.closingAction.id}>
-                  <TableCell><DecisionChip type={action.type} size="small" /></TableCell>
-                  <TableCell>
-                    <Link component={RouterLink} to={`/tickers/${encodeURIComponent(normalizeTickerToCompany(action.ticker) || action.ticker?.toUpperCase() || '')}`} underline="hover" fontWeight={600}>
-                      {action.ticker ? getTickerDisplayLabel(action.ticker) : '—'}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{action.action_date}</TableCell>
-                  <TableCell align="right">
-                    <Typography component="span" variant="body2" color={row.returnPct >= 0 ? 'success.main' : 'error.main'}>
-                      {row.returnPct >= 0 ? '+' : ''}{row.returnPct.toFixed(1)}%
-                    </Typography>
-                  </TableCell>
+          <Box sx={{ overflowX: 'auto', width: '100%' }}>
+            <Table size="small" sx={{ '& td, & th': { py: 0.5, borderColor: 'divider' } }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Type</TableCell>
+                  <TableCell>Symbol</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell align="right">Return</TableCell>
                 </TableRow>
-              )})}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {reasonOppPaginated.map((row) => {
+                  const action = row.closingAction
+                  return (
+                  <TableRow key={row.closingAction.id}>
+                    <TableCell><DecisionChip type={action.type} size="small" /></TableCell>
+                    <TableCell>
+                      <Link component={RouterLink} to={`/tickers/${encodeURIComponent(normalizeTickerToCompany(action.ticker) || action.ticker?.toUpperCase() || '')}`} underline="hover" fontWeight={600}>
+                        {action.ticker ? getTickerDisplayLabel(action.ticker) : '—'}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{action.action_date}</TableCell>
+                    <TableCell align="right">
+                      <Typography component="span" variant="body2" color={row.returnPct >= 0 ? 'success.main' : 'error.main'}>
+                        {row.returnPct >= 0 ? '+' : ''}{row.returnPct.toFixed(1)}%
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                )})}
+              </TableBody>
+            </Table>
+          </Box>
           {reasonOppTotalPages > 1 && (
             <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ mt: 1 }}>
               <Typography variant="caption" color="text.secondary">

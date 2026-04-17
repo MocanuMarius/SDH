@@ -172,6 +172,31 @@ const theme = createTheme({
           fontFamily: 'inherit',
           fontVariantNumeric: 'tabular-nums',
         },
+        // iOS-style scrollbars: thin, rounded, low-contrast, fade-in on hover.
+        // Applies to every scrollable surface — works in Chrome/Edge/Safari
+        // (WebKit) and Firefox (scrollbar-* properties).
+        '*': {
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(15, 23, 42, 0.18) transparent',
+        },
+        '*::-webkit-scrollbar': {
+          width: 6,
+          height: 6,
+        },
+        '*::-webkit-scrollbar-track': {
+          background: 'transparent',
+        },
+        '*::-webkit-scrollbar-thumb': {
+          backgroundColor: 'rgba(15, 23, 42, 0.18)',
+          borderRadius: 10,
+          transition: 'background-color 150ms ease',
+        },
+        '*::-webkit-scrollbar-thumb:hover': {
+          backgroundColor: 'rgba(15, 23, 42, 0.34)',
+        },
+        '*::-webkit-scrollbar-corner': {
+          background: 'transparent',
+        },
         // Numbers feel newspaper-y in mono — apply to anything tagged `mono`.
         '.mono, code, pre, kbd, samp': { fontFamily: fontMono },
         // Prevent the chart wrapper from showing focus outlines.

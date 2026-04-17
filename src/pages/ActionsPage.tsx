@@ -149,7 +149,7 @@ export default function ActionsPage() {
       {
         field: 'type',
         headerName: 'Type',
-        width: 110,
+        width: isMobile ? 88 : 110,
         renderCell: (p: GridRenderCellParams<Row>) => (
           <DecisionChip type={p.value as string} size="small" />
         ),
@@ -157,7 +157,7 @@ export default function ActionsPage() {
       {
         field: 'ticker',
         headerName: 'Symbol',
-        width: 130,
+        width: isMobile ? 92 : 130,
         renderCell: (p: GridRenderCellParams<Row>) =>
           p.value ? (
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
@@ -178,7 +178,7 @@ export default function ActionsPage() {
       {
         field: 'action_date',
         headerName: 'Date',
-        width: 120,
+        width: isMobile ? 84 : 120,
         renderCell: (p: GridRenderCellParams<Row>) => <RelativeDate date={p.value as string} />,
       },
       {
@@ -263,7 +263,7 @@ export default function ActionsPage() {
       {
         field: 'id',
         headerName: '',
-        width: 110,
+        width: isMobile ? 88 : 110,
         sortable: false,
         renderCell: (p: GridRenderCellParams<Row>) =>
           !p.row.outcome ? (
@@ -271,14 +271,14 @@ export default function ActionsPage() {
               component="button"
               variant="body2"
               onClick={() => setOutcomeDialogAction(p.row)}
-              sx={{ cursor: 'pointer' }}
+              sx={{ cursor: 'pointer', fontSize: isMobile ? '0.78rem' : undefined }}
             >
               Add outcome
             </Link>
           ) : null,
       },
     ],
-    [openChart]
+    [openChart, isMobile]
   )
 
   // Hide some columns on mobile
@@ -355,8 +355,15 @@ export default function ActionsPage() {
             border: '1px solid',
             borderColor: 'divider',
             borderRadius: 1,
-            '& .MuiDataGrid-cell': { alignItems: 'center', display: 'flex' },
-            '& .MuiDataGrid-columnHeader': { bgcolor: 'background.default' },
+            '& .MuiDataGrid-cell': {
+              alignItems: 'center',
+              display: 'flex',
+              ...(isMobile && { paddingLeft: '6px', paddingRight: '6px' }),
+            },
+            '& .MuiDataGrid-columnHeader': {
+              bgcolor: 'background.default',
+              ...(isMobile && { paddingLeft: '6px', paddingRight: '6px' }),
+            },
           }}
         />
       )}
