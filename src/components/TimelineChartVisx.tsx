@@ -3,7 +3,7 @@
  * Hovering an arrow fetches & overlays ticker price lines anchored to the arrow date.
  */
 
-import { useMemo, useState, useCallback, useEffect, memo } from 'react'
+import { useMemo, useState, useCallback, useEffect, useId, memo } from 'react'
 import { Group } from '@visx/group'
 import { scaleTime, scaleLinear } from '@visx/scale'
 import { AxisBottom, AxisLeft } from '@visx/axis'
@@ -32,45 +32,22 @@ const TICKER_COLORS = [
   '#a16207', // yellow-dark
 ]
 
-// Arrow geometry — defaults for wider viewports. On xs widths we derive a
-// 15% smaller version via getArrowGeom() so arrows don't overwhelm the plot.
-interface ArrowGeom {
-  AW: number  // arrow head width (half-span from centre)
-  AH: number  // arrow head height
-  SW: number  // shaft half-width
-  SH: number  // shaft height
-  ARROW_TOTAL: number
-  BASE_GAP: number
-  FONT: number
-  CORNER_R: number
+// Marker geometry — dots on the price line + light-cone glows radiating from
+// them (up for buys, down for sells). The cones fade to transparent over
+// CONE_HEIGHT px and screen-blend for constructive interference where
+// multiple close-together trades overlap.
+interface MarkerGeom {
+  DOT_R: number
+  DOT_STROKE: number
+  CONE_HEIGHT: number
+  CONE_HALFWIDTH: number
 }
 
-const ARROW_GEOM_DEFAULT: ArrowGeom = {
-  AW: 22, AH: 14, SW: 10, SH: 20,
-  ARROW_TOTAL: 14 + 20,
-  BASE_GAP: 19,
-  FONT: 13,
-  CORNER_R: 4,
-}
-
-function getArrowGeom(width: number): ArrowGeom {
-  // xs: scale ~15% smaller, drop the label font to 11.
+function getMarkerGeom(width: number): MarkerGeom {
   if (width < 480) {
-    const scale = 0.85
-    const AH = Math.round(ARROW_GEOM_DEFAULT.AH * scale)
-    const SH = Math.round(ARROW_GEOM_DEFAULT.SH * scale)
-    return {
-      AW: Math.round(ARROW_GEOM_DEFAULT.AW * scale),
-      AH,
-      SW: Math.round(ARROW_GEOM_DEFAULT.SW * scale),
-      SH,
-      ARROW_TOTAL: AH + SH,
-      BASE_GAP: Math.round(ARROW_GEOM_DEFAULT.BASE_GAP * scale),
-      FONT: 11,
-      CORNER_R: 3,
-    }
+    return { DOT_R: 3.5, DOT_STROKE: 1, CONE_HEIGHT: 20, CONE_HALFWIDTH: 10 }
   }
-  return ARROW_GEOM_DEFAULT
+  return { DOT_R: 4, DOT_STROKE: 1, CONE_HEIGHT: 24, CONE_HALFWIDTH: 12 }
 }
 
 function _getDecisionCountsByType(decisions: Array<{ type: string }> | undefined) {
@@ -84,41 +61,11 @@ function _getDecisionCountsByType(decisions: Array<{ type: string }> | undefined
   return counts
 }
 
-function roundedPolyPath(pts: [number, number][], r: number): string {
-  const n = pts.length
-  let d = ''
-  for (let i = 0; i < n; i++) {
-    const prev = pts[(i - 1 + n) % n]
-    const cur = pts[i]
-    const next = pts[(i + 1) % n]
-    const dx1 = prev[0] - cur[0], dy1 = prev[1] - cur[1]
-    const len1 = Math.sqrt(dx1 * dx1 + dy1 * dy1)
-    const dx2 = next[0] - cur[0], dy2 = next[1] - cur[1]
-    const len2 = Math.sqrt(dx2 * dx2 + dy2 * dy2)
-    const rr = Math.min(r, len1 / 2, len2 / 2)
-    const p1x = cur[0] + (dx1 / len1) * rr, p1y = cur[1] + (dy1 / len1) * rr
-    const p2x = cur[0] + (dx2 / len2) * rr, p2y = cur[1] + (dy2 / len2) * rr
-    if (i === 0) d += `M ${p1x} ${p1y}`
-    else d += ` L ${p1x} ${p1y}`
-    d += ` Q ${cur[0]} ${cur[1]} ${p2x} ${p2y}`
-  }
-  return d + ' Z'
-}
-
-function upArrowPath(cx: number, baseY: number, g: ArrowGeom): string {
-  const tipY = baseY - g.ARROW_TOTAL
-  return roundedPolyPath([
-    [cx, tipY], [cx + g.AW, tipY + g.AH], [cx + g.SW, tipY + g.AH],
-    [cx + g.SW, baseY], [cx - g.SW, baseY], [cx - g.SW, tipY + g.AH], [cx - g.AW, tipY + g.AH],
-  ], g.CORNER_R)
-}
-
-function downArrowPath(cx: number, baseY: number, g: ArrowGeom): string {
-  const tipY = baseY + g.ARROW_TOTAL
-  return roundedPolyPath([
-    [cx, tipY], [cx + g.AW, tipY - g.AH], [cx + g.SW, tipY - g.AH],
-    [cx + g.SW, baseY], [cx - g.SW, baseY], [cx - g.SW, tipY - g.AH], [cx - g.AW, tipY - g.AH],
-  ], g.CORNER_R)
+/** Triangle path for a light-cone glow. Apex at (cx, cy), base at (cy + dir*h)
+ * where dir = -1 for buy (cone goes up) and +1 for sell (cone goes down). */
+function conePath(cx: number, cy: number, halfW: number, h: number, dir: -1 | 1): string {
+  const baseY = cy + dir * h
+  return `M ${cx} ${cy} L ${cx + halfW} ${baseY} L ${cx - halfW} ${baseY} Z`
 }
 
 export interface TimelineChartPoint {
@@ -200,8 +147,11 @@ function TimelineChartVisx({
   const axisLabelFontSize = isMobile ? 10 : 11
   const leftAxisLabelFontSize = isMobile ? 12 : 14
   const numBottomTicks = width > 400 ? 8 : 5
-  const arrowGeom = useMemo(() => getArrowGeom(width), [width])
-  const { AW, ARROW_TOTAL, BASE_GAP, FONT: ARROW_FONT } = arrowGeom
+  const markerGeom = useMemo(() => getMarkerGeom(width), [width])
+  const { DOT_R, DOT_STROKE, CONE_HEIGHT, CONE_HALFWIDTH } = markerGeom
+  // Stable id suffix for SVG <defs> — prevents collisions when multiple
+  // TimelineChartVisx instances are on screen at the same time.
+  const chartId = useId()
 
   const dateScale = useMemo(
     () =>
@@ -356,17 +306,19 @@ function TimelineChartVisx({
     left = Math.max(4, Math.min(width - TOOLTIP_W - 4, left))
 
     let top: number
+    // Tooltip sits past the cone tip, with a small gap. `anchorY` is already
+    // the marker dot, so the cone for a buy extends anchorY - CONE_HEIGHT up.
     if (activeArrow.direction === 'buy') {
-      top = anchorY - ARROW_TOTAL - TOOLTIP_H_EST - 8
-      if (top < 4) top = anchorY + ARROW_TOTAL + 8
+      top = anchorY - CONE_HEIGHT - TOOLTIP_H_EST - 8
+      if (top < 4) top = anchorY + CONE_HEIGHT + 8
     } else {
-      top = anchorY + ARROW_TOTAL + 8
-      if (top + TOOLTIP_H_EST > height - 4) top = anchorY - ARROW_TOTAL - TOOLTIP_H_EST - 8
+      top = anchorY + CONE_HEIGHT + 8
+      if (top + TOOLTIP_H_EST > height - 4) top = anchorY - CONE_HEIGHT - TOOLTIP_H_EST - 8
     }
     top = Math.max(4, top)
 
     return { left, top }
-  }, [activeArrow, width, height, responsiveMargin, ARROW_TOTAL])
+  }, [activeArrow, width, height, responsiveMargin, CONE_HEIGHT])
 
   if (width < 10 || height < 10) return null
 
@@ -379,6 +331,24 @@ function TimelineChartVisx({
       }}
     >
       <svg width={width} height={height} style={{ display: 'block' }}>
+        <defs>
+          {/* Clip glows to the plot area so they don't spill past the axes. */}
+          <clipPath id={`plot-clip-${chartId}`}>
+            <rect x={0} y={0} width={innerWidth} height={innerHeight} />
+          </clipPath>
+          {/* Buy glow: opaque near the dot (bottom of bbox), transparent at the top. */}
+          <linearGradient id={`buy-glow-${chartId}`} x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0" stopColor={ARROW_BUY_COLOR} stopOpacity="0.85" />
+            <stop offset="0.35" stopColor={ARROW_BUY_COLOR} stopOpacity="0.55" />
+            <stop offset="1" stopColor={ARROW_BUY_COLOR} stopOpacity="0" />
+          </linearGradient>
+          {/* Sell glow: opaque at the top (dot position), transparent at the bottom. */}
+          <linearGradient id={`sell-glow-${chartId}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={ARROW_SELL_COLOR} stopOpacity="0.85" />
+            <stop offset="0.35" stopColor={ARROW_SELL_COLOR} stopOpacity="0.55" />
+            <stop offset="1" stopColor={ARROW_SELL_COLOR} stopOpacity="0" />
+          </linearGradient>
+        </defs>
         <Group left={responsiveMargin.left} top={responsiveMargin.top}>
           {/* Grid lines */}
           {priceScale.ticks(5).map((tick) => (
@@ -459,9 +429,12 @@ function TimelineChartVisx({
           <rect x={0} y={0} width={innerWidth} height={innerHeight}
             fill="transparent" onClick={handleBackgroundClick} />
 
-          {/* Clustered arrows */}
+          {/* Buy/sell markers: light-cone glows on the price line + colored dots.
+              Per-marker cones screen-blend into each other, so close-together
+              trades naturally brighten where their cones overlap. Clicks open
+              the overlay per-cluster (grouped by x-proximity). */}
           {(() => {
-            const MIN_GAP = AW * 2 + 10
+            const MIN_GAP = CONE_HALFWIDTH * 2 + 8  // cluster markers whose cones overlap
 
             interface Marker {
               cx: number; priceY: number; point: TimelineChartPoint
@@ -505,141 +478,117 @@ function TimelineChartVisx({
             const sellGroups = clusterDir('sell')
             const els: React.ReactElement[] = []
 
-            // Chart intersection dots
-            markers.forEach((m, i) => {
-              els.push(
-                <circle key={`dot-${i}`} cx={m.cx} cy={m.priceY} r={4}
-                  fill="#0f172a" style={{ pointerEvents: 'none' }} />
+            const buyMarkers = markers.filter((m) => m.buyCount > 0)
+            const sellMarkers = markers.filter((m) => m.sellCount > 0)
+
+            // Ticker filter applied to whole markers (same logic as old arrows).
+            const isBuyMarkerGreyed = (m: Marker) => selectedTicker != null
+              && !(m.point.decisions ?? []).some((d) => d.type === 'buy' && (d.action.ticker ?? '').toUpperCase() === selectedTicker)
+            const isSellMarkerGreyed = (m: Marker) => selectedTicker != null
+              && !(m.point.decisions ?? []).some((d) => d.type === 'sell' && (d.action.ticker ?? '').toUpperCase() === selectedTicker)
+
+            // 1. Cones — wrapped in a <g> with clipPath so they stay inside
+            //    the plot area. We rely on normal alpha compositing (no
+            //    `mix-blend-mode: screen`, which degenerates to pure white on a
+            //    white background) for the constructive-interference effect:
+            //    two overlapping translucent greens give 1 - (1-a)^2 in the
+            //    overlap ≈ more saturated green. The per-marker opacity also
+            //    scales with count so a day with 3+ trades is visibly louder.
+            els.push(
+              <g key="cone-layer" clipPath={`url(#plot-clip-${chartId})`} style={{ pointerEvents: 'none' }}>
+                {buyMarkers.map((m, i) => {
+                  const greyed = isBuyMarkerGreyed(m)
+                  const op = greyed ? 0.22 : Math.min(0.95, 0.7 + (m.buyCount - 1) * 0.1)
+                  return (
+                    <path
+                      key={`bc-${i}`}
+                      d={conePath(m.cx, m.priceY, CONE_HALFWIDTH, CONE_HEIGHT, -1)}
+                      fill={greyed ? ARROW_GREYED : `url(#buy-glow-${chartId})`}
+                      opacity={op}
+                    />
+                  )
+                })}
+                {sellMarkers.map((m, i) => {
+                  const greyed = isSellMarkerGreyed(m)
+                  const op = greyed ? 0.22 : Math.min(0.95, 0.7 + (m.sellCount - 1) * 0.1)
+                  return (
+                    <path
+                      key={`sc-${i}`}
+                      d={conePath(m.cx, m.priceY, CONE_HALFWIDTH, CONE_HEIGHT, 1)}
+                      fill={greyed ? ARROW_GREYED : `url(#sell-glow-${chartId})`}
+                      opacity={op}
+                    />
+                  )
+                })}
+              </g>
+            )
+
+            // 2. Colored dots on the line — sells first, buys on top so a same-day
+            //    buy+sell shows the buy dot (more actionable). Any hovered/active
+            //    cluster gets a slightly bigger radius for feedback.
+            const anyHoverOrActiveDotInGroup = (group: Marker[], dir: 'buy' | 'sell') => {
+              const key = dir === 'buy' ? `buy-${buyGroups.indexOf(group)}` : `sell-${sellGroups.indexOf(group)}`
+              return hoveredKey === key || activeArrow?.key === key
+            }
+            const dotFor = (m: Marker, dir: 'buy' | 'sell', hovered: boolean) => {
+              const greyed = dir === 'buy' ? isBuyMarkerGreyed(m) : isSellMarkerGreyed(m)
+              const fill = greyed ? ARROW_GREYED : (dir === 'buy' ? ARROW_BUY_COLOR : ARROW_SELL_COLOR)
+              const r = hovered ? DOT_R + 1.5 : DOT_R
+              return (
+                <circle
+                  key={`dot-${dir}-${m.cx}-${m.priceY}`}
+                  cx={m.cx} cy={m.priceY} r={r}
+                  fill={fill} stroke="#fff" strokeWidth={DOT_STROKE}
+                  style={{ pointerEvents: 'none' }}
+                />
               )
+            }
+            sellGroups.forEach((group) => {
+              const hovered = anyHoverOrActiveDotInGroup(group, 'sell')
+              group.forEach((m) => els.push(dotFor(m, 'sell', hovered)))
+            })
+            buyGroups.forEach((group) => {
+              const hovered = anyHoverOrActiveDotInGroup(group, 'buy')
+              group.forEach((m) => els.push(dotFor(m, 'buy', hovered)))
             })
 
-            buyGroups.forEach((group, gi) => {
-              const clusterKey = `buy-${gi}`
-              const totalCount = group.reduce((s, m) => s + m.buyCount, 0)
-              const avgCx = group.reduce((s, m) => s + m.cx, 0) / group.length
-              const topPriceY = Math.min(...group.map((m) => m.priceY))
-              const baseY = topPriceY - BASE_GAP
-              const midY = baseY - ARROW_TOTAL / 2
-              const isHovered = hoveredKey === clusterKey
+            // 3. Per-cluster invisible hit rectangles for click/hover. One
+            //    rectangle covers the full cone region for that cluster.
+            const addHitRect = (group: Marker[], dir: 'buy' | 'sell', gi: number) => {
+              const clusterKey = `${dir}-${gi}`
               const isActive = activeArrow?.key === clusterKey
-              const isGreyed = selectedTicker != null && !group.some((m) => (m.point.decisions ?? []).some((d) => d.type === 'buy' && (d.action.ticker ?? '').toUpperCase() === selectedTicker))
-              const fill = isGreyed ? ARROW_GREYED : ARROW_BUY_COLOR
-              const tickers = [...new Set(group.flatMap((m) => m.buyTickers))]
-              const firstId = group[0].buyFirstId
+              const totalCount = group.reduce((s, m) => s + (dir === 'buy' ? m.buyCount : m.sellCount), 0)
+              const avgCx = group.reduce((s, m) => s + m.cx, 0) / group.length
+              const anchorY = dir === 'buy'
+                ? Math.min(...group.map((m) => m.priceY))
+                : Math.max(...group.map((m) => m.priceY))
+              const tickers = [...new Set(group.flatMap((m) => dir === 'buy' ? m.buyTickers : m.sellTickers))]
+              const firstId = dir === 'buy' ? group[0].buyFirstId : group[0].sellFirstId
               const repMarker = group.reduce((best, m) => Math.abs(m.cx - avgCx) < Math.abs(best.cx - avgCx) ? m : best, group[0])
-
+              const xStart = Math.min(...group.map((m) => m.cx)) - CONE_HALFWIDTH - 4
+              const xEnd = Math.max(...group.map((m) => m.cx)) + CONE_HALFWIDTH + 4
+              const yStart = dir === 'buy' ? anchorY - CONE_HEIGHT - 4 : anchorY - 4
+              const ySize = CONE_HEIGHT + 8
               els.push(
-                <g key={clusterKey}
+                <rect
+                  key={`hit-${clusterKey}`}
+                  x={xStart} y={yStart}
+                  width={xEnd - xStart} height={ySize}
+                  fill="transparent"
+                  style={{ cursor: 'pointer' }}
                   onClick={(e) => {
                     e.stopPropagation()
                     if (firstId) onSelectAction(firstId)
                     if (isActive) { setActiveArrow(null); setTickerLines([]) }
-                    else setActiveArrow({ point: repMarker.point, direction: 'buy', ticker: tickers.join(', '), tickers, count: totalCount, cx: avgCx, cy: midY, key: clusterKey })
+                    else setActiveArrow({ point: repMarker.point, direction: dir, ticker: tickers.join(', '), tickers, count: totalCount, cx: avgCx, cy: anchorY, key: clusterKey })
                   }}
                   onMouseEnter={() => setHoveredKey(clusterKey)}
                   onMouseLeave={() => setHoveredKey(null)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {/* Invisible expanded hit area covering arrow + dotted line region */}
-                  <rect
-                    x={avgCx - AW - 8} y={baseY - ARROW_TOTAL - 8}
-                    width={(AW + 8) * 2} height={ARROW_TOTAL + BASE_GAP + 16}
-                    fill="transparent"
-                  />
-                  {group.map((m, si) => (
-                    <line key={`bl-${si}`}
-                      x1={m.cx} y1={m.priceY - 4}
-                      x2={avgCx} y2={baseY}
-                      stroke={isGreyed ? ARROW_GREYED : ARROW_BUY_COLOR}
-                      strokeWidth={1.5} strokeDasharray="3 3"
-                      opacity={isGreyed ? 0.3 : 0.6}
-                      style={{ pointerEvents: 'none' }}
-                    />
-                  ))}
-                  {/* Hover/active ring */}
-                  {(isHovered || isActive) && (
-                    <path d={upArrowPath(avgCx, baseY, arrowGeom)}
-                      fill="none"
-                      stroke={isActive ? '#0f172a' : '#475569'}
-                      strokeWidth={isActive ? 2.5 : 2}
-                      strokeLinejoin="round"
-                      style={{ pointerEvents: 'none' }}
-                    />
-                  )}
-                  <path d={upArrowPath(avgCx, baseY, arrowGeom)} fill={fill} fillOpacity={isGreyed ? 0.35 : 0.9}
-                    stroke="rgba(255,255,255,0.6)" strokeWidth={1} strokeLinejoin="round" />
-                  <text x={avgCx} y={midY + 1} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={ARROW_FONT} fontWeight={800} fill="#fff"
-                    style={{ pointerEvents: 'none', userSelect: 'none' }}>
-                    {totalCount}
-                  </text>
-                </g>
+                />
               )
-            })
-
-            sellGroups.forEach((group, gi) => {
-              const clusterKey = `sell-${gi}`
-              const totalCount = group.reduce((s, m) => s + m.sellCount, 0)
-              const avgCx = group.reduce((s, m) => s + m.cx, 0) / group.length
-              const botPriceY = Math.max(...group.map((m) => m.priceY))
-              const baseY = botPriceY + BASE_GAP
-              const midY = baseY + ARROW_TOTAL / 2
-              const isHovered = hoveredKey === clusterKey
-              const isActive = activeArrow?.key === clusterKey
-              const isGreyed = selectedTicker != null && !group.some((m) => (m.point.decisions ?? []).some((d) => d.type === 'sell' && (d.action.ticker ?? '').toUpperCase() === selectedTicker))
-              const fill = isGreyed ? ARROW_GREYED : ARROW_SELL_COLOR
-              const tickers = [...new Set(group.flatMap((m) => m.sellTickers))]
-              const firstId = group[0].sellFirstId
-              const repMarker = group.reduce((best, m) => Math.abs(m.cx - avgCx) < Math.abs(best.cx - avgCx) ? m : best, group[0])
-
-              els.push(
-                <g key={clusterKey}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (firstId) onSelectAction(firstId)
-                    if (isActive) { setActiveArrow(null); setTickerLines([]) }
-                    else setActiveArrow({ point: repMarker.point, direction: 'sell', ticker: tickers.join(', '), tickers, count: totalCount, cx: avgCx, cy: midY, key: clusterKey })
-                  }}
-                  onMouseEnter={() => setHoveredKey(clusterKey)}
-                  onMouseLeave={() => setHoveredKey(null)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {/* Invisible expanded hit area covering arrow + dotted line region */}
-                  <rect
-                    x={avgCx - AW - 8} y={baseY - BASE_GAP - 8}
-                    width={(AW + 8) * 2} height={ARROW_TOTAL + BASE_GAP + 16}
-                    fill="transparent"
-                  />
-                  {group.map((m, si) => (
-                    <line key={`sl-${si}`}
-                      x1={m.cx} y1={m.priceY + 4}
-                      x2={avgCx} y2={baseY}
-                      stroke={isGreyed ? ARROW_GREYED : ARROW_SELL_COLOR}
-                      strokeWidth={1.5} strokeDasharray="3 3"
-                      opacity={isGreyed ? 0.3 : 0.6}
-                      style={{ pointerEvents: 'none' }}
-                    />
-                  ))}
-                  {/* Hover/active ring */}
-                  {(isHovered || isActive) && (
-                    <path d={downArrowPath(avgCx, baseY, arrowGeom)}
-                      fill="none"
-                      stroke={isActive ? '#0f172a' : '#475569'}
-                      strokeWidth={isActive ? 2.5 : 2}
-                      strokeLinejoin="round"
-                      style={{ pointerEvents: 'none' }}
-                    />
-                  )}
-                  <path d={downArrowPath(avgCx, baseY, arrowGeom)} fill={fill} fillOpacity={isGreyed ? 0.35 : 0.9}
-                    stroke="rgba(255,255,255,0.6)" strokeWidth={1} strokeLinejoin="round" />
-                  <text x={avgCx} y={midY - 1} textAnchor="middle" dominantBaseline="middle"
-                    fontSize={ARROW_FONT} fontWeight={800} fill="#fff"
-                    style={{ pointerEvents: 'none', userSelect: 'none' }}>
-                    {totalCount}
-                  </text>
-                </g>
-              )
-            })
+            }
+            buyGroups.forEach((group, gi) => addHitRect(group, 'buy', gi))
+            sellGroups.forEach((group, gi) => addHitRect(group, 'sell', gi))
 
             // ── Other-type decisions (pass / research / hold / watchlist / speculate)
             // Render a colored diamond on the price line with a thin connector to the
