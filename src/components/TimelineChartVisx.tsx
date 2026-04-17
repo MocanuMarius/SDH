@@ -3,10 +3,10 @@
  * Hovering an arrow fetches & overlays ticker price lines anchored to the arrow date.
  */
 
-import { useMemo, useState, useCallback, useEffect, useId, memo } from 'react'
+import { useMemo, useState, useCallback, useEffect, useId, useRef, memo } from 'react'
 import { Group } from '@visx/group'
 import { scaleTime, scaleLinear } from '@visx/scale'
-import { AxisBottom, AxisLeft } from '@visx/axis'
+import { AxisBottom, AxisLeft, AxisRight } from '@visx/axis'
 import { Brush } from '@visx/brush'
 import { Box, Paper, Typography, CircularProgress } from '@mui/material'
 import type { ActionWithEntry } from '../services/actionsService'
@@ -91,11 +91,13 @@ export interface TimelineChartPoint {
   _total?: number
 }
 
-const margin = { top: 24, right: 24, bottom: 24, left: 52 }
+// Right margin now reserves room for the second Y axis (% growth since start
+// of visible period), so it's wider than the old price-only layout.
+const margin = { top: 24, right: 52, bottom: 24, left: 52 }
 
 export function getTimelineChartResponsiveMargin(width: number) {
-  if (width < 400) return { top: 24, right: 16, bottom: 24, left: 40 }
-  if (width < 600) return { top: 24, right: 20, bottom: 24, left: 44 }
+  if (width < 400) return { top: 24, right: 40, bottom: 24, left: 40 }
+  if (width < 600) return { top: 24, right: 44, bottom: 24, left: 44 }
   return margin
 }
 
@@ -301,6 +303,57 @@ function TimelineChartVisx({
     onChartClick()
   }, [onChartClick])
 
+  // Global click-outside listener — any click that isn't inside this chart
+  // container closes the active overlay. (The in-chart background rect already
+  // handles clicks on empty plot area, but clicking the page, sidebar, list
+  // items, etc. used to leave the overlay open indefinitely.)
+  const chartBoxRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!activeArrow) return
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node | null
+      if (!target) return
+      if (chartBoxRef.current && chartBoxRef.current.contains(target)) return
+      setActiveArrow(null)
+      setTickerLines([])
+    }
+    // `click` (not `mousedown`) so clicks inside a list item that also
+    // programmatically opens an overlay don't immediately close it.
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [activeArrow])
+
+  // Sync activeArrow from an externally set selectedActionId (e.g. clicking
+  // an "Entries in range" list item below the chart). Finds the data point
+  // that carries that action and opens the overlay for it.
+  useEffect(() => {
+    if (!selectedActionId) return
+    // Don't reopen if we're already showing this action.
+    if (activeArrow && activeArrow.key === `ext-${selectedActionId}`) return
+    for (const pt of data) {
+      const decisions = pt.decisions ?? []
+      const match = decisions.find((d) => d.action.id === selectedActionId)
+      if (!match) continue
+      // Only open for directional types — pass/research/hold/watchlist don't
+      // have ticker-overlay behaviour on this chart.
+      const dir: 'buy' | 'sell' = match.type === 'sell' ? 'sell' : 'buy'
+      const ticker = (match.action.ticker ?? '').toUpperCase()
+      if (!ticker) return
+      setActiveArrow({
+        point: pt,
+        direction: dir,
+        ticker,
+        tickers: [ticker],
+        count: 1,
+        cx: dateScale(new Date(pt.date)),
+        cy: priceScale(pt.price),
+        key: `ext-${selectedActionId}`,
+      })
+      return
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedActionId])
+
   const handleBrushChange = useCallback(
     (domain: { x0: number; x1: number } | null) => {
       if (!domain || !onBrushChange) return
@@ -339,6 +392,7 @@ function TimelineChartVisx({
 
   return (
     <Box
+      ref={chartBoxRef}
       sx={{ position: 'relative', width, height }}
       onMouseLeave={() => {
         setHoveredKey(null)
@@ -394,6 +448,34 @@ function TimelineChartVisx({
               />
             )
           })}
+
+          {/* Benchmark end label — shown alongside the overlay ticker labels
+              so the user can see the benchmark's own move at a glance. Only
+              rendered when an overlay is up (to avoid clutter in the default
+              view) and keyed off the last data point. */}
+          {activeArrow && data.length > 0 && (() => {
+            const lastPt = data[data.length - 1]
+            const anchorPrice = activeArrow.point.price
+            if (!anchorPrice || anchorPrice <= 0) return null
+            const pct = ((lastPt.price - anchorPrice) / anchorPrice) * 100
+            const sign = pct >= 0 ? '+' : ''
+            const label = `${symbol} ${sign}${pct.toFixed(1)}%`
+            const badgeW = label.length * 7 + 10
+            const badgeH = 18
+            const badgeX = Math.min(innerWidth - badgeW - 2, Math.max(2, dateScale(new Date(lastPt.date)) - badgeW / 2))
+            const badgeY = priceScale(lastPt.price) + 12  // push below the line so it doesn't fight overlays
+            const bgColor = pct >= 0 ? '#0f172a' : '#0f172a'  // benchmark stays neutral-dark
+            return (
+              <g key="label-benchmark" style={{ pointerEvents: 'none' }}>
+                <rect x={badgeX} y={badgeY} width={badgeW} height={badgeH} rx={4} fill={bgColor} />
+                <text x={badgeX + badgeW / 2} y={badgeY + badgeH / 2}
+                  fill="#fff" fontSize={10} fontWeight={800}
+                  textAnchor="middle" dominantBaseline="middle" style={{ userSelect: 'none' }}>
+                  {label}
+                </text>
+              </g>
+            )
+          })()}
 
           {/* Ticker end labels + solid % badge */}
           {tickerLines.map((tl) => {
@@ -732,6 +814,24 @@ function TimelineChartVisx({
           tickLabelProps={() => ({ fill: '#334155', fontSize: leftAxisLabelFontSize, textAnchor: 'end', dx: -4 })}
           numTicks={5}
           tickFormat={(v) => (typeof v === 'number' ? v.toFixed(0) : String(v))}
+        />
+        {/* Right Y axis: % growth relative to the first visible price. Same
+            5 ticks as the left axis, converted into a percentage so the user
+            can read "+12.5%" directly instead of mental-mathing the price. */}
+        <AxisRight
+          left={width - responsiveMargin.right}
+          scale={priceScale}
+          stroke={AXIS_COLOR}
+          tickStroke={AXIS_COLOR}
+          tickLabelProps={() => ({ fill: '#334155', fontSize: leftAxisLabelFontSize, textAnchor: 'start', dx: 4 })}
+          numTicks={5}
+          tickFormat={(v) => {
+            const firstPrice = data.length > 0 ? data[0].price : 0
+            if (!firstPrice || typeof v !== 'number') return ''
+            const pct = ((v - firstPrice) / firstPrice) * 100
+            const sign = pct >= 0 ? '+' : ''
+            return `${sign}${pct.toFixed(0)}%`
+          }}
         />
 
         {/* Brush */}
