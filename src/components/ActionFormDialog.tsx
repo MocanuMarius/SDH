@@ -104,6 +104,24 @@ export default function ActionFormDialog({
     }
   }, [open])
 
+  // Sync form state with `initial` whenever the dialog is (re-)opened. The
+  // useState defaults only fire once on mount, so re-opening with a different
+  // action would otherwise leave stale values from the previous open.
+  useEffect(() => {
+    if (!open) return
+    setType((initial?.type as Action['type']) ?? 'buy')
+    setTicker(initial?.ticker ?? '')
+    setCompanyName(initial?.company_name ?? '')
+    setActionDate(initial?.action_date ?? getToday())
+    setPrice(initial?.price ?? '')
+    setCurrency(initial?.currency ?? '')
+    setShares(initial?.shares ?? '')
+    setReason(initial?.reason ?? '')
+    setNotes(initial?.notes ?? '')
+    setKillCriteria((initial as { kill_criteria?: string })?.kill_criteria ?? '')
+    setPreMortemText((initial as { pre_mortem_text?: string | null })?.pre_mortem_text ?? '')
+  }, [open, initial])
+
   const isNewBuy = !initial?.id && type === 'buy'
   const readyChecks = {
     thesis: reason.trim().length > 0,

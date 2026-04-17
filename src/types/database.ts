@@ -253,28 +253,6 @@ export type EntryValuationInsert = Omit<EntryValuation, 'id' | 'created_at' | 'u
 
 export type EntryValuationUpdate = Partial<Omit<EntryValuation, 'id' | 'entry_id' | 'created_at'>>
 
-// v2 parity: Feeling block per entry (Journalytic-style)
-export type FeelingType = 'idea' | 'market'
-
-export interface EntryFeeling {
-  id: string
-  entry_id: string
-  score: number
-  label: string
-  type: FeelingType
-  ticker: string | null
-  created_at: string
-  updated_at: string
-}
-
-export type EntryFeelingInsert = Omit<EntryFeeling, 'id' | 'created_at' | 'updated_at'> & {
-  id?: string
-  created_at?: string
-  updated_at?: string
-}
-
-export type EntryFeelingUpdate = Partial<Omit<EntryFeeling, 'id' | 'entry_id' | 'created_at'>>
-
 // ============================================================================
 // Broker Statement Imports
 // ============================================================================

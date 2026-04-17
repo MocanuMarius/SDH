@@ -15,7 +15,6 @@ import { listEntries, listEntriesWithActions, getEntry } from '../services/entri
 import { listActions, listActionsByEntryId } from '../services/actionsService'
 import { listOutcomes, getOutcomesForActionIds } from '../services/outcomesService'
 import { listPredictionsByEntryId } from '../services/predictionsService'
-import { listFeelingsByEntryId } from '../services/feelingsService'
 import { listReminders } from '../services/remindersService'
 import { listPassed, listPassedDueForReview } from '../services/passedService'
 import { getValuationByEntryId } from '../services/entryValuationsService'
@@ -36,7 +35,6 @@ export const queryKeys = {
   outcomesByActionIds: (ids: string[]) => ['outcomes', 'byActionIds', [...ids].sort().join(',')] as const,
 
   predictions: (entryId: string | undefined) => ['predictions', entryId] as const,
-  feelings: (entryId: string | undefined) => ['feelings', entryId] as const,
 
   reminders: () => ['reminders'] as const,
   passed: () => ['passed'] as const,
@@ -109,14 +107,6 @@ export function usePredictions(entryId: string | undefined) {
   })
 }
 
-export function useFeelings(entryId: string | undefined) {
-  return useQuery({
-    queryKey: queryKeys.feelings(entryId),
-    queryFn: () => (entryId ? listFeelingsByEntryId(entryId) : Promise.resolve([])),
-    enabled: !!entryId,
-  })
-}
-
 export function useReminders(onlyActive = true) {
   return useQuery({
     queryKey: [...queryKeys.reminders(), onlyActive],
@@ -182,11 +172,6 @@ export function useInvalidate() {
       else qc.invalidateQueries({ queryKey: ['predictions'] })
       // Calibration analytics roll up predictions — keep that in sync.
       qc.invalidateQueries({ queryKey: ['analytics'] })
-    },
-    /** Invalidate feelings for a specific entry (or all if no id). */
-    feelings: (entryId?: string) => {
-      if (entryId) qc.invalidateQueries({ queryKey: queryKeys.feelings(entryId) })
-      else qc.invalidateQueries({ queryKey: ['feelings'] })
     },
     /** Invalidate reminders + the activity badge count. */
     reminders: () => {

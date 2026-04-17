@@ -74,11 +74,6 @@ export function useRealtimeSync(userId: string | null | undefined) {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'entry_feelings' },
-        () => inv(['feelings']),
-      )
-      .on(
-        'postgres_changes',
         { event: '*', schema: 'public', table: 'reminders', filter: `user_id=eq.${userId}` },
         () => inv(['reminders']),
       )

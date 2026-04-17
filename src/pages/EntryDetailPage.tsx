@@ -28,27 +28,19 @@ import {
   deletePrediction,
 } from '../services/predictionsService'
 import {
-  createFeeling,
-  updateFeeling,
-  deleteFeeling,
-} from '../services/feelingsService'
-import {
   useEntry,
   useActionsByEntry,
   useOutcomesByActionIds,
   usePredictions,
-  useFeelings,
   useInvalidate,
 } from '../hooks/queries'
 import ActionFormDialog from '../components/ActionFormDialog'
 import OutcomeFormDialog from '../components/OutcomeFormDialog'
 import PredictionFormDialog from '../components/PredictionFormDialog'
-import FeelingFormDialog from '../components/FeelingFormDialog'
 import ConfirmDialog from '../components/ConfirmDialog'
 import DecisionCard from '../components/DecisionCard'
 import ValuationWidget from '../components/ValuationWidget'
 import PredictionCard from '../components/PredictionCard'
-import FeelingCard from '../components/FeelingCard'
 import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import AddReminderDialog from '../components/AddReminderDialog'
 import TagChip from '../components/TagChip'
@@ -56,7 +48,7 @@ import { useSnackbar } from '../contexts/SnackbarContext'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
 import { getTickerDisplayLabel } from '../utils/tickerCompany'
 import type { Outcome, Action } from '../types/database'
-import type { EntryPrediction, EntryFeeling } from '../types/database'
+import type { EntryPrediction } from '../types/database'
 
 export default function EntryDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -78,8 +70,6 @@ export default function EntryDetailPage() {
   }, [outcomesQ.data])
   const predictionsQ = usePredictions(id)
   const predictions = predictionsQ.data ?? []
-  const feelingsQ = useFeelings(id)
-  const feelings = feelingsQ.data ?? []
 
   const entry = entryQ.data ?? null
   const loading = entryQ.isLoading
@@ -98,14 +88,11 @@ export default function EntryDetailPage() {
     | { type: 'action'; id: string }
     | { type: 'entry' }
     | { type: 'prediction'; id: string }
-    | { type: 'feeling'; id: string }
     | null
   >(null)
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [predictionDialogOpen, setPredictionDialogOpen] = useState(false)
-  const [feelingDialogOpen, setFeelingDialogOpen] = useState(false)
   const [editingPrediction, setEditingPrediction] = useState<EntryPrediction | null>(null)
-  const [editingFeeling, setEditingFeeling] = useState<EntryFeeling | null>(null)
   const [currentPriceByTicker, setCurrentPriceByTicker] = useState<Record<string, number>>({})
 
   const openActionTickers = useMemo(() => {
@@ -418,7 +405,6 @@ export default function EntryDetailPage() {
           >
             <Tab label={`Actions (${actions.length})`} />
             <Tab label={`Predictions (${predictions.length})`} />
-            <Tab label={`Feelings (${feelings.length})`} />
             <Tab label="Valuation" />
           </Tabs>
           {detailTab === 0 && (
@@ -428,11 +414,6 @@ export default function EntryDetailPage() {
           )}
           {detailTab === 1 && (
             <Button size="small" startIcon={<AddIcon />} onClick={() => { setEditingPrediction(null); setPredictionDialogOpen(true); }} sx={{ flexShrink: 0, mr: 0.5, fontSize: '0.75rem' }}>
-              Add
-            </Button>
-          )}
-          {detailTab === 2 && (
-            <Button size="small" startIcon={<AddIcon />} onClick={() => { setEditingFeeling(null); setFeelingDialogOpen(true); }} sx={{ flexShrink: 0, mr: 0.5, fontSize: '0.75rem' }}>
               Add
             </Button>
           )}
@@ -499,30 +480,8 @@ export default function EntryDetailPage() {
           </Box>
         )}
 
-        {/* Tab 2: Feelings */}
-        {detailTab === 2 && (
-          <Box sx={{ pt: 1.5 }}>
-            {feelings.length === 0 ? (
-              <Typography color="text.secondary" variant="body2">
-                Log how you feel about this idea or market (score 1-10).
-              </Typography>
-            ) : (
-              <Stack spacing={1}>
-                {feelings.map((f) => (
-                  <FeelingCard
-                    key={f.id}
-                    feeling={f}
-                    onEdit={() => { setEditingFeeling(f); setFeelingDialogOpen(true); }}
-                    onDelete={() => setConfirmDelete({ type: 'feeling', id: f.id })}
-                  />
-                ))}
-              </Stack>
-            )}
-          </Box>
-        )}
-
-        {/* Tab 3: Valuation (Huber 3 Engines) */}
-        {detailTab === 3 && id && (
+        {/* Tab 2: Valuation (Huber 3 Engines) */}
+        {detailTab === 2 && id && (
           <Box sx={{ pt: 1.5 }}>
             <ValuationWidget entryId={id} defaultExpanded />
           </Box>
@@ -602,9 +561,7 @@ export default function EntryDetailPage() {
               ? 'Delete action?'
               : confirmDelete?.type === 'prediction'
                 ? 'Delete prediction?'
-                : confirmDelete?.type === 'feeling'
-                  ? 'Delete feeling?'
-                  : 'Delete?'
+                : 'Delete?'
         }
         message={
           confirmDelete?.type === 'entry'
@@ -613,9 +570,7 @@ export default function EntryDetailPage() {
               ? 'This will permanently delete this action and its outcome.'
               : confirmDelete?.type === 'prediction'
                 ? 'This prediction will be removed from this entry.'
-                : confirmDelete?.type === 'feeling'
-                  ? 'This feeling will be removed from this entry.'
-                  : ''
+                : ''
         }
         confirmLabel="Delete"
         cancelLabel="Cancel"
@@ -639,10 +594,6 @@ export default function EntryDetailPage() {
               await deletePrediction(confirmDelete.id)
               invalidate.predictions(id)
               showSuccess('Prediction deleted')
-            } else if (confirmDelete.type === 'feeling') {
-              await deleteFeeling(confirmDelete.id)
-              invalidate.feelings(id)
-              showSuccess('Feeling deleted')
             }
             setConfirmDelete(null)
           } finally {
@@ -694,32 +645,6 @@ export default function EntryDetailPage() {
           }
           invalidate.predictions(id)
           showSuccess(editingPrediction ? 'Prediction updated' : 'Prediction added')
-        }}
-      />
-      <FeelingFormDialog
-        open={feelingDialogOpen}
-        onClose={() => { setFeelingDialogOpen(false); setEditingFeeling(null); }}
-        initial={editingFeeling}
-        onSubmit={async (data) => {
-          if (!id) return
-          if (editingFeeling) {
-            await updateFeeling(editingFeeling.id, {
-              score: data.score,
-              label: data.label,
-              type: data.type,
-              ticker: data.ticker || null,
-            })
-          } else {
-            await createFeeling({
-              entry_id: id,
-              score: data.score,
-              label: data.label,
-              type: data.type,
-              ticker: data.ticker || null,
-            })
-          }
-          invalidate.feelings(id)
-          showSuccess(editingFeeling ? 'Feeling updated' : 'Feeling logged')
         }}
       />
       {outcomeDialogActionId && (

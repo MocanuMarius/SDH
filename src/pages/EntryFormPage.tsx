@@ -20,7 +20,6 @@ import CloseIcon from '@mui/icons-material/Close'
 import { AnimatePresence, motion } from 'motion/react'
 import { useAuth } from '../contexts/AuthContext'
 import { createEntry, updateEntry } from '../services/entriesService'
-import { createFeeling } from '../services/feelingsService'
 import { createPrediction } from '../services/predictionsService'
 import { createAction } from '../services/actionsService'
 import { ensurePassedForUser } from '../services/passedService'
@@ -32,11 +31,9 @@ import { generateEntryId } from '../utils/id'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { useEntry, useInvalidate } from '../hooks/queries'
 import InsertDecisionBlockDialog from '../components/InsertDecisionBlockDialog'
-import FeelingFormDialog from '../components/FeelingFormDialog'
 import TickerDollarField from '../components/TickerDollarField'
 import { getTagPresets } from '../utils/tagPresets'
 import TagChip from '../components/TagChip'
-import type { FeelingType } from '../types/database'
 
 const getToday = () => new Date().toISOString().slice(0, 10)
 
@@ -174,8 +171,6 @@ export default function EntryFormPage() {
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [feelingDialogOpen, setFeelingDialogOpen] = useState(false)
-  const [pendingFeelingType, setPendingFeelingType] = useState<FeelingType>('market')
   const [entryRules, setEntryRules] = useState('')
   const [exitRules, setExitRules] = useState('')
   const [predictionPercent, setPredictionPercent] = useState('')
@@ -324,14 +319,6 @@ export default function EntryFormPage() {
         setBodyTab('decision')
       }
 
-      // Ctrl/Cmd+Shift+M: Open market feeling dialog (only on edit, not new)
-      if (modifier && e.shiftKey && e.key === 'M') {
-        e.preventDefault()
-        if (!isNew) {
-          setPendingFeelingType('market')
-          setFeelingDialogOpen(true)
-        }
-      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -376,21 +363,6 @@ export default function EntryFormPage() {
       notes: block.notes.trim(),
       raw_snippet: buildDecisionBlockMarkdown(block),
     }
-  }
-
-  const handleFeelingSubmit = async (data: { score: number; label: string; type: FeelingType; ticker: string }) => {
-    if (!id || isNew) {
-      throw new Error('Entry must be saved before adding a feeling')
-    }
-    const entryId = id
-    await createFeeling({
-      entry_id: entryId,
-      score: data.score,
-      label: data.label,
-      type: data.type,
-      ticker: data.ticker,
-    })
-    invalidate.feelings(entryId)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -826,21 +798,6 @@ export default function EntryFormPage() {
         </Button>
       </Box>
 
-      <FeelingFormDialog
-        open={feelingDialogOpen}
-        onClose={() => setFeelingDialogOpen(false)}
-        onSubmit={handleFeelingSubmit}
-        initial={{
-          id: '',
-          entry_id: id || '',
-          score: 5,
-          label: '',
-          type: pendingFeelingType,
-          ticker: '',
-          created_at: '',
-          updated_at: '',
-        }}
-      />
     </Box>
   )
 }
