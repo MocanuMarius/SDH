@@ -544,7 +544,19 @@ function TimelineChartVisx({
               /** Largest size among buys on this marker — drives cone height. */
               buyMaxSize: import('../types/database').ActionSize
               sellMaxSize: import('../types/database').ActionSize
+              /** True if ANY buy on this marker is a primary action (buy/short/speculate)
+               *  rather than an adjustment (add_more/cover/trim). Drives dot style
+               *  (filled vs ringed). */
+              buyIsPrimary: boolean
+              sellIsPrimary: boolean
             }
+            // An "entry" buy or a "full sell" is a primary — visually filled.
+            // Adjustments (add_more / trim / cover) show as ringed dots so the
+            // user can distinguish at a glance between opening/closing a
+            // position and merely scaling it.
+            const PRIMARY_TYPES = new Set(['buy', 'sell', 'short', 'speculate'])
+            const hasPrimary = (arr: { action: { type: string } }[]) =>
+              arr.some((d) => PRIMARY_TYPES.has(d.action.type))
             const sizeRank: Record<import('../types/database').ActionSize, number> = {
               tiny: 0, small: 1, medium: 2, large: 3, xl: 4,
             }
@@ -576,6 +588,8 @@ function TimelineChartVisx({
                 sellTickers: [...new Set(sells.map((d) => (d.action.ticker ?? '').toUpperCase()).filter(Boolean))],
                 buyMaxSize: buys.length ? maxSize(buys) : 'medium',
                 sellMaxSize: sells.length ? maxSize(sells) : 'medium',
+                buyIsPrimary: buys.length ? hasPrimary(buys) : false,
+                sellIsPrimary: sells.length ? hasPrimary(sells) : false,
               }]
             })
 
@@ -649,11 +663,16 @@ function TimelineChartVisx({
               </g>
             )
 
-            // 2. Dots on the line. Three cases:
-            //    - buy only → green dot
-            //    - sell only → red dot
-            //    - both on same marker → SINGLE split dot (green top, red
+            // 2. Dots on the line. Four cases (× primary/secondary style):
+            //    - buy only        → green dot
+            //    - sell only       → red dot
+            //    - both on same marker → single split dot (green top, red
             //      bottom) so they don't stack and fight for clicks.
+            //    Primary actions (buy / sell / short / speculate) get a solid
+            //    filled dot. Secondary adjustments (add_more / trim / cover)
+            //    get a hollow-ringed dot (outer colour, inner white) so you
+            //    can tell at a glance which marker represents opening/closing
+            //    a position vs merely scaling one.
             const anyHoverOrActiveDotInGroup = (group: Marker[], dir: 'buy' | 'sell') => {
               const key = dir === 'buy' ? `buy-${buyGroups.indexOf(group)}` : `sell-${sellGroups.indexOf(group)}`
               return hoveredKey === key || activeArrow?.key === key
@@ -666,33 +685,35 @@ function TimelineChartVisx({
             const mixedMarkers = markers.filter((m) => m.buyCount > 0 && m.sellCount > 0)
             const mixedSet = new Set(mixedMarkers)
 
-            // Solid green for buy-only
+            // Helper: render a dot that is either filled (primary) or ringed
+            // (secondary). `r` is the outer radius; the inner white disc for
+            // secondary markers shrinks by 1.5px so the coloured ring is
+            // clearly visible.
+            const renderDot = (key: string, cx: number, cy: number, r: number, fill: string, primary: boolean) => (
+              <g key={key} style={{ pointerEvents: 'none' }}>
+                <circle cx={cx} cy={cy} r={r} fill={fill} stroke="#fff" strokeWidth={DOT_STROKE} />
+                {!primary && <circle cx={cx} cy={cy} r={Math.max(1, r - 1.75)} fill="#fff" />}
+              </g>
+            )
+
+            // Buy-only markers
             buyMarkers.filter((m) => !mixedSet.has(m)).forEach((m) => {
               const greyed = isBuyMarkerGreyed(m)
               const fill = greyed ? ARROW_GREYED : ARROW_BUY_COLOR
               const hovered = hoveredBuyMarkers.has(m)
               const r = hovered ? DOT_R + 1.5 : DOT_R
-              els.push(
-                <circle key={`dot-buy-${m.cx}-${m.priceY}`}
-                  cx={m.cx} cy={m.priceY} r={r}
-                  fill={fill} stroke="#fff" strokeWidth={DOT_STROKE}
-                  style={{ pointerEvents: 'none' }} />
-              )
+              els.push(renderDot(`dot-buy-${m.cx}-${m.priceY}`, m.cx, m.priceY, r, fill, m.buyIsPrimary))
             })
-            // Solid red for sell-only
+            // Sell-only markers
             sellMarkers.filter((m) => !mixedSet.has(m)).forEach((m) => {
               const greyed = isSellMarkerGreyed(m)
               const fill = greyed ? ARROW_GREYED : ARROW_SELL_COLOR
               const hovered = hoveredSellMarkers.has(m)
               const r = hovered ? DOT_R + 1.5 : DOT_R
-              els.push(
-                <circle key={`dot-sell-${m.cx}-${m.priceY}`}
-                  cx={m.cx} cy={m.priceY} r={r}
-                  fill={fill} stroke="#fff" strokeWidth={DOT_STROKE}
-                  style={{ pointerEvents: 'none' }} />
-              )
+              els.push(renderDot(`dot-sell-${m.cx}-${m.priceY}`, m.cx, m.priceY, r, fill, m.sellIsPrimary))
             })
-            // Split dot for mixed: top semicircle = green, bottom = red.
+            // Mixed: split dot (top green, bottom red). Secondary treatment on
+            // either half is approximated by whitening the matching half's inner.
             mixedMarkers.forEach((m) => {
               const greyedBuy = isBuyMarkerGreyed(m)
               const greyedSell = isSellMarkerGreyed(m)
@@ -700,13 +721,18 @@ function TimelineChartVisx({
               const botFill = greyedSell ? ARROW_GREYED : ARROW_SELL_COLOR
               const hovered = hoveredBuyMarkers.has(m) || hoveredSellMarkers.has(m)
               const r = hovered ? DOT_R + 1.5 : DOT_R
+              const innerR = Math.max(1, r - 1.75)
               els.push(
                 <g key={`dot-mixed-${m.cx}-${m.priceY}`} style={{ pointerEvents: 'none' }}>
-                  {/* Top half (green) — apex up */}
                   <path d={`M ${m.cx - r} ${m.priceY} A ${r} ${r} 0 0 1 ${m.cx + r} ${m.priceY} Z`} fill={topFill} />
-                  {/* Bottom half (red) — apex down */}
                   <path d={`M ${m.cx - r} ${m.priceY} A ${r} ${r} 0 0 0 ${m.cx + r} ${m.priceY} Z`} fill={botFill} />
-                  {/* Outer white stroke */}
+                  {/* Per-half ring for secondary action style. */}
+                  {!m.buyIsPrimary && (
+                    <path d={`M ${m.cx - innerR} ${m.priceY} A ${innerR} ${innerR} 0 0 1 ${m.cx + innerR} ${m.priceY} Z`} fill="#fff" />
+                  )}
+                  {!m.sellIsPrimary && (
+                    <path d={`M ${m.cx - innerR} ${m.priceY} A ${innerR} ${innerR} 0 0 0 ${m.cx + innerR} ${m.priceY} Z`} fill="#fff" />
+                  )}
                   <circle cx={m.cx} cy={m.priceY} r={r} fill="none" stroke="#fff" strokeWidth={DOT_STROKE} />
                 </g>
               )
