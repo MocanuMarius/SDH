@@ -302,6 +302,7 @@ function AppBarNav({
             notes: data.notes,
             kill_criteria: data.kill_criteria || null,
             pre_mortem_text: data.pre_mortem_text || null,
+            size: data.size,
             raw_snippet: null,
           })
           if (data.type === 'pass') {

@@ -33,21 +33,36 @@ const TICKER_COLORS = [
 ]
 
 // Marker geometry — dots on the price line + light-cone glows radiating from
-// them (up for buys, down for sells). The cones fade to transparent over
-// CONE_HEIGHT px and screen-blend for constructive interference where
-// multiple close-together trades overlap.
+// them (up for buys, down for sells). Cone height scales with trade size.
+// A 'medium' cone at desktop is 32px; tiny is barely visible, xl is 2x medium.
+// We rely on natural alpha compositing + `mix-blend-mode: multiply` (in the
+// cone group) for the constructive-interference effect: overlapping greens
+// darken into a more saturated green, which reads as "more activity" on a
+// light background.
 interface MarkerGeom {
   DOT_R: number
   DOT_STROKE: number
-  CONE_HEIGHT: number
-  CONE_HALFWIDTH: number
+  /** Maximum cone footprint — used for clustering & hit-testing. */
+  CONE_HEIGHT_MAX: number
+  CONE_HALFWIDTH_MAX: number
+  /** Per-size cone height in px. Half-width = height * 0.5. */
+  CONE_SIZE: Record<import('../types/database').ActionSize, number>
 }
 
 function getMarkerGeom(width: number): MarkerGeom {
-  if (width < 480) {
-    return { DOT_R: 3.5, DOT_STROKE: 1, CONE_HEIGHT: 20, CONE_HALFWIDTH: 10 }
+  const mobile = width < 480
+  // Heights tuned so medium is "about what you had before" but a bit longer.
+  const sizes = mobile
+    ? { tiny: 10, small: 18, medium: 28, large: 42, xl: 60 }
+    : { tiny: 12, small: 22, medium: 34, large: 52, xl: 72 }
+  const maxH = sizes.xl
+  return {
+    DOT_R: mobile ? 3.5 : 4,
+    DOT_STROKE: 1,
+    CONE_HEIGHT_MAX: maxH,
+    CONE_HALFWIDTH_MAX: Math.round(maxH * 0.5),
+    CONE_SIZE: sizes,
   }
-  return { DOT_R: 4, DOT_STROKE: 1, CONE_HEIGHT: 24, CONE_HALFWIDTH: 12 }
 }
 
 function _getDecisionCountsByType(decisions: Array<{ type: string }> | undefined) {
@@ -148,7 +163,7 @@ function TimelineChartVisx({
   const leftAxisLabelFontSize = isMobile ? 12 : 14
   const numBottomTicks = width > 400 ? 8 : 5
   const markerGeom = useMemo(() => getMarkerGeom(width), [width])
-  const { DOT_R, DOT_STROKE, CONE_HEIGHT, CONE_HALFWIDTH } = markerGeom
+  const { DOT_R, DOT_STROKE, CONE_HEIGHT_MAX, CONE_HALFWIDTH_MAX, CONE_SIZE } = markerGeom
   // Stable id suffix for SVG <defs> — prevents collisions when multiple
   // TimelineChartVisx instances are on screen at the same time.
   const chartId = useId()
@@ -306,19 +321,19 @@ function TimelineChartVisx({
     left = Math.max(4, Math.min(width - TOOLTIP_W - 4, left))
 
     let top: number
-    // Tooltip sits past the cone tip, with a small gap. `anchorY` is already
-    // the marker dot, so the cone for a buy extends anchorY - CONE_HEIGHT up.
+    // Tooltip sits past the longest possible cone tip (we don't know the
+    // exact size of the active cluster's cone from here, so use the max).
     if (activeArrow.direction === 'buy') {
-      top = anchorY - CONE_HEIGHT - TOOLTIP_H_EST - 8
-      if (top < 4) top = anchorY + CONE_HEIGHT + 8
+      top = anchorY - CONE_HEIGHT_MAX - TOOLTIP_H_EST - 8
+      if (top < 4) top = anchorY + CONE_HEIGHT_MAX + 8
     } else {
-      top = anchorY + CONE_HEIGHT + 8
-      if (top + TOOLTIP_H_EST > height - 4) top = anchorY - CONE_HEIGHT - TOOLTIP_H_EST - 8
+      top = anchorY + CONE_HEIGHT_MAX + 8
+      if (top + TOOLTIP_H_EST > height - 4) top = anchorY - CONE_HEIGHT_MAX - TOOLTIP_H_EST - 8
     }
     top = Math.max(4, top)
 
     return { left, top }
-  }, [activeArrow, width, height, responsiveMargin, CONE_HEIGHT])
+  }, [activeArrow, width, height, responsiveMargin, CONE_HEIGHT_MAX])
 
   if (width < 10 || height < 10) return null
 
@@ -429,18 +444,38 @@ function TimelineChartVisx({
           <rect x={0} y={0} width={innerWidth} height={innerHeight}
             fill="transparent" onClick={handleBackgroundClick} />
 
-          {/* Buy/sell markers: light-cone glows on the price line + colored dots.
-              Per-marker cones screen-blend into each other, so close-together
-              trades naturally brighten where their cones overlap. Clicks open
-              the overlay per-cluster (grouped by x-proximity). */}
+          {/* Buy/sell markers: coloured dots on the price line + light-cone
+              glows radiating up (buys) or down (sells). Cone height scales
+              with trade size (tiny → xl). Overlapping cones are rendered in
+              a <g> with `mix-blend-mode: multiply`, which on a light chart
+              background darkens/saturates the overlap — the "constructive
+              interference" effect that reads as "more activity here".
+              Per-cluster hit rectangles drive click/hover. */}
           {(() => {
-            const MIN_GAP = CONE_HALFWIDTH * 2 + 8  // cluster markers whose cones overlap
+            const MIN_GAP = CONE_HALFWIDTH_MAX * 2 + 8  // cluster cones whose glows overlap
 
             interface Marker {
               cx: number; priceY: number; point: TimelineChartPoint
               buyCount: number; sellCount: number
               buyFirstId: string | null; sellFirstId: string | null
               buyTickers: string[]; sellTickers: string[]
+              /** Largest size among buys on this marker — drives cone height. */
+              buyMaxSize: import('../types/database').ActionSize
+              sellMaxSize: import('../types/database').ActionSize
+            }
+            const sizeRank: Record<import('../types/database').ActionSize, number> = {
+              tiny: 0, small: 1, medium: 2, large: 3, xl: 4,
+            }
+            const maxSize = (
+              arr: { action: { size?: string | null } }[],
+              fallback: import('../types/database').ActionSize = 'medium',
+            ): import('../types/database').ActionSize => {
+              let best = fallback
+              for (const d of arr) {
+                const s = (d.action.size as import('../types/database').ActionSize | null | undefined) ?? 'medium'
+                if (sizeRank[s] > sizeRank[best]) best = s
+              }
+              return best
             }
             const markers: Marker[] = data.flatMap((pt) => {
               const decisions = pt.decisions ?? []
@@ -457,6 +492,8 @@ function TimelineChartVisx({
                 sellFirstId: sells[0]?.action.id ?? null,
                 buyTickers: [...new Set(buys.map((d) => (d.action.ticker ?? '').toUpperCase()).filter(Boolean))],
                 sellTickers: [...new Set(sells.map((d) => (d.action.ticker ?? '').toUpperCase()).filter(Boolean))],
+                buyMaxSize: buys.length ? maxSize(buys) : 'medium',
+                sellMaxSize: sells.length ? maxSize(sells) : 'medium',
               }]
             })
 
@@ -487,22 +524,27 @@ function TimelineChartVisx({
             const isSellMarkerGreyed = (m: Marker) => selectedTicker != null
               && !(m.point.decisions ?? []).some((d) => d.type === 'sell' && (d.action.ticker ?? '').toUpperCase() === selectedTicker)
 
+            // Per-marker cone geometry: height from size, half-width = height * 0.5
+            // (preserves ~45° cone angle at any size).
+            const coneHeight = (s: import('../types/database').ActionSize) => CONE_SIZE[s]
+            const coneHalfW = (s: import('../types/database').ActionSize) => Math.round(CONE_SIZE[s] * 0.5)
+
             // 1. Cones — wrapped in a <g> with clipPath so they stay inside
-            //    the plot area. We rely on normal alpha compositing (no
-            //    `mix-blend-mode: screen`, which degenerates to pure white on a
-            //    white background) for the constructive-interference effect:
-            //    two overlapping translucent greens give 1 - (1-a)^2 in the
-            //    overlap ≈ more saturated green. The per-marker opacity also
-            //    scales with count so a day with 3+ trades is visibly louder.
+            //    the plot area, and mix-blend-mode: multiply so overlapping
+            //    cones DARKEN (on a white bg that reads as "more saturated"
+            //    — the constructive-interference effect the UX proposal asks
+            //    for). Per-marker opacity also scales with count.
             els.push(
-              <g key="cone-layer" clipPath={`url(#plot-clip-${chartId})`} style={{ pointerEvents: 'none' }}>
+              <g key="cone-layer" clipPath={`url(#plot-clip-${chartId})`} style={{ pointerEvents: 'none', mixBlendMode: 'multiply' }}>
                 {buyMarkers.map((m, i) => {
                   const greyed = isBuyMarkerGreyed(m)
-                  const op = greyed ? 0.22 : Math.min(0.95, 0.7 + (m.buyCount - 1) * 0.1)
+                  const h = coneHeight(m.buyMaxSize)
+                  const hw = coneHalfW(m.buyMaxSize)
+                  const op = greyed ? 0.18 : Math.min(0.95, 0.6 + (m.buyCount - 1) * 0.12)
                   return (
                     <path
                       key={`bc-${i}`}
-                      d={conePath(m.cx, m.priceY, CONE_HALFWIDTH, CONE_HEIGHT, -1)}
+                      d={conePath(m.cx, m.priceY, hw, h, -1)}
                       fill={greyed ? ARROW_GREYED : `url(#buy-glow-${chartId})`}
                       opacity={op}
                     />
@@ -510,11 +552,13 @@ function TimelineChartVisx({
                 })}
                 {sellMarkers.map((m, i) => {
                   const greyed = isSellMarkerGreyed(m)
-                  const op = greyed ? 0.22 : Math.min(0.95, 0.7 + (m.sellCount - 1) * 0.1)
+                  const h = coneHeight(m.sellMaxSize)
+                  const hw = coneHalfW(m.sellMaxSize)
+                  const op = greyed ? 0.18 : Math.min(0.95, 0.6 + (m.sellCount - 1) * 0.12)
                   return (
                     <path
                       key={`sc-${i}`}
-                      d={conePath(m.cx, m.priceY, CONE_HALFWIDTH, CONE_HEIGHT, 1)}
+                      d={conePath(m.cx, m.priceY, hw, h, 1)}
                       fill={greyed ? ARROW_GREYED : `url(#sell-glow-${chartId})`}
                       opacity={op}
                     />
@@ -523,37 +567,73 @@ function TimelineChartVisx({
               </g>
             )
 
-            // 2. Colored dots on the line — sells first, buys on top so a same-day
-            //    buy+sell shows the buy dot (more actionable). Any hovered/active
-            //    cluster gets a slightly bigger radius for feedback.
+            // 2. Dots on the line. Three cases:
+            //    - buy only → green dot
+            //    - sell only → red dot
+            //    - both on same marker → SINGLE split dot (green top, red
+            //      bottom) so they don't stack and fight for clicks.
             const anyHoverOrActiveDotInGroup = (group: Marker[], dir: 'buy' | 'sell') => {
               const key = dir === 'buy' ? `buy-${buyGroups.indexOf(group)}` : `sell-${sellGroups.indexOf(group)}`
               return hoveredKey === key || activeArrow?.key === key
             }
-            const dotFor = (m: Marker, dir: 'buy' | 'sell', hovered: boolean) => {
-              const greyed = dir === 'buy' ? isBuyMarkerGreyed(m) : isSellMarkerGreyed(m)
-              const fill = greyed ? ARROW_GREYED : (dir === 'buy' ? ARROW_BUY_COLOR : ARROW_SELL_COLOR)
+            const hoveredBuyMarkers = new Set<Marker>()
+            const hoveredSellMarkers = new Set<Marker>()
+            buyGroups.forEach((g) => { if (anyHoverOrActiveDotInGroup(g, 'buy')) g.forEach((m) => hoveredBuyMarkers.add(m)) })
+            sellGroups.forEach((g) => { if (anyHoverOrActiveDotInGroup(g, 'sell')) g.forEach((m) => hoveredSellMarkers.add(m)) })
+
+            const mixedMarkers = markers.filter((m) => m.buyCount > 0 && m.sellCount > 0)
+            const mixedSet = new Set(mixedMarkers)
+
+            // Solid green for buy-only
+            buyMarkers.filter((m) => !mixedSet.has(m)).forEach((m) => {
+              const greyed = isBuyMarkerGreyed(m)
+              const fill = greyed ? ARROW_GREYED : ARROW_BUY_COLOR
+              const hovered = hoveredBuyMarkers.has(m)
               const r = hovered ? DOT_R + 1.5 : DOT_R
-              return (
-                <circle
-                  key={`dot-${dir}-${m.cx}-${m.priceY}`}
+              els.push(
+                <circle key={`dot-buy-${m.cx}-${m.priceY}`}
                   cx={m.cx} cy={m.priceY} r={r}
                   fill={fill} stroke="#fff" strokeWidth={DOT_STROKE}
-                  style={{ pointerEvents: 'none' }}
-                />
+                  style={{ pointerEvents: 'none' }} />
               )
-            }
-            sellGroups.forEach((group) => {
-              const hovered = anyHoverOrActiveDotInGroup(group, 'sell')
-              group.forEach((m) => els.push(dotFor(m, 'sell', hovered)))
             })
-            buyGroups.forEach((group) => {
-              const hovered = anyHoverOrActiveDotInGroup(group, 'buy')
-              group.forEach((m) => els.push(dotFor(m, 'buy', hovered)))
+            // Solid red for sell-only
+            sellMarkers.filter((m) => !mixedSet.has(m)).forEach((m) => {
+              const greyed = isSellMarkerGreyed(m)
+              const fill = greyed ? ARROW_GREYED : ARROW_SELL_COLOR
+              const hovered = hoveredSellMarkers.has(m)
+              const r = hovered ? DOT_R + 1.5 : DOT_R
+              els.push(
+                <circle key={`dot-sell-${m.cx}-${m.priceY}`}
+                  cx={m.cx} cy={m.priceY} r={r}
+                  fill={fill} stroke="#fff" strokeWidth={DOT_STROKE}
+                  style={{ pointerEvents: 'none' }} />
+              )
+            })
+            // Split dot for mixed: top semicircle = green, bottom = red.
+            mixedMarkers.forEach((m) => {
+              const greyedBuy = isBuyMarkerGreyed(m)
+              const greyedSell = isSellMarkerGreyed(m)
+              const topFill = greyedBuy ? ARROW_GREYED : ARROW_BUY_COLOR
+              const botFill = greyedSell ? ARROW_GREYED : ARROW_SELL_COLOR
+              const hovered = hoveredBuyMarkers.has(m) || hoveredSellMarkers.has(m)
+              const r = hovered ? DOT_R + 1.5 : DOT_R
+              els.push(
+                <g key={`dot-mixed-${m.cx}-${m.priceY}`} style={{ pointerEvents: 'none' }}>
+                  {/* Top half (green) — apex up */}
+                  <path d={`M ${m.cx - r} ${m.priceY} A ${r} ${r} 0 0 1 ${m.cx + r} ${m.priceY} Z`} fill={topFill} />
+                  {/* Bottom half (red) — apex down */}
+                  <path d={`M ${m.cx - r} ${m.priceY} A ${r} ${r} 0 0 0 ${m.cx + r} ${m.priceY} Z`} fill={botFill} />
+                  {/* Outer white stroke */}
+                  <circle cx={m.cx} cy={m.priceY} r={r} fill="none" stroke="#fff" strokeWidth={DOT_STROKE} />
+                </g>
+              )
             })
 
             // 3. Per-cluster invisible hit rectangles for click/hover. One
-            //    rectangle covers the full cone region for that cluster.
+            //    rectangle covers the full cone region for that cluster. We
+            //    size the rect by the cluster's largest cone so clicks land
+            //    on the glow, not empty space beyond it.
             const addHitRect = (group: Marker[], dir: 'buy' | 'sell', gi: number) => {
               const clusterKey = `${dir}-${gi}`
               const isActive = activeArrow?.key === clusterKey
@@ -565,10 +645,12 @@ function TimelineChartVisx({
               const tickers = [...new Set(group.flatMap((m) => dir === 'buy' ? m.buyTickers : m.sellTickers))]
               const firstId = dir === 'buy' ? group[0].buyFirstId : group[0].sellFirstId
               const repMarker = group.reduce((best, m) => Math.abs(m.cx - avgCx) < Math.abs(best.cx - avgCx) ? m : best, group[0])
-              const xStart = Math.min(...group.map((m) => m.cx)) - CONE_HALFWIDTH - 4
-              const xEnd = Math.max(...group.map((m) => m.cx)) + CONE_HALFWIDTH + 4
-              const yStart = dir === 'buy' ? anchorY - CONE_HEIGHT - 4 : anchorY - 4
-              const ySize = CONE_HEIGHT + 8
+              const clusterMaxH = Math.max(...group.map((m) => coneHeight(dir === 'buy' ? m.buyMaxSize : m.sellMaxSize)))
+              const clusterMaxHW = Math.max(...group.map((m) => coneHalfW(dir === 'buy' ? m.buyMaxSize : m.sellMaxSize)))
+              const xStart = Math.min(...group.map((m) => m.cx)) - clusterMaxHW - 4
+              const xEnd = Math.max(...group.map((m) => m.cx)) + clusterMaxHW + 4
+              const yStart = dir === 'buy' ? anchorY - clusterMaxH - 4 : anchorY - 4
+              const ySize = clusterMaxH + 8
               els.push(
                 <rect
                   key={`hit-${clusterKey}`}

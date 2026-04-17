@@ -25,8 +25,8 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import CheckIcon from '@mui/icons-material/Check'
-import { ACTION_TYPES } from '../types/database'
-import type { Action } from '../types/database'
+import { ACTION_TYPES, ACTION_SIZES, isDirectionalAction } from '../types/database'
+import type { Action, ActionSize } from '../types/database'
 import TickerAutocomplete from './TickerAutocomplete'
 import DecisionChip from './DecisionChip'
 import ReasonField from './ReasonField'
@@ -48,6 +48,7 @@ interface ActionFormDialogProps {
     notes: string
     kill_criteria: string
     pre_mortem_text: string
+    size: ActionSize | null
   }) => Promise<void>
   initial?: Partial<Action> | null
 }
@@ -87,6 +88,7 @@ export default function ActionFormDialog({
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [kill_criteria, setKillCriteria] = useState((initial as { kill_criteria?: string })?.kill_criteria ?? '')
   const [pre_mortem_text, setPreMortemText] = useState((initial as { pre_mortem_text?: string | null })?.pre_mortem_text ?? '')
+  const [size, setSize] = useState<ActionSize>((initial?.size as ActionSize) ?? 'medium')
   const [isOption, setIsOption] = useState(false)
   const [optionExpiry, setOptionExpiry] = useState('')
   const [optionStrike, setOptionStrike] = useState('')
@@ -120,6 +122,7 @@ export default function ActionFormDialog({
     setNotes(initial?.notes ?? '')
     setKillCriteria((initial as { kill_criteria?: string })?.kill_criteria ?? '')
     setPreMortemText((initial as { pre_mortem_text?: string | null })?.pre_mortem_text ?? '')
+    setSize((initial?.size as ActionSize) ?? 'medium')
   }, [open, initial])
 
   const isNewBuy = !initial?.id && type === 'buy'
@@ -173,6 +176,7 @@ export default function ActionFormDialog({
         notes,
         kill_criteria: kill_criteria || '',
         pre_mortem_text: pre_mortem_text || '',
+        size: isDirectionalAction(type) ? size : null,
       })
       onClose()
     } catch (err: unknown) {
@@ -339,6 +343,40 @@ export default function ActionFormDialog({
               onChange={(e) => setShares(e.target.value === '' ? '' : Number(e.target.value))}
               inputProps={{ min: 0, step: 1 }}
             />
+
+            {isDirectionalAction(type) && (
+              <Box>
+                <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+                  Size
+                  <Typography component="span" variant="caption" color="text.disabled" sx={{ ml: 0.5, fontWeight: 400 }}>
+                    — scales the glow on the timeline
+                  </Typography>
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                  {ACTION_SIZES.map((s) => {
+                    const selected = size === s
+                    return (
+                      <Button
+                        key={s}
+                        size="small"
+                        variant={selected ? 'contained' : 'outlined'}
+                        onClick={() => setSize(s)}
+                        sx={{
+                          textTransform: 'none',
+                          minWidth: 0,
+                          px: 1.25,
+                          py: 0.25,
+                          fontSize: '0.75rem',
+                          fontWeight: selected ? 700 : 500,
+                        }}
+                      >
+                        {s === 'tiny' ? 'Tiny' : s === 'small' ? 'Small' : s === 'medium' ? 'Medium' : s === 'large' ? 'Large' : 'Very big'}
+                      </Button>
+                    )
+                  })}
+                </Box>
+              </Box>
+            )}
 
             <Box>
               <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 1 }}>

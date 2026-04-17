@@ -606,6 +606,7 @@ export default function EntryDetailPage() {
               notes: data.notes,
               kill_criteria: data.kill_criteria || null,
               pre_mortem_text: data.pre_mortem_text || null,
+              size: data.size,
             })
             if (data.type === 'pass' && data.ticker?.trim()) {
               await ensurePassedForUser(user.id, data.ticker.trim(), {
@@ -635,6 +636,7 @@ export default function EntryDetailPage() {
             notes: data.notes,
             kill_criteria: data.kill_criteria || null,
             pre_mortem_text: data.pre_mortem_text || null,
+            size: data.size,
             raw_snippet: null,
           })
           if (data.type === 'pass' && user?.id && data.ticker?.trim()) {

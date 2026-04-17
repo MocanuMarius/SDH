@@ -68,6 +68,24 @@ export const ACTION_TYPES = [
 ] as const
 export type ActionType = (typeof ACTION_TYPES)[number]
 
+/**
+ * Relative size of a directional trade. Drives the height of the light-cone
+ * glow on the timeline chart — bigger trade = taller cone = more visual
+ * weight. Meaningful for: buy, sell, add_more, trim, cover, short, speculate.
+ * Existing rows were backfilled to 'medium'.
+ */
+export const ACTION_SIZES = ['tiny', 'small', 'medium', 'large', 'xl'] as const
+export type ActionSize = (typeof ACTION_SIZES)[number]
+
+/** Which action types are "directional" and therefore carry a light cone. */
+export const DIRECTIONAL_ACTION_TYPES: readonly ActionType[] = [
+  'buy', 'sell', 'add_more', 'trim', 'cover', 'short', 'speculate',
+]
+
+export function isDirectionalAction(type: ActionType | string | null | undefined): boolean {
+  return DIRECTIONAL_ACTION_TYPES.includes(type as ActionType)
+}
+
 export interface Action {
   id: string
   /** Owning user — required for RLS even when entry_id is null (standalone decision). */
@@ -87,6 +105,8 @@ export interface Action {
   kill_criteria?: string | null
   /** F22: If this decision fails, what is the most likely reason? */
   pre_mortem_text?: string | null
+  /** Relative trade size. null for non-directional decisions. Defaults to 'medium'. */
+  size?: ActionSize | null
   raw_snippet: string | null
   created_at: string
   updated_at: string
