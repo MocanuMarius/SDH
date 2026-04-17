@@ -47,6 +47,8 @@ import TagChip from '../components/TagChip'
 import { investmentScoreBadge } from '../utils/investmentScore'
 import SwipeableCard from '../components/SwipeableCard'
 import PullToRefresh from '../components/PullToRefresh'
+import { EmptyState } from '../components/system'
+import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined'
 
 /** Initial entries to load (6 rows × 4 cols) */
 const INITIAL_PAGE_SIZE = 24
@@ -783,11 +785,24 @@ export default function EntryListPage() {
           </Stack>
         )
       ) : filteredEntries.length === 0 ? (
-        <Typography color="text.secondary">
-          {entries.length === 0
-            ? 'No entries yet. Create one to get started.'
-            : 'No entries match the current filters.'}
-        </Typography>
+        entries.length === 0 ? (
+          <EmptyState
+            icon={<ArticleOutlinedIcon />}
+            title="No journal entries yet"
+            description="Every investment decision starts with a thesis. Create your first entry — pick a ticker, write a paragraph, attach a buy/sell decision."
+            action={
+              <Button component={RouterLink} to="/entries/new" variant="contained" size="small" sx={{ textTransform: 'none' }}>
+                Create first entry
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            dense
+            title="No entries match the current filters"
+            description="Try a different bucket, clear the tag selection, or widen the search term."
+          />
+        )
       ) : gridView ? (
         <Grid container spacing={1} sx={{ alignItems: 'flex-start' }}>
           {gridItems}
