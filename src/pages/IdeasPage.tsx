@@ -7,10 +7,12 @@ import {
   TextField,
   InputAdornment,
   Skeleton,
+  useMediaQuery,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import SearchIcon from '@mui/icons-material/Search'
 import { DataGrid } from '@mui/x-data-grid'
-import type { GridColDef, GridRenderCellParams, GridRowParams } from '@mui/x-data-grid'
+import type { GridColDef, GridColumnVisibilityModel, GridRenderCellParams, GridRowParams } from '@mui/x-data-grid'
 import { normalizeTickerToCompany } from '../utils/tickerCompany'
 import { isAutomatedEntry } from '../utils/entryTitle'
 import RelativeDate from '../components/RelativeDate'
@@ -35,6 +37,8 @@ export default function IdeasPage() {
   const navigate = useNavigate()
   const { openChart } = useTickerChart()
   const [search, setSearch] = useState('')
+  const theme = useTheme()
+  const isMobile = !useMediaQuery(theme.breakpoints.up('md'))
   const [error, setError] = useState<string | null>(null)
 
   // ─── react-query: actions/passed/entries are shared across pages ──
@@ -115,7 +119,7 @@ export default function IdeasPage() {
     {
       field: 'ticker',
       headerName: '$',
-      width: 120,
+      width: isMobile ? 88 : 120,
       renderCell: (p: GridRenderCellParams<IdeaRow>) => (
         <Chip
           size="small"
@@ -130,14 +134,14 @@ export default function IdeasPage() {
       field: 'company',
       headerName: 'Name',
       flex: 1,
-      minWidth: 120,
+      minWidth: isMobile ? 100 : 140,
       renderCell: (p: GridRenderCellParams<IdeaRow>) =>
         (p.value as string) || p.row.ticker,
     },
     {
       field: 'lastDate',
       headerName: 'Last entry',
-      width: 130,
+      width: isMobile ? 100 : 130,
       renderCell: (p: GridRenderCellParams<IdeaRow>) => (
         <RelativeDate date={p.value as string} />
       ),
@@ -161,6 +165,12 @@ export default function IdeasPage() {
       },
     },
   ]
+
+  // On mobile (Pixel 8 ~ 412px) we drop Decisions count and Status to make
+  // room for $, Name, Last entry — the three users actually scan for.
+  const columnVisibilityModel: GridColumnVisibilityModel = isMobile
+    ? { decisionCount: false, isPassed: false }
+    : {}
 
   return (
     <Box>
@@ -210,6 +220,7 @@ export default function IdeasPage() {
         <DataGrid
           rows={ideas}
           columns={columns}
+          columnVisibilityModel={columnVisibilityModel}
           density="compact"
           autoHeight
           disableRowSelectionOnClick
@@ -223,8 +234,15 @@ export default function IdeasPage() {
             borderColor: 'divider',
             borderRadius: 1,
             cursor: 'pointer',
-            '& .MuiDataGrid-cell': { alignItems: 'center', display: 'flex' },
-            '& .MuiDataGrid-columnHeader': { bgcolor: 'background.default' },
+            '& .MuiDataGrid-cell': {
+              alignItems: 'center',
+              display: 'flex',
+              ...(isMobile && { paddingLeft: '6px', paddingRight: '6px' }),
+            },
+            '& .MuiDataGrid-columnHeader': {
+              bgcolor: 'background.default',
+              ...(isMobile && { paddingLeft: '6px', paddingRight: '6px' }),
+            },
             '& .MuiDataGrid-row': { cursor: 'pointer' },
           }}
         />
