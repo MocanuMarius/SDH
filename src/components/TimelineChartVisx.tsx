@@ -144,7 +144,7 @@ function TimelineChartVisx({
   yDomain,
   width,
   height,
-  selectedActionId: _selectedActionId,
+  selectedActionId,
   selectedTicker,
   onSelectAction,
   onChartClick,
