@@ -52,6 +52,7 @@ import { normalizeTicker } from '../utils/tickerNormalization'
 import { fetchChartData } from '../services/chartApiService'
 import { stripMarkdown } from '../utils/text'
 import { isAutomatedEntry } from '../utils/entryTitle'
+import { parseOptionSymbol } from '../utils/optionSymbol'
 import { ERROR_TYPE_LABELS } from '../utils/errorTypeLabels'
 import { computeCounterfactualFromChart, computeCagrFromChart, formatCagrPercent, formatDurationSince } from '../utils/cagr'
 import type { Entry } from '../types/database'
@@ -79,7 +80,23 @@ export default function InsightsPage() {
   const outcomesQ = useOutcomes()
   const passedQ = usePassed()
   const entries = entriesQ.data ?? []
-  const actions = actionsQ.data ?? []
+  const rawActions = actionsQ.data ?? []
+  // Stats exclude:
+  //   - actions on automated/IBKR-imported entries (tags "Automated" / "IBKR"
+  //     or author "IBKR") — kept for raw data preservation, not analysis
+  //   - option tickers — IBKR option rows are absurdly noisy ($0.10 premiums
+  //     generating 500,000% returns) and the app treats them as a side book
+  const autoEntryIdSet = useMemo(
+    () => new Set(entries.filter(isAutomatedEntry).map((e) => e.id)),
+    [entries]
+  )
+  const actions = useMemo(
+    () => rawActions.filter((a) =>
+      (a.entry_id == null || !autoEntryIdSet.has(a.entry_id))
+      && parseOptionSymbol(a.ticker) == null
+    ),
+    [rawActions, autoEntryIdSet]
+  )
   const outcomes = outcomesQ.data ?? []
   const passedList = passedQ.data ?? []
   const passedTickers = useMemo(
@@ -157,10 +174,10 @@ export default function InsightsPage() {
   const hasWriteupContent = (e: Entry) =>
     (stripMarkdown((e.title_markdown || '').trim()) + ' ' + stripMarkdown((e.body_markdown || '').trim())).trim().length >= 20
 
-  // Exclude automated IBKR entries from all counts and calculations.
-  const autoEntryIds = new Set(entries.filter(isAutomatedEntry).map((e) => e.id))
-  const manualEntries = entries.filter((e) => !autoEntryIds.has(e.id))
-  const manualActions = actions.filter((a) => a.entry_id == null || !autoEntryIds.has(a.entry_id))
+  // `actions` above is already manual + non-option filtered. Derive the
+  // manual-entries and corresponding outcomes from it.
+  const manualEntries = entries.filter((e) => !autoEntryIdSet.has(e.id))
+  const manualActions = actions
   const actionIds = new Set(manualActions.map((a) => a.id))
   const manualOutcomes = outcomes.filter((o) => actionIds.has(o.action_id))
 

@@ -89,6 +89,15 @@ export default function AnalyticsDashboardPage() {
 
   return (
     <Box>
+      {/* Framing caption — Overview is outcomes-only, Performance covers all
+          decisions. Without this the numbers look disagreed-upon between tabs. */}
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5, fontStyle: 'italic' }}>
+        Realized outcomes only — win rate and process quality for decisions you've marked closed.
+        For all decisions (open + closed, recent activity, CAGR on passes),
+        see <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>Performance</Box>.
+        IBKR-imported entries and option tickers are excluded from both.
+      </Typography>
+
       {/* Filters — collapsed into a button on mobile */}
       <Paper sx={{ p: { xs: 1, sm: 2 }, mb: 2 }}>
         <Box display="flex" alignItems="center" justifyContent="space-between" gap={1}>

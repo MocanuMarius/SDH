@@ -75,6 +75,12 @@ export async function fetchOutcomesWithContext(): Promise<OutcomeAnalytics[]> {
     // Only real Journalytic decisions count.
     if (isAutomatedEntry(entry)) continue
 
+    // Exclude option trades from stats. IBKR-imported option rows report
+    // absurd % returns (e.g. 500,000% on a $0.10 premium) and the user
+    // treats them as noise — analytics should be about the underlying
+    // investment theses, not the option book.
+    if (parseOptionSymbol(action.ticker) != null) continue
+
     const decisionDate = new Date(action.action_date)
     const outcomeDate = new Date(outcome.outcome_date)
     const holdingDays = Math.floor((outcomeDate.getTime() - decisionDate.getTime()) / (1000 * 60 * 60 * 24))
@@ -82,12 +88,8 @@ export async function fetchOutcomesWithContext(): Promise<OutcomeAnalytics[]> {
     const decisionPrice = parsePrice(action.price)
     const hasFullData = decisionPrice > 0 && action.shares != null && action.shares > 0
 
-    // Option detection: if the action's ticker parses as an option symbol, the
-    // true capital-at-risk is contracts * 100 * premium (the 100 is the standard
-    // OCC contract multiplier). Without this adjustment, a $500 P&L on a 1-contract
-    // $0.10 premium reports as 500,000% instead of 50%.
-    const isOption = parseOptionSymbol(action.ticker) != null
-    const optionMultiplier = isOption ? 100 : 1
+    // All surviving rows are non-option equities; no contract multiplier needed.
+    const optionMultiplier = 1
 
     // Return calculation:
     // - If we have price + shares: use realized_pnl / (shares * price * multiplier)
@@ -96,14 +98,12 @@ export async function fetchOutcomesWithContext(): Promise<OutcomeAnalytics[]> {
       ? Math.max(-100, (outcome.realized_pnl / (action.shares! * decisionPrice * optionMultiplier)) * 100)
       : null
 
-    // finalPrice is a pseudo "exit equity price". For equities we derive it from
-    // the realised P&L per share; for options it isn't meaningful (the "price" is
-    // the premium, not the underlying), so we fall back to decisionPrice.
-    const finalPrice = isOption
-      ? decisionPrice
-      : hasFullData && outcome.realized_pnl != null
-        ? decisionPrice + outcome.realized_pnl / action.shares!
-        : decisionPrice
+    // finalPrice is a pseudo "exit equity price" derived from realised P&L
+    // per share. Options were filtered out above, so we only need the
+    // equity branch here.
+    const finalPrice = hasFullData && outcome.realized_pnl != null
+      ? decisionPrice + outcome.realized_pnl / action.shares!
+      : decisionPrice
 
     // Get sentiment for the decision date
     const sentimentForDate = sentimentBands.find(
