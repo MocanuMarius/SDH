@@ -1,45 +1,56 @@
--- Watchlist diagnostic — paste this into Supabase SQL Editor and share the
--- output. It will tell us whether the `watchlist` table exists, whether RLS is
--- on, what policies are configured, and how many rows the current user can see.
+-- Watchlist diagnostic — UPDATED 2026-04-17 with the correct table names.
 --
--- Run it while signed in to Supabase as the app's auth.uid() owner.
+-- The app uses THREE tables under the watchlist feature, not one:
+--   - public.watchlist_items          (the alerts themselves)
+--   - public.watchlist_alert_history  (trigger events)
+--   - public.watchlist_audit_log      (manual edits / enable-disable events)
+--
+-- My earlier diagnostic asked about `public.watchlist` (singular) by mistake —
+-- that table was never created because the code doesn't use it. The "relation
+-- does not exist" error from that query was expected and harmless.
+--
+-- Run this updated version if you want a health-check. Share the output if
+-- anything looks off.
 
--- 1. Does the table exist and what columns does it have?
+-- 1. Do all three tables exist and what columns do they have?
 SELECT
-  table_schema,
   table_name,
   column_name,
   data_type,
   is_nullable
 FROM information_schema.columns
 WHERE table_schema = 'public'
-  AND table_name = 'watchlist'
-ORDER BY ordinal_position;
+  AND table_name IN ('watchlist_items', 'watchlist_alert_history', 'watchlist_audit_log')
+ORDER BY table_name, ordinal_position;
 
--- 2. Is RLS enabled?
+-- 2. Is RLS enabled on each?
 SELECT
-  schemaname,
   tablename,
   rowsecurity AS rls_enabled
 FROM pg_tables
 WHERE schemaname = 'public'
-  AND tablename = 'watchlist';
+  AND tablename IN ('watchlist_items', 'watchlist_alert_history', 'watchlist_audit_log')
+ORDER BY tablename;
 
--- 3. What policies exist?
+-- 3. What policies exist? (Gives ownership-scope per table.)
 SELECT
+  tablename,
   policyname,
   cmd,
-  permissive,
-  roles,
   qual,
   with_check
 FROM pg_policies
 WHERE schemaname = 'public'
-  AND tablename = 'watchlist';
+  AND tablename IN ('watchlist_items', 'watchlist_alert_history', 'watchlist_audit_log')
+ORDER BY tablename, policyname;
 
--- 4. Row count visible to the currently-authenticated role (anon/authenticated
---    will be scoped by RLS; service-role sees everything).
-SELECT count(*) AS visible_rows FROM public.watchlist;
+-- 4. Visible row counts for the currently-authenticated user.
+SELECT 'watchlist_items'         AS table_name, count(*) AS visible_rows FROM public.watchlist_items
+UNION ALL
+SELECT 'watchlist_alert_history', count(*) FROM public.watchlist_alert_history
+UNION ALL
+SELECT 'watchlist_audit_log',     count(*) FROM public.watchlist_audit_log;
 
--- 5. Last 3 rows the current user can see (confirms data shape).
-SELECT * FROM public.watchlist ORDER BY created_at DESC LIMIT 3;
+-- 5. Last 3 items and last 3 audit events (confirms data shape).
+SELECT * FROM public.watchlist_items      ORDER BY created_at DESC LIMIT 3;
+SELECT * FROM public.watchlist_audit_log  ORDER BY created_at DESC LIMIT 3;
