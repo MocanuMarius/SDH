@@ -61,8 +61,8 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
         <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5, flexWrap: 'wrap' }}>
             <DecisionChip type={action.type} size="small" />
-            <Typography variant="subtitle2" color="text.secondary" fontWeight={600}>
-              Decision
+            <Typography component="span" variant="caption" color="text.secondary">
+              <RelativeDate date={action.action_date} variant="caption" sx={{ color: 'inherit' }} />
             </Typography>
           </Box>
           {tickerLabel && (
@@ -89,9 +89,6 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
             </Box>
           )}
           <Box component="dl" sx={{ m: 0, '& dd': { m: 0 }, '& dt': { display: 'inline', fontWeight: 600 }, '& dd + dt': { mt: 0.5 } }}>
-            <Typography component="div" variant="body2" sx={{ mt: 0.25 }}>
-              <Box component="span" sx={{ fontWeight: 600 }}>Date:</Box> <RelativeDate date={action.action_date} variant="body2" />
-            </Typography>
             {(action.price != null && action.price !== '') && (
               <Typography component="div" variant="body2">
                 <Box component="span" sx={{ fontWeight: 600 }}>Price:</Box> {action.price} {action.currency || ''}

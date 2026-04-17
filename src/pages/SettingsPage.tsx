@@ -30,6 +30,7 @@ import {
 import type { CustomDecisionType } from '../utils/customDecisionTypes'
 import TagChip from '../components/TagChip'
 import DecisionChip from '../components/DecisionChip'
+import { PageHeader } from '../components/system'
 
 const DEFAULT_COLOR = '#6366f1'
 
@@ -145,9 +146,11 @@ export default function SettingsPage() {
 
   return (
     <Box>
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
-        Settings
-      </Typography>
+      <PageHeader
+        title="Settings"
+        dek="Custom decision types, reason presets, entry tag presets, and anything else that shapes what your forms look like."
+        dense
+      />
 
       {/* Custom Decision Types */}
       <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, mb: 2 }}>

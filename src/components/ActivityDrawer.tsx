@@ -49,6 +49,7 @@ import { getDismissedStaleIdeas, dismissStaleIdea } from '../utils/dismissedStal
 import OptionTypeChip from './OptionTypeChip'
 import RelativeDate from './RelativeDate'
 import type { Reminder, ActionType } from '../types/database'
+import { SectionTitle, EmptyState } from './system'
 
 function addDaysToToday(days: number): string {
   const d = new Date()
@@ -213,14 +214,9 @@ function urgencyBorderColor(date: string): string {
 }
 
 function SectionHeader({ title, count }: { title: string; count: number }) {
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
-      <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: 'uppercase', fontSize: '0.65rem', letterSpacing: '0.06em' }}>
-        {title}
-      </Typography>
-      <Chip label={count} size="small" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, '& .MuiChip-label': { px: 0.5 } }} />
-    </Box>
-  )
+  // Thin wrapper around the design-system SectionTitle so the activity drawer
+  // stays consistent with the rest of the app's section labels.
+  return <SectionTitle count={count} mb={0.75}>{title}</SectionTitle>
 }
 
 export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDrawerProps) {
@@ -496,14 +492,11 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
       onClose={onClose}
       PaperProps={{ sx: { width: { xs: '100%', sm: 400 }, display: 'flex', flexDirection: 'column' } }}
     >
-      {/* Header */}
-      <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <NotificationsNoneIcon fontSize="small" color="action" />
-          <Typography variant="h6" fontWeight={700} fontSize="1rem">
-            Activity
-          </Typography>
-        </Box>
+      {/* Header — serif title, hairline rule underneath. */}
+      <Box sx={{ px: 2, py: 1.75, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider' }}>
+        <Typography variant="h4" sx={{ fontSize: '1.25rem', lineHeight: 1, m: 0 }}>
+          Activity
+        </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={load} disabled={loading} aria-label="Refresh">
@@ -525,15 +518,12 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
             ))}
           </Box>
         ) : isEmpty ? (
-          <Box sx={{ py: 6, textAlign: 'center' }}>
-            <NotificationsNoneIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography variant="body2" color="text.secondary">
-              All clear — no reminders or stale ideas.
-            </Typography>
-            <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5 }}>
-              Add a reminder from any entry to revisit it later.
-            </Typography>
-          </Box>
+          <EmptyState
+            icon={<NotificationsNoneIcon />}
+            title="All clear"
+            description="No reminders or stale tickers right now. Add a reminder from any entry to revisit it later."
+            dense
+          />
         ) : (
           <>
             {/* ── Pass reviews due — score your rejection ── */}

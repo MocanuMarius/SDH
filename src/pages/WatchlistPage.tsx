@@ -42,6 +42,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import { supabase } from '../services/supabaseClient'
 import TickerAutocomplete from '../components/TickerAutocomplete'
 import SwipeableCard from '../components/SwipeableCard'
+import { PageHeader } from '../components/system'
 
 interface WatchlistItem {
   id: string
@@ -383,7 +384,11 @@ export default function WatchlistPage() {
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
-      <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>Watchlist</Typography>
+      <PageHeader
+        title="Watchlist"
+        dek="Price alerts on tickers you're tracking. Set a trigger; get a Telegram ping when it fires."
+        dense
+      />
 
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
