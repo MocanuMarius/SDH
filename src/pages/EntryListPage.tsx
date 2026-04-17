@@ -624,25 +624,26 @@ export default function EntryListPage() {
           boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
         }}
       >
-        {/* Row 1: title + toggle + new */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
+        {/* Row 1: title + toggle + new — toolbar elements share the same height
+            (32px) so the layout reads as one bar instead of three things stacked. */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
           <Typography variant="h1" sx={{ flex: 1, mt: 0.5 }}>Journal</Typography>
           <ToggleButtonGroup
             value={gridView ? 'grid' : 'list'}
             exclusive
             size="small"
             onChange={(_, v) => { if (v !== null) setGridView(v === 'grid') }}
-            sx={{ '& .MuiToggleButton-root': { px: 0.5, py: 0.35 } }}
+            sx={{ '& .MuiToggleButton-root': { height: 32, width: 32, px: 0, py: 0 } }}
           >
-            <ToggleButton value="grid"><GridViewIcon sx={{ fontSize: 16 }} /></ToggleButton>
-            <ToggleButton value="list"><ViewListIcon sx={{ fontSize: 16 }} /></ToggleButton>
+            <ToggleButton value="grid" aria-label="Grid view"><GridViewIcon sx={{ fontSize: 16 }} /></ToggleButton>
+            <ToggleButton value="list" aria-label="List view"><ViewListIcon sx={{ fontSize: 16 }} /></ToggleButton>
           </ToggleButtonGroup>
           <Button
             component={RouterLink}
             to="/entries/new"
             variant="contained"
             size="small"
-            sx={{ textTransform: 'none', py: 0.35, px: 1.5, fontSize: '0.8rem', minHeight: 0 }}
+            sx={{ textTransform: 'none', height: 32, minHeight: 32, px: 1.5, fontSize: '0.8rem', fontWeight: 600 }}
           >
             + New
           </Button>
@@ -752,7 +753,9 @@ export default function EntryListPage() {
         </Alert>
       )}
 
-      {/* ── Content ── */}
+      {/* ── Content — give a real gap below the sticky header so the list
+              doesn't crash into the filter chips. ── */}
+      <Box sx={{ mt: 2 }} />
       {loading ? (
         gridView ? (
           <Grid container spacing={1} sx={{ alignItems: 'flex-start' }}>
