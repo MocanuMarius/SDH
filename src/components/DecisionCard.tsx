@@ -67,6 +67,29 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
             <Typography component="span" variant="caption" color="text.secondary">
               <RelativeDate date={action.action_date} variant="caption" sx={{ color: 'inherit' }} />
             </Typography>
+            {/* Show the trade size when it's been explicitly set to something
+                other than the default 'medium' — keeps the card quiet for the
+                95% default case, flags unusual sizes when they matter. */}
+            {action.size && action.size !== 'medium' && (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={
+                  action.size === 'tiny' ? 'Tiny size'
+                    : action.size === 'small' ? 'Small size'
+                    : action.size === 'large' ? 'Large size'
+                    : 'XL size'
+                }
+                sx={{
+                  height: 18,
+                  fontSize: '0.65rem',
+                  fontWeight: 600,
+                  borderColor: 'divider',
+                  color: 'text.secondary',
+                  '& .MuiChip-label': { px: 0.75 },
+                }}
+              />
+            )}
           </Box>
           {tickerLabel && (
             <Box sx={{ mb: 0.5, display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
