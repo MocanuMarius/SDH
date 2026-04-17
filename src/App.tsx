@@ -320,7 +320,7 @@ function AppBarNav({
   )
 }
 
-function MobileBottomNav({ onOpenNav, onOpenActivity, activityCount }: { onOpenNav: () => void; onOpenActivity: () => void; activityCount: number }) {
+function MobileBottomNav({ onOpenNav }: { onOpenNav: () => void }) {
   const muiTheme = useTheme()
   const isMobile = !useMediaQuery(muiTheme.breakpoints.up('md'))
   const location = useLocation()
@@ -469,7 +469,7 @@ function AppLayout() {
           <AppRoutes />
         </Container>
       </Box>
-      <MobileBottomNav onOpenNav={() => setNavOpen(true)} onOpenActivity={() => setActivityOpen(true)} activityCount={activityCount} />
+      <MobileBottomNav onOpenNav={() => setNavOpen(true)} />
     </>
   )
 }

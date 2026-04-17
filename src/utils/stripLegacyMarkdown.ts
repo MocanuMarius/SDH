@@ -27,4 +27,8 @@ export function stripLegacyMarkdown(text: string): string {
     .replace(/(?<![*\w])\*([^*\n]+?)\*(?!\w)/g, '$1')
     .replace(/(?<![_\w])_([^_\n]+?)_(?!\w)/g, '$1')
     .replace(/~~([^~\n]+?)~~/g, '$1')
+    // Fenced code blocks ```...``` → keep the content without the fence markers
+    .replace(/```[a-zA-Z0-9_-]*\n?([\s\S]*?)\n?```/g, '$1')
+    // Inline code `word` → word (titles like `#research` that got pasted from markdown)
+    .replace(/`([^`\n]+?)`/g, '$1')
 }

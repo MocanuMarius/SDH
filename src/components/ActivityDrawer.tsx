@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link as RouterLink } from 'react-router-dom'
 import {
   Drawer,
   Box,
@@ -42,11 +41,9 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import SnoozeIcon from '@mui/icons-material/Snooze'
 import type { Passed, PassReviewStatus } from '../types/database'
 import { useAuth } from '../contexts/AuthContext'
-import TickerLinks from './TickerLinks'
 import { getTickerDisplayLabel, normalizeTickerToCompany } from '../utils/tickerCompany'
 import { parseOptionSymbol } from '../utils/optionSymbol'
 import { getDismissedStaleIdeas, dismissStaleIdea } from '../utils/dismissedStaleIdeas'
-import OptionTypeChip from './OptionTypeChip'
 import RelativeDate from './RelativeDate'
 import type { Reminder, ActionType } from '../types/database'
 import { SectionTitle, EmptyState } from './system'
@@ -127,11 +124,6 @@ type IdeaAlert = {
   freshnessPct: number
 }
 
-/** Actions where you expect the price to go UP to be validated. */
-const BULLISH_TYPES: ActionType[] = ['buy', 'add_more', 'speculate', 'cover']
-/** Actions where you expect the price to go DOWN (or stay flat) to be validated. */
-const BEARISH_TYPES: ActionType[] = ['sell', 'trim', 'short', 'pass']
-
 function parseActionPrice(price: string | null | undefined): number | null {
   if (price == null || typeof price !== 'string') return null
   const cleaned = price.replace(/,/g, '').trim()
@@ -184,28 +176,6 @@ function computeCagr(totalReturnPct: number, days: number): number | null {
   return (Math.pow(multiple, 1 / years) - 1) * 100
 }
 
-function isNeutralType(type: ActionType): boolean {
-  return !BULLISH_TYPES.includes(type) && !BEARISH_TYPES.includes(type)
-}
-
-function freshnessColor(pct: number): string {
-  if (pct >= 75) return '#16a34a'  // green: 0–90 days
-  if (pct >= 50) return '#d97706'  // amber: 90–180 days
-  if (pct >= 25) return '#ea580c'  // orange: 180–273 days
-  return '#dc2626'                 // red: 273+ days
-}
-
-/** Human-friendly label for the expected direction of each action type. */
-function directionLabel(type: ActionType): string {
-  if (type === 'pass') return 'Since pass'
-  if (type === 'buy' || type === 'add_more' || type === 'speculate') return 'Since buy'
-  if (type === 'sell' || type === 'trim') return 'Since sell'
-  if (type === 'short') return 'Since short'
-  if (type === 'cover') return 'Since cover'
-  if (type === 'hold') return 'Since hold'
-  return `Since ${type}`
-}
-
 /** Card border color based on urgency */
 function urgencyBorderColor(date: string): string {
   if (isOverdue(date)) return '#dc2626'   // red
@@ -233,8 +203,6 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
   const [ideaLaterAnchor, setIdeaLaterAnchor] = useState<{ el: HTMLElement; alert: IdeaAlert } | null>(null)
   const [snoozedIdeaTickers, setSnoozedIdeaTickers] = useState<Set<string>>(new Set())
   const [dismissConfirmId, setDismissConfirmId] = useState<string | null>(null)
-  const [snoozingId, setSnoozingId] = useState<string | null>(null)
-  const [snoozingIdeaTicker, setSnoozingIdeaTicker] = useState<string | null>(null)
   const [resolveTarget, setResolveTarget] = useState<{ actionId: string; ticker: string } | null>(null)
 
   // ─── Source data via react-query — auto-refreshes after any mutation that ──
@@ -414,7 +382,6 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
   const handleLaterSelect = async (reminder: Reminder, days: number) => {
     if (!user?.id) return
     setLaterAnchor(null)
-    setSnoozingId(reminder.id)
     try {
       await completeReminder(reminder.id)
       const created = await createReminder(user.id, {
@@ -431,15 +398,14 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
       )
       invalidate.reminders()
       onRefresh?.()
-    } finally {
-      setSnoozingId(null)
+    } catch (err) {
+      console.error('snooze reminder failed', err)
     }
   }
 
   const handleIdeaLaterSelect = async (ticker: string, days: number) => {
     if (!user?.id) return
     setIdeaLaterAnchor(null)
-    setSnoozingIdeaTicker(ticker)
     try {
       await createReminder(user.id, {
         entry_id: null,
@@ -451,8 +417,8 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
       setSnoozedIdeaTickers((prev) => new Set(prev).add(ticker))
       invalidate.reminders()
       onRefresh?.()
-    } finally {
-      setSnoozingIdeaTicker(null)
+    } catch (err) {
+      console.error('snooze idea failed', err)
     }
   }
 
