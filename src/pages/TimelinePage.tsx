@@ -729,7 +729,9 @@ export default function TimelinePage() {
         }
         dek={
           <>
-            Every decision you've made plotted against a benchmark. For one ticker's full history, open its{' '}
+            All your decisions plotted against a benchmark — zoom, overlay other tickers,
+            step through with arrow keys. For one ticker's own chart, counterfactuals and
+            decision deltas, open its{' '}
             <Link component={RouterLink} to="/tickers" underline="hover">Ticker page</Link>.
           </>
         }

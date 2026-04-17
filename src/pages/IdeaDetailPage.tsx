@@ -21,10 +21,16 @@ import {
   Stack,
 } from '@mui/material'
 import TimelineIcon from '@mui/icons-material/Timeline'
+import AddIcon from '@mui/icons-material/Add'
 import ValuationWidget from '../components/ValuationWidget'
 import { type ActionWithEntry } from '../services/actionsService'
 import { fetchChartData } from '../services/chartApiService'
-import { useActions } from '../hooks/queries'
+import { useActions, useInvalidate } from '../hooks/queries'
+import { useAuth } from '../contexts/AuthContext'
+import { useSnackbar } from '../contexts/SnackbarContext'
+import { createAction } from '../services/actionsService'
+import { ensurePassedForUser } from '../services/passedService'
+import ActionFormDialog from '../components/ActionFormDialog'
 import TickerLinks from '../components/TickerLinks'
 import TickerTimelineChart from '../components/TickerTimelineChart'
 import RelativeDate from '../components/RelativeDate'
@@ -83,6 +89,7 @@ export default function IdeaDetailPage() {
   const [chartLoading, setChartLoading] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [logDecisionOpen, setLogDecisionOpen] = useState(false)
   const [counterfactual, setCounterfactual] = useState<{
     totalReturnPct: number | null
     hypotheticalEnd: number | null
@@ -91,6 +98,9 @@ export default function IdeaDetailPage() {
   }>({ totalReturnPct: null, hypotheticalEnd: null, cagr: null, loading: false })
 
   // ─── react-query: shared actions cache, auto-refreshes everywhere ──
+  const { user } = useAuth()
+  const invalidate = useInvalidate()
+  const { showSuccess } = useSnackbar()
   const allActionsQ = useActions({ limit: 500 })
   const loading = allActionsQ.isLoading
   const queryError = allActionsQ.error ? (allActionsQ.error as Error).message : null
@@ -224,6 +234,15 @@ export default function IdeaDetailPage() {
           const latest = [...actions].sort((a, b) => (b.action_date || '').localeCompare(a.action_date || ''))[0]
           return <StatusChip kind={statusFromLatestActionType(latest.type)} />
         })()}
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<AddIcon />}
+          onClick={() => setLogDecisionOpen(true)}
+          sx={{ ml: 'auto' }}
+        >
+          Log decision
+        </Button>
       </Box>
       {actions.length > 0 && (() => {
         const sortedAsc = [...actions].sort((a, b) => (a.action_date || '').localeCompare(b.action_date || ''))
@@ -304,7 +323,7 @@ export default function IdeaDetailPage() {
           sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
         >
           <TimelineIcon sx={{ fontSize: 18 }} />
-          Full timeline (zoom & filters)
+          See in full timeline — zoom, benchmark, overlay other tickers
         </Link>
       </Box>
 
@@ -483,6 +502,43 @@ export default function IdeaDetailPage() {
           </TableContainer>
         )
       })()}
+
+      {/* Standalone log-decision for this ticker — creates an `actions` row
+          with no entry_id, pre-filled with the current ticker. */}
+      <ActionFormDialog
+        open={logDecisionOpen}
+        onClose={() => setLogDecisionOpen(false)}
+        initial={{ ticker: decodedTicker, company_name: company }}
+        onSubmit={async (data) => {
+          if (!user?.id || !data.ticker?.trim()) return
+          await createAction({
+            user_id: user.id,
+            entry_id: null,
+            type: data.type,
+            ticker: data.ticker.trim().toUpperCase(),
+            company_name: data.company_name || null,
+            action_date: data.action_date,
+            price: data.price,
+            currency: data.currency || null,
+            shares: data.shares,
+            reason: data.reason,
+            notes: data.notes,
+            kill_criteria: data.kill_criteria || null,
+            pre_mortem_text: data.pre_mortem_text || null,
+            raw_snippet: null,
+          })
+          if (data.type === 'pass') {
+            await ensurePassedForUser(user.id, data.ticker.trim(), {
+              passed_date: data.action_date,
+              reason: data.reason ?? '',
+              notes: data.notes ?? '',
+            })
+            invalidate.passed()
+          }
+          invalidate.actions()
+          showSuccess('Decision logged')
+        }}
+      />
     </Box>
   )
 }
