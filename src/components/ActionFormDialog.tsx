@@ -19,6 +19,7 @@ import {
   Stack,
   FormControlLabel,
   Checkbox,
+  Link,
 } from '@mui/material'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
@@ -97,6 +98,12 @@ export default function ActionFormDialog({
   const [error, setError] = useState<string | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [readyCheckOpen, setReadyCheckOpen] = useState(false)
+  // Collapsed-by-default sections. When editing an existing row, open the
+  // sections that already have a value so nothing is hidden.
+  const initiallyTakenToday = (initial?.action_date ?? getToday()) === getToday()
+  const [decisionTakenToday, setDecisionTakenToday] = useState(initiallyTakenToday)
+  const [priceOpen, setPriceOpen] = useState(Boolean(initial?.price || initial?.currency || initial?.shares))
+  const [sizeOpen, setSizeOpen] = useState(false)
   const tickerInputRef = useRef<HTMLInputElement>(null)
   const customTypes = getCustomDecisionTypes()
 
@@ -105,6 +112,11 @@ export default function ActionFormDialog({
       setTimeout(() => tickerInputRef.current?.focus(), 100)
     }
   }, [open])
+
+  // Keep action_date pinned to today while "taken today" is checked.
+  useEffect(() => {
+    if (decisionTakenToday) setActionDate(getToday())
+  }, [decisionTakenToday])
 
   // Sync form state with `initial` whenever the dialog is (re-)opened. The
   // useState defaults only fire once on mount, so re-opening with a different
@@ -123,6 +135,10 @@ export default function ActionFormDialog({
     setKillCriteria((initial as { kill_criteria?: string })?.kill_criteria ?? '')
     setPreMortemText((initial as { pre_mortem_text?: string | null })?.pre_mortem_text ?? '')
     setSize((initial?.size as ActionSize) ?? 'medium')
+    const takenToday = (initial?.action_date ?? getToday()) === getToday()
+    setDecisionTakenToday(takenToday)
+    setPriceOpen(Boolean(initial?.price || initial?.currency || initial?.shares))
+    setSizeOpen(false)
   }, [open, initial])
 
   const isNewBuy = !initial?.id && type === 'buy'
@@ -274,107 +290,152 @@ export default function ActionFormDialog({
               )}
             </Box>
 
+            {/* Date — defaults to "today" checkbox. Uncheck to reveal the date
+                picker + quick-pick buttons. Mirrors the entry form dialog. */}
             <Box>
-              <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                Date
-              </Typography>
-              <TextField
-                size="small"
-                label="Date"
-                type="date"
-                value={action_date}
-                onChange={(e) => setActionDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                fullWidth
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start" sx={{ mr: 0, '& .MuiSvgIcon-root': { fontSize: 18 } }}>
-                      <CalendarTodayIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={decisionTakenToday}
+                    onChange={(e) => setDecisionTakenToday(e.target.checked)}
+                  />
+                }
+                label={<Typography variant="body2">Decision taken today</Typography>}
+                sx={{ ml: -0.75 }}
               />
-              <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
-                {[
-                  { label: 'Today', fn: () => getToday() },
-                  { label: 'Yesterday', fn: () => daysAgo(1) },
-                  { label: '1 week ago', fn: () => daysAgo(7) },
-                  { label: '2 weeks ago', fn: () => daysAgo(14) },
-                  { label: '1 month ago', fn: () => daysAgo(30) },
-                ].map(({ label, fn }) => (
-                  <Button key={label} size="small" variant="outlined" onClick={() => setActionDate(fn())} sx={{ textTransform: 'none' }}>
-                    {label}
-                  </Button>
-                ))}
-              </Box>
+              <Collapse in={!decisionTakenToday} unmountOnExit>
+                <Box sx={{ mt: 0.5 }}>
+                  <TextField
+                    size="small"
+                    label="Decision date"
+                    type="date"
+                    value={action_date}
+                    onChange={(e) => setActionDate(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                    fullWidth
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start" sx={{ mr: 0, '& .MuiSvgIcon-root': { fontSize: 18 } }}>
+                          <CalendarTodayIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                  <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'Yesterday', fn: () => daysAgo(1) },
+                      { label: '1 week ago', fn: () => daysAgo(7) },
+                      { label: '2 weeks ago', fn: () => daysAgo(14) },
+                      { label: '1 month ago', fn: () => daysAgo(30) },
+                    ].map(({ label, fn }) => (
+                      <Button key={label} size="small" variant="outlined" onClick={() => setActionDate(fn())} sx={{ textTransform: 'none' }}>
+                        {label}
+                      </Button>
+                    ))}
+                  </Box>
+                </Box>
+              </Collapse>
             </Box>
 
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <TextField
-                size="small"
-                label="Price"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                sx={{ flex: 1 }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start" sx={{ '& .MuiSvgIcon-root': { fontSize: 18 } }}>
-                      <AttachMoneyIcon color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <TextField
-                size="small"
-                label="Cur."
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-                placeholder="USD"
-                sx={{ width: 110 }}
-                inputProps={{ maxLength: 4 }}
-              />
+            {/* Price / Currency / Shares — collapsed link. Open if the user is
+                editing a row that already has any of them. */}
+            <Box>
+              <Link
+                component="button"
+                type="button"
+                underline="hover"
+                onClick={() => setPriceOpen((v) => !v)}
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25, fontSize: '0.85rem', color: 'text.secondary' }}
+              >
+                {priceOpen ? '− ' : '+ '}
+                {priceOpen ? 'Hide price, currency, shares' : 'Add price, currency, shares'}
+              </Link>
+              <Collapse in={priceOpen} unmountOnExit>
+                <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                  <TextField
+                    size="small"
+                    label="Price"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    sx={{ flex: '1 1 120px', minWidth: 120 }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start" sx={{ '& .MuiSvgIcon-root': { fontSize: 18 } }}>
+                          <AttachMoneyIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                  <TextField
+                    size="small"
+                    label="Cur."
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                    placeholder="USD"
+                    sx={{ width: 90 }}
+                    inputProps={{ maxLength: 4 }}
+                  />
+                  <TextField
+                    size="small"
+                    label="Shares"
+                    type="number"
+                    value={shares}
+                    onChange={(e) => setShares(e.target.value === '' ? '' : Number(e.target.value))}
+                    inputProps={{ min: 0, step: 1 }}
+                    sx={{ width: 110 }}
+                  />
+                </Box>
+              </Collapse>
             </Box>
 
-            <TextField
-              size="small"
-              label="Shares (optional)"
-              type="number"
-              value={shares}
-              onChange={(e) => setShares(e.target.value === '' ? '' : Number(e.target.value))}
-              inputProps={{ min: 0, step: 1 }}
-            />
-
+            {/* Size — collapsed. Header shows the current choice so the user
+                knows what's in effect without opening it. Only rendered for
+                directional types (buys, sells, etc). */}
             {isDirectionalAction(type) && (
               <Box>
-                <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                  Size
-                  <Typography component="span" variant="caption" color="text.disabled" sx={{ ml: 0.5, fontWeight: 400 }}>
-                    — scales the glow on the timeline
+                <Link
+                  component="button"
+                  type="button"
+                  underline="hover"
+                  onClick={() => setSizeOpen((v) => !v)}
+                  sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.85rem', color: 'text.secondary' }}
+                >
+                  {sizeOpen ? '− Size' : '+ Size'}
+                  <Typography component="span" variant="caption" color="text.primary" fontWeight={600} sx={{ textTransform: 'capitalize' }}>
+                    · {size === 'xl' ? 'Very big' : size}
                   </Typography>
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                  {ACTION_SIZES.map((s) => {
-                    const selected = size === s
-                    return (
-                      <Button
-                        key={s}
-                        size="small"
-                        variant={selected ? 'contained' : 'outlined'}
-                        onClick={() => setSize(s)}
-                        sx={{
-                          textTransform: 'none',
-                          minWidth: 0,
-                          px: 1.25,
-                          py: 0.25,
-                          fontSize: '0.75rem',
-                          fontWeight: selected ? 700 : 500,
-                        }}
-                      >
-                        {s === 'tiny' ? 'Tiny' : s === 'small' ? 'Small' : s === 'medium' ? 'Medium' : s === 'large' ? 'Large' : 'Very big'}
-                      </Button>
-                    )
-                  })}
-                </Box>
+                </Link>
+                <Collapse in={sizeOpen} unmountOnExit>
+                  <Box sx={{ mt: 0.75 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: '0.72rem' }}>
+                      Scales the glow on the timeline.
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                      {ACTION_SIZES.map((s) => {
+                        const selected = size === s
+                        return (
+                          <Button
+                            key={s}
+                            size="small"
+                            variant={selected ? 'contained' : 'outlined'}
+                            onClick={() => setSize(s)}
+                            sx={{
+                              textTransform: 'none',
+                              minWidth: 0,
+                              px: 1.25,
+                              py: 0.25,
+                              fontSize: '0.75rem',
+                              fontWeight: selected ? 700 : 500,
+                            }}
+                          >
+                            {s === 'tiny' ? 'Tiny' : s === 'small' ? 'Small' : s === 'medium' ? 'Medium' : s === 'large' ? 'Large' : 'Very big'}
+                          </Button>
+                        )
+                      })}
+                    </Box>
+                  </Box>
+                </Collapse>
               </Box>
             )}
 
