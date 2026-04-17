@@ -88,10 +88,61 @@ land. Reorder if priority shifts.
 ## Still open
 
 - [ ] **Date inputs** — native `<input type="date">` still in several forms.
-  Either accept it (it's not bad on modern browsers) or pull in
-  `@mui/x-date-pickers` — adds ~200 KB gz + a date-lib dep. Deferred until
-  asked.
-- [ ] Keep iterating on flows as they come up. Add new items here.
+  Deferred unless asked for `@mui/x-date-pickers`.
+
+---
+
+## Round 6 — flow audit findings (2026-04-17)
+
+Full walkthrough lives in [FLOW_AUDIT.md](FLOW_AUDIT.md). This is the punch
+list extracted from it, in priority order.
+
+### Clear fixes — no input needed
+- [ ] **F2 broken — no edit affordance for a decision.** Add a focused
+  `EditDecisionDialog` and put a ✏️ on each `DecisionCard` so the user can
+  change type / ticker / date / price / reason / notes without re-editing
+  the whole entry. (Step 3 of the rebuild plan, never landed.)
+- [ ] **F4 broken — no UI to log a standalone decision.** Add a global
+  `+ Log decision` button in the AppBar (no pre-fill) AND an inline log bar
+  on the Ticker page (pre-fills ticker). Both reuse the same form. (Steps 5
+  and 6 of the rebuild plan, never landed.)
+- [ ] **F3 awkward — Outcome dialog submit silently fails.** Default
+  `outcome_date` to today; surface validation errors visibly when the user
+  clicks Add and a required field is missing.
+- [ ] **F8 — Calibration tab needs a real EmptyState** when there are no
+  predictions. Today it renders blank cards.
+- [ ] **F7 — Long-term horizons EmptyState** is good; no further fix needed
+  unless the page is to be merged elsewhere.
+
+### Chart polish — clear
+- [ ] **TickerTimelineChart hardcoded margins** ([file:line](../src/components/TickerTimelineChart.tsx#L859))
+  → extract `getTickerChartResponsiveMargin(width)`, mirror what the visx
+  version does. Shrink left margin to 40 on mobile.
+- [ ] **TickerTimelineChart axis font sizes hardcoded 13px** → use
+  `isMobile ? 11 : 13` (mirror the visx version).
+- [ ] **TickerTimelineChart x-axis 80px tall + −45° fixed rotation** → drop
+  to ~64px and tilt to −60° on xs widths.
+- [ ] **TimelineChartVisx arrow geometry doesn't scale** on xs — derive AW /
+  AH / SW / SH from a base unit and shrink ~15% on xs.
+
+### IA / wayfinding — needs your call
+- [ ] **Timeline vs Ticker page overlap.** Recommendation: keep both;
+  shrink the Ticker page chart to a "preview" with a strong CTA to the
+  Timeline. Or merge as you prefer. **Needs input.**
+
+### Data / schema — needs your call
+- [ ] **F9 — `entry_feelings` table is empty across the DB** but a "Feelings"
+  tab still renders on every entry. The Market Sentiment slider writes to
+  `entries.market_feeling`, not this table. Is `entry_feelings` dead? Should
+  the tab go? **Needs input.**
+- [ ] **F10 — Watchlist count returns null** from a direct supabase query —
+  table may not exist or RLS is blocking. WatchlistPage works in the UI
+  though. Worth a deeper look. **Needs input or deeper investigation.**
+
+### Lower-priority polish
+- [ ] **Sharpen Calibration / Overall analytics copy** once predictions exist.
+- [ ] **Decision card** could pick up a small per-type left-border colour
+  treatment to match the Timeline diamond colours (already done — verify).
 
 ---
 

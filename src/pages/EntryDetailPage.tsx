@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext'
 import {
   createAction,
   deleteAction,
+  updateAction,
 } from '../services/actionsService'
 import { ensurePassedForUser } from '../services/passedService'
 import {
@@ -54,7 +55,7 @@ import TagChip from '../components/TagChip'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
 import { getTickerDisplayLabel } from '../utils/tickerCompany'
-import type { Outcome } from '../types/database'
+import type { Outcome, Action } from '../types/database'
 import type { EntryPrediction, EntryFeeling } from '../types/database'
 
 export default function EntryDetailPage() {
@@ -88,6 +89,8 @@ export default function EntryDetailPage() {
   const [quickNote, setQuickNote] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [actionDialogOpen, setActionDialogOpen] = useState(false)
+  // Holds the action being edited; null means the dialog is in "add new" mode.
+  const [editingAction, setEditingAction] = useState<Action | null>(null)
   const [overflowAnchor, setOverflowAnchor] = useState<null | HTMLElement>(null)
   const [outcomeDialogActionId, setOutcomeDialogActionId] = useState<string | null>(null)
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false)
@@ -452,6 +455,7 @@ export default function EntryDetailPage() {
                     currentPrice={a.ticker ? currentPriceByTicker[(a.ticker || '').trim().toUpperCase()] : undefined}
                     onAddOrEditOutcome={() => setOutcomeDialogActionId(a.id)}
                     onDelete={() => setConfirmDelete({ type: 'action', id: a.id })}
+                    onEdit={() => setEditingAction(a)}
                   />
                 ))}
               </Stack>
@@ -526,10 +530,40 @@ export default function EntryDetailPage() {
       </Box>
 
       <ActionFormDialog
-        open={actionDialogOpen}
-        onClose={() => setActionDialogOpen(false)}
+        open={actionDialogOpen || editingAction != null}
+        onClose={() => { setActionDialogOpen(false); setEditingAction(null) }}
+        initial={editingAction ?? undefined}
         onSubmit={async (data) => {
-          if (!id || !user?.id) return
+          if (!user?.id) return
+          if (editingAction) {
+            // Edit existing decision in place — keep entry_id, update everything else.
+            await updateAction(editingAction.id, {
+              type: data.type,
+              ticker: data.ticker,
+              company_name: data.company_name || null,
+              action_date: data.action_date,
+              price: data.price,
+              currency: data.currency || null,
+              shares: data.shares,
+              reason: data.reason,
+              notes: data.notes,
+              kill_criteria: data.kill_criteria || null,
+              pre_mortem_text: data.pre_mortem_text || null,
+            })
+            if (data.type === 'pass' && data.ticker?.trim()) {
+              await ensurePassedForUser(user.id, data.ticker.trim(), {
+                passed_date: data.action_date,
+                reason: data.reason ?? '',
+                notes: data.notes ?? '',
+              })
+              invalidate.passed()
+            }
+            invalidate.actions()
+            showSuccess('Decision updated')
+            setEditingAction(null)
+            return
+          }
+          if (!id) return
           await createAction({
             user_id: user.id,
             entry_id: id,

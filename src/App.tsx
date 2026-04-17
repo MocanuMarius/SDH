@@ -31,6 +31,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 import { AppBar, Toolbar, Typography, Container, Box, Button, CircularProgress, IconButton, Badge, BottomNavigation, BottomNavigationAction, Menu, MenuItem, ListItemIcon, ListItemText, Divider, Tooltip } from '@mui/material'
 import MenuIcon from '@mui/icons-material/Menu'
 import NotificationsIcon from '@mui/icons-material/Notifications'
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import TimelineIcon from '@mui/icons-material/Timeline'
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
@@ -49,6 +50,11 @@ import { SnackbarProvider } from './contexts/SnackbarContext'
 import { TickerChartProvider } from './contexts/TickerChartContext'
 import ActivityDrawer, { useActivityBadge } from './components/ActivityDrawer'
 import NavDrawer from './components/NavDrawer'
+import ActionFormDialog from './components/ActionFormDialog'
+import { createAction } from './services/actionsService'
+import { ensurePassedForUser } from './services/passedService'
+import { useInvalidate } from './hooks/queries'
+import { useSnackbar } from './contexts/SnackbarContext'
 import theme from './theme'
 import LoginPage from './pages/LoginPage'
 import EntryListPage from './pages/EntryListPage'
@@ -145,9 +151,13 @@ function AppBarNav({
   const muiTheme = useTheme()
   const isMobile = !useMediaQuery(muiTheme.breakpoints.up('md'))
   const { user, signOut } = useAuth()
+  const invalidate = useInvalidate()
+  const { showSuccess } = useSnackbar()
   const [localActivityOpen, setLocalActivityOpen] = useState(false)
   const [localNavOpen, setLocalNavOpen] = useState(false)
   const [moreAnchor, setMoreAnchor] = useState<null | HTMLElement>(null)
+  /** Standalone "log a decision" modal — creates an `actions` row with no entry. */
+  const [logDecisionOpen, setLogDecisionOpen] = useState(false)
   const navOpenVal = setNavOpen != null ? (navOpen ?? false) : localNavOpen
   const setNavOpenVal = setNavOpen ?? setLocalNavOpen
   const activityOpen = setActivityOpenProp != null ? (activityOpenProp ?? false) : localActivityOpen
@@ -207,8 +217,13 @@ function AppBarNav({
             </Box>
           )}
 
-          {/* Right: activity + more menu (desktop) + sign out */}
+          {/* Right: log decision + activity + more menu (desktop) + sign out */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+            <Tooltip title="Log a decision">
+              <IconButton color="inherit" onClick={() => setLogDecisionOpen(true)} aria-label="Log a decision">
+                <AddCircleOutlineIcon />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Activity">
               <IconButton color="inherit" onClick={() => setActivityOpen(true)} aria-label="Activity">
                 <Badge badgeContent={activityCount} color="secondary">
@@ -266,6 +281,41 @@ function AppBarNav({
         onSignOut={signOut}
       />
       <ActivityDrawer open={activityOpen} onClose={() => setActivityOpen(false)} onRefresh={refreshActivity} />
+      {/* Global standalone-decision logger: creates an `actions` row with no entry. */}
+      <ActionFormDialog
+        open={logDecisionOpen}
+        onClose={() => setLogDecisionOpen(false)}
+        onSubmit={async (data) => {
+          if (!user?.id) return
+          if (!data.ticker?.trim()) return
+          await createAction({
+            user_id: user.id,
+            entry_id: null,
+            type: data.type,
+            ticker: data.ticker.trim().toUpperCase(),
+            company_name: data.company_name || null,
+            action_date: data.action_date,
+            price: data.price,
+            currency: data.currency || null,
+            shares: data.shares,
+            reason: data.reason,
+            notes: data.notes,
+            kill_criteria: data.kill_criteria || null,
+            pre_mortem_text: data.pre_mortem_text || null,
+            raw_snippet: null,
+          })
+          if (data.type === 'pass') {
+            await ensurePassedForUser(user.id, data.ticker.trim(), {
+              passed_date: data.action_date,
+              reason: data.reason ?? '',
+              notes: data.notes ?? '',
+            })
+            invalidate.passed()
+          }
+          invalidate.actions()
+          showSuccess('Decision logged')
+        }}
+      />
     </>
   )
 }

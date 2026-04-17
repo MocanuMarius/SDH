@@ -1,6 +1,7 @@
 import { Alert, Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import EditIcon from '@mui/icons-material/Edit'
 import ShowChartIcon from '@mui/icons-material/ShowChart'
 import TickerLinks from './TickerLinks'
 import PlainTextWithTickers from './PlainTextWithTickers'
@@ -26,10 +27,12 @@ interface DecisionCardProps {
   currentPrice?: number | null
   onAddOrEditOutcome: () => void
   onDelete: () => void
+  /** Open the focused decision-edit dialog for this action. */
+  onEdit?: () => void
 }
 
 /** Journalytic-style decision card: blockquote layout with $TICKER, Date, Price, Reason, Expanded Reasoning */
-export default function DecisionCard({ action, outcome, currentPrice, onAddOrEditOutcome, onDelete }: DecisionCardProps) {
+export default function DecisionCard({ action, outcome, currentPrice, onAddOrEditOutcome, onDelete, onEdit }: DecisionCardProps) {
   const { openChart } = useTickerChart()
   const tickerLabel = action.ticker ? getTickerDisplayLabel(action.ticker) : null
   const borderColor = getDecisionTypeColor(action.type)
@@ -203,6 +206,13 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
           <Button size="small" variant="text" onClick={onAddOrEditOutcome}>
             {outcome ? 'Edit outcome' : 'Add outcome'}
           </Button>
+          {onEdit && (
+            <Tooltip title="Edit decision">
+              <IconButton size="small" aria-label="Edit decision" onClick={onEdit}>
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton size="small" aria-label="Delete decision" onClick={onDelete}>
             <DeleteOutlineIcon fontSize="small" />
           </IconButton>

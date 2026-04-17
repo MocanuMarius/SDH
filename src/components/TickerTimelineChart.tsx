@@ -292,8 +292,8 @@ function mergeWithBenchmarks(
 const MAX_COMPARE_SYMBOLS = 3
 
 /** Custom X-axis tick component with rotation for better readability */
-function CustomXAxisTick(props: { x?: number; y?: number; payload?: { value?: string } }) {
-  const { x = 0, y = 0, payload } = props
+function CustomXAxisTick(props: { x?: number; y?: number; payload?: { value?: string }; rotation?: number; fontSize?: number }) {
+  const { x = 0, y = 0, payload, rotation = -45, fontSize = FONT_SIZE_AXIS } = props
   if (!payload?.value) return null
   const formatted = new Date(payload.value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
   return (
@@ -304,8 +304,8 @@ function CustomXAxisTick(props: { x?: number; y?: number; payload?: { value?: st
         dy={4}
         textAnchor="end"
         fill="#334155"
-        fontSize={FONT_SIZE_AXIS}
-        style={{ transform: 'rotate(-45deg)', transformOrigin: '0 0', whiteSpace: 'nowrap' }}
+        fontSize={fontSize}
+        style={{ transform: `rotate(${rotation}deg)`, transformOrigin: '0 0', whiteSpace: 'nowrap' }}
       >
         {formatted}
       </text>
@@ -383,8 +383,16 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
   const justFinishedDragRef = useRef(false)
   const companyKey = normalizeTickerToCompany(symbol)
   const displaySymbol = companyKey || (symbol?.toUpperCase() ?? '')
-  const plotLeft = 52
-  const plotRight = 24
+  // Responsive chart chrome — shrink margins, axis fonts, and x-axis band on
+  // narrow viewports so the plot area gets to keep most of the width.
+  const chartIsNarrow = wrapperWidth > 0 && wrapperWidth < 480
+  const plotLeft = chartIsNarrow ? 36 : 52
+  const plotRight = chartIsNarrow ? 12 : 24
+  const plotTop = 16
+  const plotBottom = chartIsNarrow ? 48 : 60
+  const axisFontSize = chartIsNarrow ? 11 : FONT_SIZE_AXIS
+  const xAxisHeight = chartIsNarrow ? 56 : 72
+  const xAxisRotation = chartIsNarrow ? -60 : -45
 
   useEffect(() => {
     if (!symbol?.trim()) {
@@ -856,7 +864,7 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           <ResponsiveContainer width={wrapperWidth} height={wrapperHeight}>
             <ComposedChart
               data={chartDisplayDataEnriched}
-              margin={{ top: 24, right: 24, left: 52, bottom: 60 }}
+              margin={{ top: plotTop, right: plotRight, left: plotLeft, bottom: plotBottom }}
               onClick={() => {
                 if (justFinishedDragRef.current) {
                   justFinishedDragRef.current = false
@@ -880,18 +888,19 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
               )}
               <XAxis
                 dataKey="date"
-                tick={<CustomXAxisTick />}
+                tick={<CustomXAxisTick rotation={xAxisRotation} fontSize={axisFontSize} />}
                 axisLine={{ stroke: '#64748b' }}
                 tickLine={{ stroke: '#94a3b8' }}
-                interval={Math.max(0, Math.floor(chartDisplayDataEnriched.length / 8) - 1)}
-                height={80}
+                interval={Math.max(0, Math.floor(chartDisplayDataEnriched.length / (chartIsNarrow ? 5 : 8)) - 1)}
+                height={xAxisHeight}
               />
               <YAxis
                 domain={yAxisDomain ?? ['auto', 'auto']}
-                tick={{ fontSize: FONT_SIZE_AXIS, fill: '#334155' }}
+                tick={{ fontSize: axisFontSize, fill: '#334155' }}
                 tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(0) : v)}
                 axisLine={{ stroke: '#64748b' }}
                 tickLine={{ stroke: '#94a3b8' }}
+                width={plotLeft}
               />
               <Tooltip
                 contentStyle={{ fontSize: FONT_SIZE_TOOLTIP, padding: 0 }}

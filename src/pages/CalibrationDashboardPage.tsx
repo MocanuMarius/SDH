@@ -16,8 +16,12 @@ import {
   TableRow,
 } from '@mui/material'
 import InfoIcon from '@mui/icons-material/Info'
+import InsightsIcon from '@mui/icons-material/Insights'
+import { Link as RouterLink } from 'react-router-dom'
+import { Button } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { calculatePredictionCalibration } from '../services/analyticsService'
+import { EmptyState } from '../components/system'
 
 export default function CalibrationDashboardPage() {
   // Wired to react-query so the page reflects new predictions / outcomes the
@@ -47,6 +51,23 @@ export default function CalibrationDashboardPage() {
   }
 
   if (!snapshot) return null
+
+  // Empty state — no predictions in the system means there's nothing to calibrate.
+  // Render a clean explainer + CTA instead of a card full of dashes.
+  if (snapshot.totalPredictions === 0) {
+    return (
+      <EmptyState
+        icon={<InsightsIcon />}
+        title="No predictions to calibrate yet"
+        description="Calibration tracks how well your forecasts pan out. Add a prediction to any entry (open the entry form, tick + Add prediction, then set the % and date) and resolved predictions will appear here."
+        action={
+          <Button component={RouterLink} to="/entries/new" variant="contained" size="small">
+            New entry with prediction
+          </Button>
+        }
+      />
+    )
+  }
 
   const biasColor = snapshot.biasSummary === 'overconfident' ? 'error' : snapshot.biasSummary === 'underconfident' ? 'warning' : 'success'
   const biasEmoji = snapshot.biasSummary === 'overconfident' ? '' : snapshot.biasSummary === 'underconfident' ? '' : ''
