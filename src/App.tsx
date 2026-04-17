@@ -402,8 +402,11 @@ function AppRoutes() {
       <Route path="/actions" element={<ProtectedLayout><Page><ActionsPage /></Page></ProtectedLayout>} />
       <Route path="/passed" element={<Navigate to="/tickers" replace />} />
       <Route path="/analytics" element={<ProtectedLayout><Page><AnalyticsPage /></Page></ProtectedLayout>} />
+      <Route path="/analytics/calibration" element={<ProtectedLayout><Page><AnalyticsPage /></Page></ProtectedLayout>} />
+      <Route path="/analytics/overview" element={<Navigate to="/analytics" replace />} />
+      <Route path="/analytics/performance" element={<Navigate to="/analytics" replace />} />
       <Route path="/insights" element={<Navigate to="/analytics" replace />} />
-      <Route path="/calibration" element={<Navigate to="/analytics" replace />} />
+      <Route path="/calibration" element={<Navigate to="/analytics/calibration" replace />} />
       <Route path="/decisions" element={<ProtectedLayout><Page><LongTermDecisionsPage /></Page></ProtectedLayout>} />
       <Route path="/tickers" element={<ProtectedLayout><Page><IdeasPage /></Page></ProtectedLayout>} />
       <Route path="/tickers/:ticker" element={<ProtectedLayout><Page><IdeaDetailPage /></Page></ProtectedLayout>} />

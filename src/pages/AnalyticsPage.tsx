@@ -1,13 +1,19 @@
 /**
- * Unified Analytics page — combines Overview, Performance, and Calibration
- * in a tabbed layout so users have one destination for all performance data.
- * Each tab remounts on switch to ensure fresh data.
+ * Analytics — two URL-routed tabs:
+ *
+ *   /analytics             → Performance (all decisions + closed-trade widgets)
+ *   /analytics/calibration → Calibration  (prediction accuracy)
+ *
+ * The old "Overview" tab was dropped — its two genuinely useful pieces
+ * (Win Rate tile + Process×Outcome matrix) now sit at the top of the
+ * Performance tab so users aren't flipping between tabs just to see
+ * closed-trade quality metrics alongside everything else.
  */
-import { useState, lazy, Suspense } from 'react'
+import { lazy, Suspense } from 'react'
 import { Box, Tabs, Tab, CircularProgress } from '@mui/material'
+import { Link as RouterLink, useLocation } from 'react-router-dom'
 import { PageHeader } from '../components/system'
 
-const AnalyticsDashboardPage = lazy(() => import('./AnalyticsDashboardPage'))
 const InsightsPage = lazy(() => import('./InsightsPage'))
 const CalibrationDashboardPage = lazy(() => import('./CalibrationDashboardPage'))
 
@@ -20,14 +26,9 @@ function TabFallback() {
 }
 
 export default function AnalyticsPage() {
-  const [tab, setTab] = useState(0)
-  // Counter forces remount when tab is re-selected (ensures data freshness)
-  const [mountKey, setMountKey] = useState(0)
-
-  const handleTabChange = (_: unknown, v: number) => {
-    setTab(v)
-    setMountKey((k) => k + 1)
-  }
+  const { pathname } = useLocation()
+  // Path-driven tab: /analytics/calibration → tab 1, everything else → tab 0.
+  const activeTab: number = pathname === '/analytics/calibration' ? 1 : 0
 
   return (
     <Box>
@@ -37,23 +38,20 @@ export default function AnalyticsPage() {
         dense
       />
       <Tabs
-        value={tab}
-        onChange={handleTabChange}
+        value={activeTab}
         sx={{
           mb: 1.5,
           minHeight: 36,
           '& .MuiTab-root': { minHeight: 36, py: 0.5, textTransform: 'none', fontSize: '0.85rem' },
         }}
       >
-        <Tab label="Overview" />
-        <Tab label="Performance" />
-        <Tab label="Calibration" />
+        <Tab label="Performance" component={RouterLink} to="/analytics" />
+        <Tab label="Calibration" component={RouterLink} to="/analytics/calibration" />
       </Tabs>
 
       <Suspense fallback={<TabFallback />}>
-        {tab === 0 && <AnalyticsDashboardPage key={`overview-${mountKey}`} />}
-        {tab === 1 && <InsightsPage key={`perf-${mountKey}`} />}
-        {tab === 2 && <CalibrationDashboardPage key={`cal-${mountKey}`} />}
+        {activeTab === 0 && <InsightsPage />}
+        {activeTab === 1 && <CalibrationDashboardPage />}
       </Suspense>
     </Box>
   )

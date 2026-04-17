@@ -59,6 +59,7 @@ import type { Entry } from '../types/database'
 import type { Action } from '../types/database'
 import type { Outcome, ErrorType } from '../types/database'
 import DecisionChip from '../components/DecisionChip'
+import ClosedDecisionsQuality from '../components/ClosedDecisionsQuality'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const PASSED_HYPOTHETICAL_AMOUNT = 10_000 // $10k per pass for opportunity-cost math
@@ -681,6 +682,11 @@ export default function InsightsPage() {
 
   return (
     <Box>
+      {/* Closed-decision quality widgets — Win Rate + Process×Outcome — used
+          to live on their own "Overview" tab. Rendered inline here when
+          there's at least one recorded outcome; hides itself otherwise. */}
+      <ClosedDecisionsQuality />
+
       {/* Dashboard metric tiles — Simply Wall St–style: label above, big value */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid size={{ xs: 6, sm: 6, md: 3 }}>
