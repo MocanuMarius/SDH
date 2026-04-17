@@ -84,7 +84,7 @@ export default function IdeaDetailPage() {
   const { ticker } = useParams<{ ticker: string }>()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
-  const chartHeight = isMobile ? 280 : 380
+  const chartHeight = isMobile ? 240 : 320
   const [chartData, setChartData] = useState<{ dates: string[]; prices: number[] } | null>(null)
   const [chartLoading, setChartLoading] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)

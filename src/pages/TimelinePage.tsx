@@ -1003,6 +1003,11 @@ export default function TimelinePage() {
                     </Typography>
                     <Typography variant="body2" fontWeight={700} sx={{ color: stats.pctChange >= 0 ? 'success.main' : 'error.main', fontSize: '1rem' }}>
                       {stats.pctChange >= 0 ? '+' : ''}{stats.pctChange.toFixed(2)}%
+                      {stats.cagr != null && (
+                        <Box component="span" sx={{ color: 'text.secondary', fontWeight: 500, fontSize: '0.85rem', ml: 0.5 }}>
+                          ({stats.cagr >= 0 ? '+' : ''}{stats.cagr.toFixed(1)}%/yr)
+                        </Box>
+                      )}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       Price: {stats.endPrice >= stats.startPrice ? '+' : ''}{(stats.endPrice - stats.startPrice).toFixed(2)}

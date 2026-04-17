@@ -9,6 +9,8 @@ export interface RangeStats {
   endPrice: number
   pctChange: number
   drawdownPct: number
+  /** Annualised CAGR (%). Null when the range is under ~1 month — too short to annualise meaningfully. */
+  cagr: number | null
 }
 
 /**
@@ -40,6 +42,16 @@ export function maxDrawdownPct(prices: number[]): number {
   return maxDd
 }
 
+/** Annualised compound growth rate, in %. Null when the window is under ~1 month. */
+export function cagrPct(startPrice: number, endPrice: number, startDate: string, endDate: string): number | null {
+  if (!(startPrice > 0) || !Number.isFinite(endPrice)) return null
+  const startMs = new Date(startDate).getTime()
+  const endMs = new Date(endDate).getTime()
+  const years = (endMs - startMs) / (365.25 * 24 * 60 * 60 * 1000)
+  if (!Number.isFinite(years) || years < 0.08) return null
+  return (Math.pow(endPrice / startPrice, 1 / years) - 1) * 100
+}
+
 export function computeRangeStats(
   data: { date: string; price: number }[],
   startIndex: number,
@@ -53,17 +65,23 @@ export function computeRangeStats(
   if (prices.length < 2) return null
   const startPrice = prices[0]
   const endPrice = prices[prices.length - 1]
+  const startDate = slice[0].date
+  const endDate = slice[slice.length - 1].date
   return {
-    startDate: slice[0].date,
-    endDate: slice[slice.length - 1].date,
+    startDate,
+    endDate,
     startPrice,
     endPrice,
     pctChange: pctChange(prices),
     drawdownPct: maxDrawdownPct(prices),
+    cagr: cagrPct(startPrice, endPrice, startDate, endDate),
   }
 }
 
 export function formatRangeStats(stats: RangeStats): string {
   const pct = stats.pctChange >= 0 ? `+${stats.pctChange.toFixed(2)}%` : `${stats.pctChange.toFixed(2)}%`
-  return `${pct} | Drawdown: -${stats.drawdownPct.toFixed(1)}%`
+  const cagrPart = stats.cagr != null
+    ? ` (${stats.cagr >= 0 ? '+' : ''}${stats.cagr.toFixed(1)}%/yr)`
+    : ''
+  return `${pct}${cagrPart} | Drawdown: -${stats.drawdownPct.toFixed(1)}%`
 }

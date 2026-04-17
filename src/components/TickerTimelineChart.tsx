@@ -361,7 +361,7 @@ const ChartDot = memo(function ChartDot(props: {
   )
 })
 
-export default function TickerTimelineChart({ symbol, actions, companyName, height = 380, defaultRange = '1y' }: TickerTimelineChartProps) {
+export default function TickerTimelineChart({ symbol, actions, companyName, height = 320, defaultRange = '1y' }: TickerTimelineChartProps) {
   const [range, setRange] = useState<ChartRange>(defaultRange)
   const [userChangedRange, setUserChangedRange] = useState(false)
   const [chartData, setChartData] = useState<{ date: string; price: number }[]>([])
@@ -386,12 +386,14 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
   // Responsive chart chrome — shrink margins, axis fonts, and x-axis band on
   // narrow viewports so the plot area gets to keep most of the width.
   const chartIsNarrow = wrapperWidth > 0 && wrapperWidth < 480
-  const plotLeft = chartIsNarrow ? 36 : 52
-  const plotRight = chartIsNarrow ? 12 : 24
-  const plotTop = 16
-  const plotBottom = chartIsNarrow ? 48 : 60
-  const axisFontSize = chartIsNarrow ? 11 : FONT_SIZE_AXIS
-  const xAxisHeight = chartIsNarrow ? 56 : 72
+  const plotLeft = chartIsNarrow ? 36 : 48
+  const plotRight = chartIsNarrow ? 12 : 20
+  const plotTop = 12
+  // Tight bottom margin — Recharts reserves this for x-axis + legend; kept
+  // just big enough to hold tilted date labels + the small symbol legend.
+  const plotBottom = chartIsNarrow ? 40 : 48
+  const axisFontSize = chartIsNarrow ? 10 : 11
+  const xAxisHeight = chartIsNarrow ? 44 : 56
   const xAxisRotation = chartIsNarrow ? -60 : -45
 
   useEffect(() => {
@@ -515,7 +517,25 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
     const pctChange = ((last.price - first.price) / first.price) * 100
     const min = Math.min(...chartData.map((d) => d.price))
     const max = Math.max(...chartData.map((d) => d.price))
-    return { firstPrice: first.price, lastPrice: last.price, pctChange, min, max, startDate: first.date, endDate: last.date }
+    // Annualised CAGR from the start date → end date. Skips sub-month ranges
+    // where the number is noisy and misleading.
+    const startMs = new Date(first.date).getTime()
+    const endMs = new Date(last.date).getTime()
+    const years = (endMs - startMs) / (365.25 * 24 * 60 * 60 * 1000)
+    const cagr =
+      years >= 0.08 && first.price > 0
+        ? (Math.pow(last.price / first.price, 1 / years) - 1) * 100
+        : null
+    return {
+      firstPrice: first.price,
+      lastPrice: last.price,
+      pctChange,
+      cagr,
+      min,
+      max,
+      startDate: first.date,
+      endDate: last.date,
+    }
   }, [chartData])
 
   const yAxisDomain = useMemo(() => {
@@ -817,6 +837,15 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           >
             {rangeSummary.pctChange >= 0 ? '+' : ''}{rangeSummary.pctChange.toFixed(2)}%
           </Typography>
+          {rangeSummary.cagr != null && (
+            <Typography
+              variant="body2"
+              component="span"
+              sx={{ color: 'text.secondary', fontWeight: 500 }}
+            >
+              {rangeSummary.cagr >= 0 ? '+' : ''}{rangeSummary.cagr.toFixed(1)}%/yr
+            </Typography>
+          )}
           <Typography variant="caption" color="text.secondary" component="span">
             {rangeSummary.startDate} – {rangeSummary.endDate}
           </Typography>
