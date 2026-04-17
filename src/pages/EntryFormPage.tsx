@@ -20,7 +20,8 @@ import CloseIcon from '@mui/icons-material/Close'
 import { AnimatePresence, motion } from 'motion/react'
 import { useAuth } from '../contexts/AuthContext'
 import { createEntry, updateEntry } from '../services/entriesService'
-import { createPrediction } from '../services/predictionsService'
+import { createPrediction, deletePrediction } from '../services/predictionsService'
+import { usePredictions } from '../hooks/queries'
 import { createAction } from '../services/actionsService'
 import { ensurePassedForUser } from '../services/passedService'
 import { buildDecisionBlockMarkdown, type DecisionBlockFields } from '../utils/decisionBlockMarkdown'
@@ -143,6 +144,94 @@ function RowCard({
   )
 }
 
+/**
+ * Card that shows a list of items + an inline "Add another" affordance. Same
+ * visual language as `RowCard` but optimised for the "Decisions / Predictions /
+ * Rules" pattern: always-on header (count + description), then rendered
+ * children which contain the rows and the inline add form.
+ */
+function ListCard({
+  title,
+  description,
+  count,
+  hasValue,
+  children,
+}: {
+  title: string
+  description?: string
+  count: number
+  hasValue: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        overflow: 'hidden',
+        transition: 'background-color 120ms, border-color 120ms',
+        bgcolor: hasValue ? 'background.paper' : 'grey.50',
+        borderColor: hasValue ? 'primary.light' : 'divider',
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, py: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box display="flex" alignItems="baseline" gap={0.75}>
+            <Typography variant="body2" fontWeight={700} color="text.primary">{title}</Typography>
+            {count > 0 && (
+              <Typography variant="caption" color="text.secondary" fontWeight={600}>({count})</Typography>
+            )}
+          </Box>
+          {!hasValue && description && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.72rem', mt: 0.25 }}>
+              {description}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+      <Box sx={{ px: 1.5, pb: 1.5, pt: 0.25, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+        {children}
+      </Box>
+    </Paper>
+  )
+}
+
+/**
+ * A single row inside a `ListCard` — children on the left (chip + label stack),
+ * a trash icon on the right. Matches the Decisions row aesthetic.
+ */
+function ItemRow({
+  children,
+  onDelete,
+  ariaLabel,
+}: {
+  children: React.ReactNode
+  onDelete: () => void
+  ariaLabel: string
+}) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        px: 1,
+        py: 0.75,
+        bgcolor: 'grey.50',
+        borderRadius: 1,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+        {children}
+      </Box>
+      <IconButton size="small" onClick={onDelete} aria-label={ariaLabel}>
+        <DeleteOutlineIcon fontSize="small" />
+      </IconButton>
+    </Box>
+  )
+}
+
 const MARKET_CONDITIONS = [
   'Bull Market',
   'Bear Market',
@@ -173,12 +262,26 @@ export default function EntryFormPage() {
   const [loading, setLoading] = useState(!isNew)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [entryRules, setEntryRules] = useState('')
-  const [exitRules, setExitRules] = useState('')
-  const [predictionPercent, setPredictionPercent] = useState('')
-  const [predictionDate, setPredictionDate] = useState('')
+  // Rules are stored server-side as newline-joined text, but the UI treats
+  // them as a list of discrete bullets (port of the Decisions row pattern).
+  const [entryRulesList, setEntryRulesList] = useState<string[]>([])
+  const [exitRulesList, setExitRulesList] = useState<string[]>([])
+  const [newEntryRule, setNewEntryRule] = useState('')
+  const [newExitRule, setNewExitRule] = useState('')
+
+  // Predictions: the UI is a list of pending (unsaved) + existing (already in
+  // DB) rows. Existing ones carry an `id` so Delete can remove them server-side.
+  interface PendingPrediction {
+    id?: string           // present if it's an existing row from the DB
+    probability: number
+    end_date: string
+  }
+  const [predictions, setPredictions] = useState<PendingPrediction[]>([])
+  const [newPredPct, setNewPredPct] = useState('')
+  const [newPredDate, setNewPredDate] = useState('')
   const [decision_horizon, setDecisionHorizon] = useState('')
   const [decisionDialogOpen, setDecisionDialogOpen] = useState(false)
+  const [deletedPredictionIds, setDeletedPredictionIds] = useState<string[]>([])
   const formRef = useRef<HTMLFormElement>(null)
   const initialValuesRef = useRef({ title_markdown: '', body_markdown: '', tagsStr: '' })
 
@@ -292,10 +395,33 @@ export default function EntryFormPage() {
       const lines = entry.trading_plan.split('\n')
       const entryIdx = lines.findIndex((l) => l.startsWith('Entry:'))
       const exitIdx = lines.findIndex((l) => l.startsWith('Exit:'))
-      if (entryIdx >= 0) setEntryRules(lines[entryIdx].replace('Entry:', '').trim())
-      if (exitIdx >= 0) setExitRules(lines[exitIdx].replace('Exit:', '').trim())
+      if (entryIdx >= 0) {
+        const raw = lines[entryIdx].replace('Entry:', '').trim()
+        setEntryRulesList(raw ? raw.split(/\s*\n\s*|\s*;\s*|\s*·\s*/).filter(Boolean) : [])
+      }
+      if (exitIdx >= 0) {
+        const raw = lines[exitIdx].replace('Exit:', '').trim()
+        setExitRulesList(raw ? raw.split(/\s*\n\s*|\s*;\s*|\s*·\s*/).filter(Boolean) : [])
+      }
     }
   }, [isNew, editEntryQ.data, editEntryQ.isLoading, editEntryQ.error])
+
+  // Load existing predictions for the entry being edited (only once per entry load).
+  const existingPredictionsQ = usePredictions(isNew ? undefined : id)
+  const loadedPredictionsIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (isNew || !id) return
+    if (loadedPredictionsIdRef.current === id) return
+    if (!existingPredictionsQ.data) return
+    setPredictions(
+      existingPredictionsQ.data.map((p) => ({
+        id: p.id,
+        probability: p.probability,
+        end_date: p.end_date,
+      }))
+    )
+    loadedPredictionsIdRef.current = id
+  }, [isNew, id, existingPredictionsQ.data])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -380,11 +506,14 @@ export default function EntryFormPage() {
     setError(null)
     setSaving(true)
     try {
-      // Build trading plan string
-      const tradingPlan = entryRules || exitRules
+      // Rules are stored as single joined lines per side; the UI treats them
+      // as a list of bullets (split on newlines when loaded).
+      const entryRulesStr = entryRulesList.map((r) => r.trim()).filter(Boolean).join('\n')
+      const exitRulesStr = exitRulesList.map((r) => r.trim()).filter(Boolean).join('\n')
+      const tradingPlan = entryRulesStr || exitRulesStr
         ? [
-            entryRules && `Entry: ${entryRules}`,
-            exitRules && `Exit: ${exitRules}`,
+            entryRulesStr && `Entry: ${entryRulesStr}`,
+            exitRulesStr && `Exit: ${exitRulesStr}`,
           ]
             .filter(Boolean)
             .join('\n')
@@ -445,22 +574,32 @@ export default function EntryFormPage() {
       showSuccess(isNew ? 'Entry created' : 'Entry saved')
       if (entryId) navigate(`/entries/${entryId}`)
 
-      // Save prediction if one was entered
-      if (entryId && predictionPercent && predictionDate) {
+      // Save predictions — delete any the user removed, create any new ones.
+      if (entryId) {
         try {
-          const probability = Math.min(100, Math.max(0, parseInt(predictionPercent) || 0))
-          await createPrediction({
-            entry_id: entryId,
-            probability,
-            end_date: predictionDate,
-            type: 'idea',
-            label: `${probability}% by ${predictionDate}`,
-            ticker: null,
-          })
-          invalidate.predictions(entryId)
+          for (const delId of deletedPredictionIds) {
+            await deletePrediction(delId)
+          }
+          const toCreate = predictions.filter((p) => !p.id)
+          for (const p of toCreate) {
+            if (!p.end_date) continue
+            const probability = Math.min(100, Math.max(0, p.probability || 0))
+            await createPrediction({
+              entry_id: entryId,
+              probability,
+              end_date: p.end_date,
+              type: 'idea',
+              label: `${probability}% by ${p.end_date}`,
+              ticker: null,
+            })
+          }
+          if (deletedPredictionIds.length || toCreate.length) {
+            invalidate.predictions(entryId)
+            setDeletedPredictionIds([])
+          }
         } catch (predErr) {
-          console.warn('Failed to save prediction:', predErr)
-          // Don't fail the entire save if prediction fails
+          console.warn('Failed to save predictions:', predErr)
+          // Don't fail the entire save if prediction upsert fails
         }
       }
     } catch (err: unknown) {
@@ -750,62 +889,158 @@ export default function EntryFormPage() {
           </Box>
         </RowCard>
 
-        <RowCard
-          title="Prediction"
-          description="A falsifiable forecast with a target date"
-          hasValue={Boolean(predictionPercent || predictionDate || decision_horizon)}
-          onClear={() => { setPredictionPercent(''); setPredictionDate(''); setDecisionHorizon('') }}
+        <ListCard
+          title="Predictions"
+          description="Falsifiable forecasts with a target date — percent move by a given day."
+          count={predictions.length}
+          hasValue={predictions.length > 0}
         >
-          <Box display="flex" gap={2} flexWrap="wrap">
-            <TextField label="Prediction %" type="number" value={predictionPercent}
-              onChange={(e) => setPredictionPercent(e.target.value)} placeholder="e.g., 15"
-              inputProps={{ min: '-100', max: '200', step: '1' }} size="small" sx={{ minWidth: 110 }}
+          {predictions.map((p, i) => (
+            <ItemRow
+              key={p.id ?? `pending-${i}`}
+              onDelete={() => {
+                if (p.id) setDeletedPredictionIds((prev) => [...prev, p.id as string])
+                setPredictions((prev) => prev.filter((_, idx) => idx !== i))
+              }}
+              ariaLabel="Remove prediction"
+            >
+              <Typography variant="body2" fontWeight={600}>
+                {p.probability >= 0 ? '+' : ''}{p.probability}%
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                by {p.end_date}
+              </Typography>
+              {!p.id && (
+                <Chip label="unsaved" size="small" variant="outlined" sx={{ height: 18, fontSize: '0.62rem', ml: 'auto' }} />
+              )}
+            </ItemRow>
+          ))}
+          <Box display="flex" gap={0.75} alignItems="flex-end" flexWrap="wrap" sx={{ mt: 0.5 }}>
+            <TextField
+              label="Prediction %" type="number" value={newPredPct}
+              onChange={(e) => setNewPredPct(e.target.value)} placeholder="e.g., 15"
+              inputProps={{ min: '-100', max: '200', step: '1' }} size="small" sx={{ width: 120 }}
             />
-            <TextField label="By Date" type="date" value={predictionDate}
-              onChange={(e) => setPredictionDate(e.target.value)}
-              InputLabelProps={{ shrink: true }} size="small" sx={{ minWidth: 140 }}
+            <TextField
+              label="By date" type="date" value={newPredDate}
+              onChange={(e) => setNewPredDate(e.target.value)}
+              InputLabelProps={{ shrink: true }} size="small" sx={{ width: 160 }}
             />
-            <TextField label="Decision Horizon" type="date" value={decision_horizon}
+            <Button
+              size="small" variant="outlined"
+              disabled={!newPredPct || !newPredDate}
+              onClick={() => {
+                const probability = Math.min(100, Math.max(-100, parseInt(newPredPct) || 0))
+                setPredictions((prev) => [...prev, { probability, end_date: newPredDate }])
+                setNewPredPct('')
+                setNewPredDate('')
+              }}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              Add
+            </Button>
+          </Box>
+          <Box sx={{ mt: 1.5, pt: 1, borderTop: '1px dashed', borderColor: 'divider' }}>
+            <TextField
+              label="Decision horizon" type="date" value={decision_horizon}
               onChange={(e) => setDecisionHorizon(e.target.value)}
-              InputLabelProps={{ shrink: true }} size="small" sx={{ minWidth: 140 }}
-              helperText="Expected resolution"
+              InputLabelProps={{ shrink: true }} size="small" sx={{ minWidth: 160 }}
+              helperText="Expected resolution for the whole idea"
             />
           </Box>
-        </RowCard>
+        </ListCard>
 
-        <RowCard
+        <ListCard
           title="Entry Rules"
-          description="When you'd enter the position"
-          hasValue={entryRules.trim().length > 0}
-          onClear={() => setEntryRules('')}
+          description="Conditions you'd need to see before entering the position."
+          count={entryRulesList.length}
+          hasValue={entryRulesList.length > 0}
         >
-          <TextField
-            placeholder="e.g., Break above $100 with volume"
-            value={entryRules}
-            onChange={(e) => setEntryRules(e.target.value)}
-            size="small"
-            fullWidth
-            multiline
-            minRows={2}
-          />
-        </RowCard>
+          {entryRulesList.map((rule, i) => (
+            <ItemRow
+              key={`entry-${i}`}
+              onDelete={() => setEntryRulesList((prev) => prev.filter((_, idx) => idx !== i))}
+              ariaLabel="Remove entry rule"
+            >
+              <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                {rule}
+              </Typography>
+            </ItemRow>
+          ))}
+          <Box display="flex" gap={0.75} alignItems="center" sx={{ mt: 0.5 }}>
+            <TextField
+              placeholder="e.g., Break above $100 with volume"
+              value={newEntryRule}
+              onChange={(e) => setNewEntryRule(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newEntryRule.trim()) {
+                  e.preventDefault()
+                  setEntryRulesList((prev) => [...prev, newEntryRule.trim()])
+                  setNewEntryRule('')
+                }
+              }}
+              size="small"
+              fullWidth
+            />
+            <Button
+              size="small" variant="outlined"
+              disabled={!newEntryRule.trim()}
+              onClick={() => {
+                setEntryRulesList((prev) => [...prev, newEntryRule.trim()])
+                setNewEntryRule('')
+              }}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              Add
+            </Button>
+          </Box>
+        </ListCard>
 
-        <RowCard
+        <ListCard
           title="Exit Rules"
-          description="When you'd reassess or close the position"
-          hasValue={exitRules.trim().length > 0}
-          onClear={() => setExitRules('')}
+          description="When you'd reassess or close the position — stops, thesis breaks, price targets."
+          count={exitRulesList.length}
+          hasValue={exitRulesList.length > 0}
         >
-          <TextField
-            placeholder="e.g., Stop loss at $95, or thesis broken"
-            value={exitRules}
-            onChange={(e) => setExitRules(e.target.value)}
-            size="small"
-            fullWidth
-            multiline
-            minRows={2}
-          />
-        </RowCard>
+          {exitRulesList.map((rule, i) => (
+            <ItemRow
+              key={`exit-${i}`}
+              onDelete={() => setExitRulesList((prev) => prev.filter((_, idx) => idx !== i))}
+              ariaLabel="Remove exit rule"
+            >
+              <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                {rule}
+              </Typography>
+            </ItemRow>
+          ))}
+          <Box display="flex" gap={0.75} alignItems="center" sx={{ mt: 0.5 }}>
+            <TextField
+              placeholder="e.g., Stop loss at $95, or thesis broken"
+              value={newExitRule}
+              onChange={(e) => setNewExitRule(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newExitRule.trim()) {
+                  e.preventDefault()
+                  setExitRulesList((prev) => [...prev, newExitRule.trim()])
+                  setNewExitRule('')
+                }
+              }}
+              size="small"
+              fullWidth
+            />
+            <Button
+              size="small" variant="outlined"
+              disabled={!newExitRule.trim()}
+              onClick={() => {
+                setExitRulesList((prev) => [...prev, newExitRule.trim()])
+                setNewExitRule('')
+              }}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              Add
+            </Button>
+          </Box>
+        </ListCard>
       </Box>
 
       <Box display="flex" gap={1.5} alignItems="center" sx={{ mt: 1 }}>
