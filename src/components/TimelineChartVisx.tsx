@@ -12,14 +12,19 @@ import { Box, Paper, Typography, CircularProgress } from '@mui/material'
 import type { ActionWithEntry } from '../services/actionsService'
 import { fetchChartData } from '../services/chartApiService'
 import { getDecisionTypeColor, getDecisionTypeConfig } from '../theme/decisionTypes'
-import { DecisionMarkerGradients } from './charts/decisionMarkers'
+import { DecisionMarkerGradients, conePath, getMarkerGeom, clusterDotRadius } from './charts/decisionMarkers'
+import { tokens } from '../theme'
 
 const CHART_LINE_COLOR = '#334155'
 const AXIS_COLOR = '#64748b'
 const GRID_COLOR = '#cbd5e1'
-const ARROW_BUY_COLOR = '#16a34a'
-const ARROW_SELL_COLOR = '#dc2626'
-const ARROW_GREYED = '#94a3b8'
+// Marker colours pulled from theme tokens so a future palette tweak is a
+// one-token change. Local aliases kept (renaming all sites would explode
+// this diff). Same names are re-exported by decisionMarkers.tsx so the
+// other charts also stay in sync.
+const ARROW_BUY_COLOR = tokens.markerBuy
+const ARROW_SELL_COLOR = tokens.markerSell
+const ARROW_GREYED = tokens.markerGreyed
 
 // Distinct, readable colors on white — avoid green/red (used for arrows)
 const TICKER_COLORS = [
@@ -33,50 +38,10 @@ const TICKER_COLORS = [
   '#a16207', // yellow-dark
 ]
 
-// Marker geometry — dots on the price line + light-cone glows radiating from
-// them (up for buys, down for sells). Cone height scales with trade size.
-// A 'medium' cone at desktop is 32px; tiny is barely visible, xl is 2x medium.
-// We rely on natural alpha compositing + `mix-blend-mode: multiply` (in the
-// cone group) for the constructive-interference effect: overlapping greens
-// darken into a more saturated green, which reads as "more activity" on a
-// light background.
-interface MarkerGeom {
-  DOT_R: number
-  DOT_STROKE: number
-  /** Maximum cone footprint — used for clustering & hit-testing. */
-  CONE_HEIGHT_MAX: number
-  CONE_HALFWIDTH_MAX: number
-  /** Per-size cone height in px. Half-width = height * 0.5. */
-  CONE_SIZE: Record<import('../types/database').ActionSize, number>
-}
-
-function getMarkerGeom(width: number): MarkerGeom {
-  const mobile = width < 480
-  // Heights tuned so medium is "about what you had before" but a bit longer.
-  const sizes = mobile
-    ? { tiny: 10, small: 18, medium: 28, large: 42, xl: 60 }
-    : { tiny: 12, small: 22, medium: 34, large: 52, xl: 72 }
-  const maxH = sizes.xl
-  return {
-    DOT_R: mobile ? 3.5 : 4,
-    DOT_STROKE: 1,
-    CONE_HEIGHT_MAX: maxH,
-    CONE_HALFWIDTH_MAX: Math.round(maxH * 0.5),
-    CONE_SIZE: sizes,
-  }
-}
-
-// Decision count helper now lives in `charts/decisionMarkers` — shared with
-// the other two chart implementations. We don't need to import it here yet
-// (the visx render computes counts inline below) but keeping the comment as
-// a breadcrumb so the next reader doesn't recreate it.
-
-/** Triangle path for a light-cone glow. Apex at (cx, cy), base at (cy + dir*h)
- * where dir = -1 for buy (cone goes up) and +1 for sell (cone goes down). */
-function conePath(cx: number, cy: number, halfW: number, h: number, dir: -1 | 1): string {
-  const baseY = cy + dir * h
-  return `M ${cx} ${cy} L ${cx + halfW} ${baseY} L ${cx - halfW} ${baseY} Z`
-}
+// Marker geometry (getMarkerGeom, MarkerGeom type) and the variable-size
+// cone-path / cluster-radius math now live in `charts/decisionMarkers.tsx`
+// alongside the dot/gradient primitives so all three charts can grow into
+// the same scale without re-deriving breakpoints.
 
 export interface TimelineChartPoint {
   date: string
@@ -215,7 +180,7 @@ function TimelineChartVisx({
     if (!firstDataPrice || firstDataPrice <= 0) return []
     // Each benchmark gets a slightly different shade of slate so the eye
     // can tell them apart in a multi-compare. Order is the input order.
-    const COLORS = ['#94a3b8', '#64748b', '#475569']
+    const COLORS = [tokens.markerBenchmark, tokens.markerBenchmarkAlt, tokens.markerBenchmarkAlt2]
     const lines: TickerLine[] = []
     for (let bi = 0; bi < benchmarkData.length; bi++) {
       const bench = benchmarkData[bi]
@@ -716,7 +681,7 @@ function TimelineChartVisx({
                   return (
                     <path
                       key={`bc-${i}`}
-                      d={conePath(m.cx, m.priceY, hw, h, -1)}
+                      d={conePath(m.cx, m.priceY, 'buy', h, hw)}
                       fill={greyed ? ARROW_GREYED : `url(#${chartId}-buy-glow)`}
                       opacity={op}
                     />
@@ -730,7 +695,7 @@ function TimelineChartVisx({
                   return (
                     <path
                       key={`sc-${i}`}
-                      d={conePath(m.cx, m.priceY, hw, h, 1)}
+                      d={conePath(m.cx, m.priceY, 'sell', h, hw)}
                       fill={greyed ? ARROW_GREYED : `url(#${chartId}-sell-glow)`}
                       opacity={op}
                     />
@@ -761,14 +726,9 @@ function TimelineChartVisx({
               return hoveredKey === key || activeArrow?.key === key
             }
 
-            // Cluster radius scales with sqrt(count) so total area grows
-            // linearly with count. Capped at 4× the base so even huge
-            // clusters stay tappable but don't dominate the chart.
-            const clusterDotRadius = (count: number, hovered: boolean): number => {
-              const base = DOT_R * Math.sqrt(Math.max(1, count))
-              const capped = Math.min(DOT_R * 4, base)
-              return hovered ? capped + 1.5 : capped
-            }
+            // Wrapper around the shared `clusterDotRadius` so the call sites
+            // below don't have to thread DOT_R every time.
+            const clusterR = (count: number, hovered: boolean) => clusterDotRadius(count, DOT_R, hovered)
 
             // Cluster centroid: average of member cx; price-y is the price
             // at the centre-most member (so the dot still sits on the line,
@@ -804,7 +764,7 @@ function TimelineChartVisx({
               const greyed = bGroup.every((m) => isBuyMarkerGreyed(m))
               const primary = bGroup.some((m) => m.buyIsPrimary)
               const hovered = anyHoverOrActiveDotInGroup(bGroup, 'buy')
-              const r = clusterDotRadius(buyCount, hovered)
+              const r = clusterR(buyCount, hovered)
               const innerR = Math.max(1, r - 1.75)
               const fill = greyed ? ARROW_GREYED : ARROW_BUY_COLOR
               const { cx, cy } = clusterCentroid(bGroup)
@@ -827,7 +787,7 @@ function TimelineChartVisx({
                 const greyedSell = sellGroupForShared.every((m) => isSellMarkerGreyed(m))
                 const sellPrimary = sellGroupForShared.some((m) => m.sellIsPrimary)
                 const hoveredEither = hovered || anyHoverOrActiveDotInGroup(sellGroupForShared, 'sell')
-                const rMix = clusterDotRadius(totalCount, hoveredEither)
+                const rMix = clusterR(totalCount, hoveredEither)
                 const innerRMix = Math.max(1, rMix - 1.75)
                 const topFill = greyed ? ARROW_GREYED : ARROW_BUY_COLOR
                 const botFill = greyedSell ? ARROW_GREYED : ARROW_SELL_COLOR
@@ -878,7 +838,7 @@ function TimelineChartVisx({
               const greyed = sGroup.every((m) => isSellMarkerGreyed(m))
               const primary = sGroup.some((m) => m.sellIsPrimary)
               const hovered = anyHoverOrActiveDotInGroup(sGroup, 'sell')
-              const r = clusterDotRadius(sellCount, hovered)
+              const r = clusterR(sellCount, hovered)
               const innerR = Math.max(1, r - 1.75)
               const fill = greyed ? ARROW_GREYED : ARROW_SELL_COLOR
               const { cx, cy } = clusterCentroid(sGroup)

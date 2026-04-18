@@ -43,6 +43,18 @@ const tokens = {
   // Hairline ruled-line for dividers — subtle but real.
   hairline: 'rgba(15, 23, 42, 0.10)',
   hairlineStrong: 'rgba(15, 23, 42, 0.18)',
+  // Decision-marker palette — single source of truth for the dot+cone
+  // colour language used by every chart (timeline, popup, per-ticker).
+  // These were sprinkled across decisionMarkers.tsx, TimelineChartVisx.tsx,
+  // and inline strings inside dialogs; consolidated here so a future dark
+  // mode (or any palette tweak) is a one-token change.
+  markerBuy: '#16a34a',           // green-600 — primary buy / add_more / cover
+  markerSell: '#dc2626',          // red-600 — primary sell / trim / short
+  markerOther: '#475569',         // slate-600 — pass / research / hold / watchlist / speculate
+  markerGreyed: '#94a3b8',        // slate-400 — muted when filtered out
+  markerBenchmark: '#94a3b8',     // benchmark overlay line (slate-400)
+  markerBenchmarkAlt: '#64748b',  // 2nd compare benchmark (slate-500)
+  markerBenchmarkAlt2: '#475569', // 3rd compare benchmark (slate-600)
 }
 
 const fontDisplay = "'Source Serif 4', 'Iowan Old Style', 'Charter', 'Georgia', serif"
@@ -78,6 +90,17 @@ const theme = createTheme({
       50: tokens.bgSubtle,
       100: '#ede9df',
       200: '#e4dfd1',
+    },
+    // Custom palette block for chart decision markers. Module-augmented
+    // type below makes `theme.palette.marker.*` typed everywhere.
+    marker: {
+      buy: tokens.markerBuy,
+      sell: tokens.markerSell,
+      other: tokens.markerOther,
+      greyed: tokens.markerGreyed,
+      benchmark: tokens.markerBenchmark,
+      benchmarkAlt: tokens.markerBenchmarkAlt,
+      benchmarkAlt2: tokens.markerBenchmarkAlt2,
     },
   },
   typography: {
@@ -512,3 +535,33 @@ const theme = createTheme({
 
 export default theme
 export { tokens, radius, fontDisplay, fontBody, fontMono }
+
+// ── Module augmentation ──────────────────────────────────────────────────
+// Tell MUI's type system about our custom `palette.marker` block so call
+// sites can do `theme.palette.marker.buy` with full type safety. Without
+// this you'd get "Property 'marker' does not exist on type 'Palette'" at
+// every consumer.
+declare module '@mui/material/styles' {
+  interface Palette {
+    marker: {
+      buy: string
+      sell: string
+      other: string
+      greyed: string
+      benchmark: string
+      benchmarkAlt: string
+      benchmarkAlt2: string
+    }
+  }
+  interface PaletteOptions {
+    marker?: {
+      buy?: string
+      sell?: string
+      other?: string
+      greyed?: string
+      benchmark?: string
+      benchmarkAlt?: string
+      benchmarkAlt2?: string
+    }
+  }
+}

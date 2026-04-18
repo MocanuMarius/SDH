@@ -16,13 +16,70 @@
  *     <circle cx={cx} cy={cy} r={4} fill={MARKER_BUY_COLOR} stroke="#fff" strokeWidth={1} />
  */
 
-export const MARKER_BUY_COLOR = '#16a34a'   // green-600
-export const MARKER_SELL_COLOR = '#dc2626'  // red-600
-export const MARKER_GREYED = '#94a3b8'      // slate-400, used when ticker is filtered out
+// Sourced from `theme.tokens` so the chart-marker palette stays in sync
+// with the rest of the app. Re-exported as named constants so legacy
+// import sites keep working — but new code should prefer `tokens.marker*`
+// or `useTheme().palette.marker.*` directly.
+import { tokens } from '../../theme'
+
+export const MARKER_BUY_COLOR = tokens.markerBuy
+export const MARKER_SELL_COLOR = tokens.markerSell
+export const MARKER_GREYED = tokens.markerGreyed
 
 /** Default cone footprint. Override per chart if it needs a tighter glow. */
 export const CONE_HEIGHT_DEFAULT = 28
 export const CONE_HALFW_DEFAULT = 14
+
+// ── Marker geometry (was inline in TimelineChartVisx) ─────────────────────
+// Keeping it here means the per-ticker page or popup can adopt the same
+// dot-radius / cone-size scale if they ever need to without re-deriving
+// the breakpoints. Today TimelineChartVisx is the only consumer.
+
+import type { ActionSize } from '../../types/database'
+
+export interface MarkerGeom {
+  /** Single-marker dot radius in px. */
+  DOT_R: number
+  DOT_STROKE: number
+  /** Maximum cone footprint — used for clustering & hit-testing. */
+  CONE_HEIGHT_MAX: number
+  CONE_HALFWIDTH_MAX: number
+  /** Per-size cone height in px. Half-width = height * 0.5. */
+  CONE_SIZE: Record<ActionSize, number>
+}
+
+/**
+ * Per-breakpoint marker sizing. Mobile gets slightly smaller dots and
+ * cones because the chart itself is narrower; desktop gets the full
+ * scale. Cone heights are in px and grow with trade size (tiny → xl).
+ */
+export function getMarkerGeom(width: number): MarkerGeom {
+  const mobile = width < 480
+  const sizes: Record<ActionSize, number> = mobile
+    ? { tiny: 10, small: 18, medium: 28, large: 42, xl: 60 }
+    : { tiny: 12, small: 22, medium: 34, large: 52, xl: 72 }
+  const maxH = sizes.xl
+  return {
+    DOT_R: mobile ? 3.5 : 4,
+    DOT_STROKE: 1,
+    CONE_HEIGHT_MAX: maxH,
+    CONE_HALFWIDTH_MAX: Math.round(maxH * 0.5),
+    CONE_SIZE: sizes,
+  }
+}
+
+/**
+ * Radius for a cluster dot whose `count` markers have collapsed into a
+ * single dot. Scales with sqrt(count) so the dot's *area* grows linearly
+ * with count (visually accurate weighting), capped at 4× base so even
+ * huge clusters stay tappable without dominating the chart. Hover adds
+ * 1.5px so the dot pops on cursor enter.
+ */
+export function clusterDotRadius(count: number, baseR: number, hovered: boolean): number {
+  const base = baseR * Math.sqrt(Math.max(1, count))
+  const capped = Math.min(baseR * 4, base)
+  return hovered ? capped + 1.5 : capped
+}
 
 /**
  * Triangle path with apex at the dot, base `height` px away in `dir`. Half-width
