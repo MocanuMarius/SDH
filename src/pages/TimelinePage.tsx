@@ -929,60 +929,98 @@ export default function TimelinePage() {
             </Box>
           </Box>
 
-          {/* Decision banner — absolute, covers the range-selector exactly.
-              Same bottom hairline as the selector so the seam continues
-              seamlessly into the chart below. Coloured left-rule by
-              direction (buy/sell) keeps the tooltip's existing semantics. */}
+          {/* Decision banner — absolute, covers the range-selector exactly
+              while preserving the old tooltip's rounded Paper look: full
+              coloured outline, 8px radius, 1.5px border.
+              Layout resilience:
+                - flexWrap: 'wrap' + column-stack when items would overflow
+                  keeps the banner from crashing awkward labels into each
+                  other on phones.
+                - matches the range-selector's resting height (pb: 1 + 1px
+                  border = 33px-ish) so nothing reflows when it opens /
+                  closes — the underlying selector row is untouched.
+                - the banner has its own bottom border hairline which
+                  visually continues the selector's underline, so the seam
+                  with the chart below is pixel-identical. */}
           {decisionOverlay && (
-            <Box
+            <Paper
+              variant="outlined"
               sx={{
                 position: 'absolute',
                 inset: 0,
-                bgcolor: 'background.paper',
-                borderBottom: '1px solid',
-                borderColor: 'divider',
-                borderLeft: `3px solid ${decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell}`,
+                borderColor: decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell,
+                borderWidth: 1.5,
+                borderRadius: 1.5,
                 display: 'flex',
                 alignItems: 'center',
-                gap: 1.25,
-                px: 1.25,
-                py: 0.75,
+                flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                columnGap: 1.25,
+                rowGap: 0.25,
+                px: { xs: 1, sm: 1.25 },
+                py: { xs: 0.5, sm: 0.75 },
                 zIndex: 8,
+                bgcolor: 'background.paper',
               }}
             >
-              {/* Direction + count — primary label */}
+              {/* Direction + count — primary label, never shrinks */}
               <Typography
                 variant="body2"
                 fontWeight={800}
-                sx={{ color: decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell, flexShrink: 0 }}
+                sx={{
+                  color: decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell,
+                  flexShrink: 0,
+                  fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                }}
               >
                 {decisionOverlay.direction === 'buy' ? '▲ Buy' : '▼ Sell'} · {decisionOverlay.count} decision{decisionOverlay.count !== 1 ? 's' : ''}
               </Typography>
 
-              {/* Date + symbol */}
-              <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+              {/* Date + symbol — one continuous chip of metadata */}
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ flexShrink: 0, fontSize: '0.72rem', whiteSpace: 'nowrap' }}
+              >
                 {decisionOverlay.date} · {decisionOverlay.symbol}
                 {Number.isFinite(decisionOverlay.price) ? ` $${decisionOverlay.price.toFixed(2)}` : ''}
               </Typography>
 
-              {/* Ticker legend — inline, space-permitting */}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75, minWidth: 0, flex: 1 }}>
+              {/* Ticker legend — flex-grows to take remaining room; wraps
+                  onto its own line on narrow screens. */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 0.75,
+                  minWidth: 0,
+                  flex: 1,
+                  rowGap: 0.25,
+                }}
+              >
                 {decisionOverlay.fetching ? (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                     <CircularProgress size={12} />
-                    <Typography variant="caption" color="text.secondary">Loading charts…</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                      Loading charts…
+                    </Typography>
                   </Box>
                 ) : decisionOverlay.lines.length > 0 ? (
                   decisionOverlay.lines.map((tl) => {
                     const sign = tl.pctChange >= 0 ? '+' : ''
                     return (
-                      <Box key={tl.ticker} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box key={tl.ticker} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, whiteSpace: 'nowrap' }}>
                         <Box sx={{ width: 14, height: 2.5, bgcolor: tl.color, borderRadius: 1 }} />
-                        <Typography variant="caption" fontWeight={700} sx={{ color: tl.color }}>${tl.ticker}</Typography>
+                        <Typography variant="caption" fontWeight={700} sx={{ color: tl.color, fontSize: '0.72rem' }}>
+                          ${tl.ticker}
+                        </Typography>
                         <Typography
                           variant="caption"
                           fontWeight={800}
-                          sx={{ color: tl.pctChange >= 0 ? tokens.markerBuy : tokens.markerSell }}
+                          sx={{
+                            color: tl.pctChange >= 0 ? tokens.markerBuy : tokens.markerSell,
+                            fontSize: '0.72rem',
+                          }}
                         >
                           {sign}{tl.pctChange.toFixed(1)}%
                         </Typography>
@@ -991,26 +1029,30 @@ export default function TimelinePage() {
                   })
                 ) : decisionOverlay.tickers.length > 0 ? (
                   decisionOverlay.tickers.slice(0, 6).map((t) => (
-                    <Chip key={t} size="small" label={`$${t}`} sx={{ height: 20, fontSize: '0.68rem' }} />
+                    <Chip key={t} size="small" label={`$${t}`} sx={{ height: 20, fontSize: '0.65rem' }} />
                   ))
                 ) : null}
                 {!decisionOverlay.fetching && decisionOverlay.lines.length > 0 && (
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', ml: 0.5 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontSize: '0.65rem', ml: 0.25, whiteSpace: 'nowrap' }}
+                  >
                     since this date
                   </Typography>
                 )}
               </Box>
 
-              {/* Dismiss */}
+              {/* Dismiss — always visible in the corner, never wraps. */}
               <IconButton
                 size="small"
                 onClick={() => { setSelectedActionId(null); setDecisionOverlay(null) }}
                 aria-label="Close decision overlay"
-                sx={{ ml: 'auto', flexShrink: 0 }}
+                sx={{ ml: 'auto', flexShrink: 0, p: 0.5 }}
               >
                 <CloseIcon fontSize="small" />
               </IconButton>
-            </Box>
+            </Paper>
           )}
           </Box>
 
