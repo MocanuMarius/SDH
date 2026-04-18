@@ -1145,8 +1145,16 @@ function TimelineChartVisx({
         </Group>
 
         {/* Axes */}
+        {/* X-axis sits at the bottom of the plot area. When the brush is
+            rendered below the plot, the axis sits just above it
+            (height - bottomMargin - BRUSH_HEIGHT). When the brush is
+            hidden (TimelinePage), the axis sits at the plot bottom
+            (height - bottomMargin). Previously this always subtracted
+            BRUSH_HEIGHT, leaving the plot area — and any chart line —
+            extending 40 px below the axis into the bottom margin, which
+            looked like "the chart going below the y-axis labels". */}
         <AxisBottom
-          top={height - responsiveMargin.bottom - BRUSH_HEIGHT}
+          top={height - responsiveMargin.bottom - (showBrush ? BRUSH_HEIGHT : 0)}
           left={responsiveMargin.left}
           scale={dateScale}
           stroke={AXIS_COLOR} tickStroke={AXIS_COLOR}
@@ -1158,7 +1166,13 @@ function TimelineChartVisx({
             return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
           }}
         />
+        {/* top=responsiveMargin.top is required so that tick labels line
+            up with the price gridlines and chart paths — which are all
+            drawn inside the main <Group top={responsiveMargin.top}>.
+            Without it, the axis sits 24 px above the plot, and every
+            chart line visually appears 24 px below its own label. */}
         <AxisLeft
+          top={responsiveMargin.top}
           left={responsiveMargin.left} scale={priceScale}
           stroke={AXIS_COLOR} tickStroke={AXIS_COLOR}
           tickLabelProps={() => ({ fill: '#334155', fontSize: leftAxisLabelFontSize, textAnchor: 'end', dx: -4 })}
@@ -1169,6 +1183,7 @@ function TimelineChartVisx({
             5 ticks as the left axis, converted into a percentage so the user
             can read "+12.5%" directly instead of mental-mathing the price. */}
         <AxisRight
+          top={responsiveMargin.top}
           left={width - responsiveMargin.right}
           scale={priceScale}
           stroke={AXIS_COLOR}
