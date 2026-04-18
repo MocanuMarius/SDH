@@ -22,7 +22,7 @@ import type { ActionWithEntry } from '../services/actionsService'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import { DECISION_CHART_COLORS, getChartCategory } from '../theme/decisionTypes'
 import { computeRangeStats, type RangeStats } from '../utils/chartRangeStats'
-import { DecisionMarkerGradients, conePath } from './charts/decisionMarkers'
+import { DecisionMarkerGradients, conePath, decisionCountsByType } from './charts/decisionMarkers'
 
 const MAX_CHART_POINTS = 280
 const CHART_LINE_COLOR = '#334155'
@@ -80,16 +80,8 @@ function getClosestPoint(
   return best
 }
 
-function getDecisionCountsByType(decisions: ChartPointWithDecisions['decisions']) {
-  const counts = { buy: 0, sell: 0, other: 0 }
-  if (!decisions?.length) return counts
-  for (const d of decisions) {
-    if (d.type === 'buy') counts.buy++
-    else if (d.type === 'sell') counts.sell++
-    else counts.other++
-  }
-  return counts
-}
+// Aliased to the shared helper so the rest of this file reads the same.
+const getDecisionCountsByType = decisionCountsByType
 
 function computeClusters(data: ChartPointWithDecisions[]): Array<{ startIdx: number; endIdx: number; repIdx: number; counts: { buy: number; sell: number; other: number }; decisions: ChartPointWithDecisions['decisions'] }> {
   const indicesWithDecisions: number[] = []

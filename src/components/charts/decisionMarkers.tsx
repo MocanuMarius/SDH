@@ -43,6 +43,28 @@ export function conePath(
 }
 
 /**
+ * Bucket decisions on a marker into buy / sell / other counts. Every chart
+ * does this same reduction to decide which cone(s) to draw and how to
+ * colour the dot — single helper so the categorisation can't drift.
+ *
+ * `'buy'` and `'sell'` here are the **chart category** (already collapsed
+ * from the action's true type via `getChartCategory()`), not the raw
+ * action.type. `add_more` lands in `buy`, `trim` in `sell`, etc.
+ */
+export function decisionCountsByType(
+  decisions: Array<{ type: 'buy' | 'sell' | 'other' }> | undefined,
+): { buy: number; sell: number; other: number } {
+  const counts = { buy: 0, sell: 0, other: 0 }
+  if (!decisions?.length) return counts
+  for (const d of decisions) {
+    if (d.type === 'buy') counts.buy++
+    else if (d.type === 'sell') counts.sell++
+    else counts.other++
+  }
+  return counts
+}
+
+/**
  * The two `<linearGradient>` defs that paint the cone. Each chart needs to
  * mount this once (inside its own `<svg><defs>`) and reference the gradients
  * by `url(#${idPrefix}-buy-glow)` / `url(#${idPrefix}-sell-glow)`.

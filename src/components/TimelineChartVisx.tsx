@@ -66,16 +66,10 @@ function getMarkerGeom(width: number): MarkerGeom {
   }
 }
 
-function _getDecisionCountsByType(decisions: Array<{ type: string }> | undefined) {
-  const counts = { buy: 0, sell: 0, other: 0 }
-  if (!decisions?.length) return counts
-  for (const d of decisions) {
-    if (d.type === 'buy') counts.buy++
-    else if (d.type === 'sell') counts.sell++
-    else counts.other++
-  }
-  return counts
-}
+// Decision count helper now lives in `charts/decisionMarkers` — shared with
+// the other two chart implementations. We don't need to import it here yet
+// (the visx render computes counts inline below) but keeping the comment as
+// a breadcrumb so the next reader doesn't recreate it.
 
 /** Triangle path for a light-cone glow. Apex at (cx, cy), base at (cy + dir*h)
  * where dir = -1 for buy (cone goes up) and +1 for sell (cone goes down). */
