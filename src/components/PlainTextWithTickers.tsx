@@ -97,10 +97,17 @@ export default function PlainTextWithTickers({
   // bullets) at render time so historical entries read as clean prose
   // even if they predate the strip-on-save in EntryFormPage.
   //
-  // This call is REMOVABLE once `npm run strip:legacy-markdown` has been
-  // run against the live database — at that point every row is clean and
-  // the strip-on-save keeps it that way. Drop this call and the
-  // `stripLegacyMarkdown` import in a follow-up commit when ready.
+  // Removal checklist (roadmap item E — blocked on a DB migration, NOT on
+  // any additional code change):
+  //   1. Run `DRY_RUN=1 npm run strip:legacy-markdown` while logged in
+  //      with service-role creds (anon key hits RLS and returns 0 rows,
+  //      which is the false-positive I kept tripping on). Confirm the
+  //      "Would update N entries" count.
+  //   2. Run `DRY_RUN=0 npm run strip:legacy-markdown` to apply.
+  //   3. Delete this `stripLegacyMarkdown(source)` call + its import.
+  //
+  // Utility itself is cheap (a handful of regexes, no allocations on
+  // already-clean input) so keeping it pending verification is fine.
   const cleaned = stripLegacyMarkdown(source)
 
   if (inline) {
