@@ -318,7 +318,7 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
                       onChartClick={() => { /* popup doesn't track background clicks */ }}
                       onMouseLeave={() => { /* popup has no list to clear */ }}
                       showBrush={false}
-                      benchmarkData={benchChartRaw ? { ticker: BENCHMARK, dates: benchChartRaw.dates, prices: benchChartRaw.prices } : null}
+                      benchmarkData={benchChartRaw ? [{ ticker: BENCHMARK, dates: benchChartRaw.dates, prices: benchChartRaw.prices }] : null}
                       disableMarkerClick
                     />
                   ) : null}

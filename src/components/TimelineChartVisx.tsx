@@ -130,12 +130,13 @@ export interface TimelineChartVisxProps {
   /** Hide the brush rail at the bottom. Used by smaller embeddings (e.g. the
    *  popup chart) where the brush would be visual noise. Defaults to true. */
   showBrush?: boolean
-  /** Always-on benchmark overlay. The chart anchors to the first date in the
-   *  data window and maps benchmark prices onto the same y-scale (same trick
-   *  as the click-fetched overlay tickers). Used by the popup chart and the
-   *  per-ticker page where the user wants to see ticker-vs-benchmark in one
-   *  view without first clicking a decision marker. */
-  benchmarkData?: { ticker: string; dates: string[]; prices: number[] } | null
+  /** Always-on benchmark overlays. Each benchmark is anchored to the first
+   *  date in the data window and mapped onto the ticker's price scale (same
+   *  trick as the click-fetched overlay tickers). Used by the popup chart
+   *  (single benchmark) and the per-ticker page (up to 3 stacked compares)
+   *  where the user wants to see ticker-vs-benchmark(s) in one view without
+   *  first clicking a decision marker. Pass `[]` or `null` to hide. */
+  benchmarkData?: Array<{ ticker: string; dates: string[]; prices: number[] }> | null
   /** Suppress the click-to-overlay-tickers behaviour. Marker clicks still
    *  call `onSelectAction` for selection, but no fetched overlay is drawn.
    *  Used by the popup chart where the benchmark is already always-on so a
@@ -193,47 +194,52 @@ function TimelineChartVisx({
     [data, innerWidth]
   )
 
-  // Always-on benchmark overlay: anchored to the first data point's price
-  // and mapped to the main chart's y-scale (same trick as the click-fetched
-  // overlay ticker lines below). Lets the popup chart and the per-ticker
-  // page show ticker-vs-benchmark without first clicking a marker.
-  const benchmarkLine: TickerLine | null = useMemo(() => {
-    if (!benchmarkData || !benchmarkData.dates.length || data.length === 0) return null
+  // Always-on benchmark overlays: each is anchored to the first data point's
+  // price and mapped to the main chart's y-scale (same trick as the click-
+  // fetched overlay ticker lines below). Lets the popup and per-ticker page
+  // show ticker-vs-benchmark(s) without first clicking a marker.
+  const benchmarkLines: TickerLine[] = useMemo(() => {
+    if (!benchmarkData?.length || data.length === 0) return []
     const firstDataDate = data[0].date
     const firstDataPrice = data[0].price
-    if (!firstDataPrice || firstDataPrice <= 0) return null
-    // Find the benchmark price at-or-after the data's first date.
-    const b0Idx = benchmarkData.dates.findIndex((d) => d >= firstDataDate)
-    if (b0Idx < 0) return null
-    const b0 = benchmarkData.prices[b0Idx]
-    if (!b0 || b0 <= 0) return null
-    const points = benchmarkData.dates
-      .slice(b0Idx)
-      .map((date, i) => {
-        const price = benchmarkData.prices[b0Idx + i]
-        if (!price || price <= 0) return null
-        return { date, mappedPrice: firstDataPrice * (price / b0) }
+    if (!firstDataPrice || firstDataPrice <= 0) return []
+    // Each benchmark gets a slightly different shade of slate so the eye
+    // can tell them apart in a multi-compare. Order is the input order.
+    const COLORS = ['#94a3b8', '#64748b', '#475569']
+    const lines: TickerLine[] = []
+    for (let bi = 0; bi < benchmarkData.length; bi++) {
+      const bench = benchmarkData[bi]
+      if (!bench?.dates?.length) continue
+      const b0Idx = bench.dates.findIndex((d) => d >= firstDataDate)
+      if (b0Idx < 0) continue
+      const b0 = bench.prices[b0Idx]
+      if (!b0 || b0 <= 0) continue
+      const points = bench.dates
+        .slice(b0Idx)
+        .map((date, i) => {
+          const price = bench.prices[b0Idx + i]
+          if (!price || price <= 0) return null
+          return { date, mappedPrice: firstDataPrice * (price / b0) }
+        })
+        .filter((p): p is { date: string; mappedPrice: number } => p !== null)
+      if (points.length < 2) continue
+      const lastMapped = points[points.length - 1].mappedPrice
+      const pctChange = ((lastMapped - firstDataPrice) / firstDataPrice) * 100
+      lines.push({
+        ticker: bench.ticker,
+        color: COLORS[bi % COLORS.length],
+        points,
+        pctChange,
       })
-      .filter((p): p is { date: string; mappedPrice: number } => p !== null)
-    if (points.length < 2) return null
-    const lastMapped = points[points.length - 1].mappedPrice
-    const pctChange = ((lastMapped - firstDataPrice) / firstDataPrice) * 100
-    return {
-      ticker: benchmarkData.ticker,
-      // Use a neutral grey for the always-on benchmark so it reads as
-      // "background reference" vs the saturated colours used for click-
-      // fetched overlay tickers.
-      color: '#94a3b8',
-      points,
-      pctChange,
     }
+    return lines
   }, [benchmarkData, data])
 
-  // All overlays = always-on benchmark + click-fetched ticker lines. They
-  // share the y-domain expansion logic and the line-end label rendering.
+  // All overlays = always-on benchmark(s) + click-fetched ticker lines.
+  // They share the y-domain expansion logic and the line-end label rendering.
   const allOverlayLines = useMemo(() => {
-    return benchmarkLine ? [benchmarkLine, ...tickerLines] : tickerLines
-  }, [benchmarkLine, tickerLines])
+    return benchmarkLines.length ? [...benchmarkLines, ...tickerLines] : tickerLines
+  }, [benchmarkLines, tickerLines])
 
   // Expand yDomain to fit overlay lines when active.
   const activeDomain = useMemo((): [number, number] => {
@@ -486,9 +492,9 @@ function TimelineChartVisx({
               const y = priceScale(p.mappedPrice)
               return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
             }).join(' ')
-            // Always-on benchmark gets a dashed stroke so it reads as
+            // Always-on benchmarks get a dashed stroke so they read as
             // "reference" vs the click-fetched solid overlays.
-            const isBenchmark = tl === benchmarkLine
+            const isBenchmark = benchmarkLines.includes(tl)
             return (
               <path key={tl.ticker} d={d} fill="none"
                 stroke={tl.color} strokeWidth={isBenchmark ? 1.5 : 2}
@@ -541,9 +547,9 @@ function TimelineChartVisx({
             // Pin badge to right edge, clamped
             const badgeX = Math.min(innerWidth - badgeW - 2, Math.max(2, dateScale(new Date(last.date)) - badgeW / 2))
             const badgeY = priceScale(last.mappedPrice) - badgeH / 2
-            // Dark solid color: darken by mixing with black. Benchmark stays
-            // neutral-dark since it's the reference, not a comparison result.
-            const isBenchmark = tl === benchmarkLine
+            // Dark solid color: darken by mixing with black. Benchmarks stay
+            // neutral-dark since they're references, not comparison results.
+            const isBenchmark = benchmarkLines.includes(tl)
             const bgColor = isBenchmark ? '#1e293b' : pct >= 0 ? '#14532d' : '#7f1d1d'
             return (
               <g key={`label-${tl.ticker}`} style={{ pointerEvents: 'none' }}>

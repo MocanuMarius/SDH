@@ -1,139 +1,35 @@
 /**
- * Embedded timeline chart for a single ticker: price line + decision markers.
- * Used on Idea detail page so the chart shows immediately without going to /timeline.
+ * Embedded timeline chart for a single ticker: price line + decision markers
+ * + always-on benchmark overlay(s). Used on Idea detail page so the chart
+ * shows immediately without going to /timeline.
+ *
+ * Rendering core is the shared `TimelineChartVisx` — same dot+cone markers,
+ * axes, hover, and overlay rendering as the /timeline page and the ticker
+ * popup. This file owns the surrounding controls (range tabs, compare chips,
+ * range summary, drag-to-measure overlay) and stays out of the chart's
+ * internals.
  */
 
-import { useEffect, useState, useMemo, useRef, memo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { Box, Typography, Paper, CircularProgress, Alert, FormControl, Select, MenuItem, Tabs, Tab, Chip } from '@mui/material'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
-import {
-  ComposedChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-  ReferenceArea,
-} from 'recharts'
+import { ParentSize } from '@visx/responsive'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
 import type { ActionWithEntry } from '../services/actionsService'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
-import { DECISION_CHART_COLORS, getChartCategory } from '../theme/decisionTypes'
+import { getChartCategory } from '../theme/decisionTypes'
 import { computeRangeStats, type RangeStats } from '../utils/chartRangeStats'
-import { DecisionMarkerGradients, conePath, decisionCountsByType, DecisionDot } from './charts/decisionMarkers'
+import TimelineChartVisx, { type TimelineChartPoint, getTimelineChartResponsiveMargin } from './TimelineChartVisx'
 
+// Cap the number of points sent to the chart. SVG renders thousands fine,
+// but downsampling speeds up clustering & marker layout for long ranges.
 const MAX_CHART_POINTS = 280
-const CHART_LINE_COLOR = '#334155'
-const CHART_LINE_WIDTH = 2
-const FONT_SIZE_AXIS = 13
-const FONT_SIZE_TOOLTIP = 12
-const DECISION_COLORS = DECISION_CHART_COLORS
-const CLUSTER_GAP = 20
-const SINGLE_DOT_R = 5
-const SINGLE_DOT_R_PASS = 6
-const GRID_OPACITY = 0.12
-
-const BENCHMARK_LINE_COLOR = '#94a3b8'
-const BENCHMARK_LINE_WIDTH = 1.5
 
 const BENCHMARK_OPTIONS: { symbol: string; label: string }[] = [
   { symbol: 'SPY', label: 'S&P 500' },
   { symbol: 'QQQ', label: 'Nasdaq 100' },
   { symbol: 'VWCE.DE', label: 'All-World (VWCE)' },
 ]
-
-interface ChartPointWithDecisions {
-  date: string
-  price: number
-  /** Normalized to 100 at start (when benchmark overlay is used) */
-  priceNorm?: number
-  /** Benchmark normalized to 100 at same start date */
-  benchmarkNorm?: number
-  decisions?: Array<{ action: ActionWithEntry; type: 'buy' | 'sell' | 'other' }>
-}
-
-interface ChartPointEnriched extends ChartPointWithDecisions {
-  _clusterRep?: boolean
-  _clusterCounts?: { buy: number; sell: number; other: number }
-  _clusterDecisions?: ChartPointWithDecisions['decisions']
-}
-
-function getClosestPoint(
-  chartData: { date: string; price: number }[],
-  actionDate: string
-): { date: string; price: number } {
-  if (!chartData.length) return { date: actionDate, price: 0 }
-  const exact = chartData.find((d) => d.date === actionDate)
-  if (exact) return exact
-  const sorted = [...chartData].sort((a, b) => a.date.localeCompare(b.date))
-  let best = sorted[0]
-  let bestDiff = Math.abs(Date.parse(actionDate) - Date.parse(best.date))
-  for (const p of sorted) {
-    const d = Math.abs(Date.parse(actionDate) - Date.parse(p.date))
-    if (d < bestDiff) {
-      bestDiff = d
-      best = p
-    }
-  }
-  return best
-}
-
-// Aliased to the shared helper so the rest of this file reads the same.
-const getDecisionCountsByType = decisionCountsByType
-
-function computeClusters(data: ChartPointWithDecisions[]): Array<{ startIdx: number; endIdx: number; repIdx: number; counts: { buy: number; sell: number; other: number }; decisions: ChartPointWithDecisions['decisions'] }> {
-  const indicesWithDecisions: number[] = []
-  for (let i = 0; i < data.length; i++) {
-    if (data[i].decisions?.length) indicesWithDecisions.push(i)
-  }
-  if (indicesWithDecisions.length === 0) return []
-  const clusters: Array<{ startIdx: number; endIdx: number; repIdx: number; counts: { buy: number; sell: number; other: number }; decisions: ChartPointWithDecisions['decisions'] }> = []
-  let start = indicesWithDecisions[0]
-  let end = start
-  let allDecisions = [...(data[start].decisions ?? [])]
-  for (let k = 1; k < indicesWithDecisions.length; k++) {
-    const i = indicesWithDecisions[k]
-    if (i - end <= CLUSTER_GAP) {
-      end = i
-      allDecisions = allDecisions.concat(data[i].decisions ?? [])
-    } else {
-      const counts = getDecisionCountsByType(allDecisions)
-      const repIdx = Math.floor((start + end) / 2)
-      clusters.push({ startIdx: start, endIdx: end, repIdx, counts, decisions: allDecisions })
-      start = i
-      end = i
-      allDecisions = [...(data[i].decisions ?? [])]
-    }
-  }
-  const counts = getDecisionCountsByType(allDecisions)
-  const repIdx = Math.floor((start + end) / 2)
-  clusters.push({ startIdx: start, endIdx: end, repIdx, counts, decisions: allDecisions })
-  return clusters
-}
-
-function enrichChartDataWithClusters(data: ChartPointWithDecisions[]): ChartPointEnriched[] {
-  const clusters = computeClusters(data)
-  const clusterByRep = new Map(clusters.map((c) => [c.repIdx, c]))
-  return data.map((pt, i) => {
-    const base = { ...pt } as ChartPointEnriched
-    if (!pt.decisions?.length) return base
-    const cluster = clusters.find((c) => i >= c.startIdx && i <= c.endIdx)
-    if (!cluster) return base
-    if (cluster.repIdx !== i) {
-      base._clusterRep = false
-      return base
-    }
-    const c = clusterByRep.get(i)
-    if (c) {
-      base._clusterRep = true
-      base._clusterCounts = c.counts
-      base._clusterDecisions = c.decisions
-    }
-    return base
-  })
-}
 
 const RANGES: { value: ChartRange; label: string }[] = [
   { value: '1m', label: '1M' },
@@ -147,70 +43,7 @@ const RANGES: { value: ChartRange; label: string }[] = [
   { value: 'max', label: 'MAX' },
 ]
 
-function TooltipContent({
-  active,
-  payload,
-  label,
-  symbol,
-  benchmarkSymbol: benchmarkTicker,
-}: {
-  active?: boolean
-  payload?: ReadonlyArray<{ name?: string; value?: number; payload?: unknown }>
-  label?: string | number
-  symbol: string
-  benchmarkSymbol?: string
-}) {
-  if (!active || !payload?.length) return null
-  const pricePayload = payload.find((p) => p.name === symbol || (p as { dataKey?: string }).dataKey === 'price' || (p as { dataKey?: string }).dataKey === 'priceNorm')
-  const pointPayload = pricePayload?.payload as ChartPointEnriched | undefined
-  const pointDecisions = pointPayload?._clusterDecisions ?? pointPayload?.decisions
-  if (pointDecisions?.length) {
-    const first = pointDecisions[0].action
-    const counts = getDecisionCountsByType(pointDecisions)
-    const parts: string[] = []
-    if (counts.buy) parts.push(`${counts.buy} buy`)
-    if (counts.sell) parts.push(`${counts.sell} sell`)
-    if (counts.other) parts.push(`${counts.other} other`)
-    return (
-      <Paper variant="outlined" sx={{ p: 1.5, maxWidth: 280 }}>
-        <Typography variant="body2" fontWeight={600} display="block">
-          {first.type} · {getTickerDisplayLabel(first.ticker) || `$${first.ticker ?? '?'}`}
-          {pointDecisions.length > 1 ? ` (+${pointDecisions.length - 1} more)` : ''}
-        </Typography>
-        {parts.length > 1 && (
-          <Typography variant="caption" display="block" sx={{ color: 'text.secondary', mt: 0.25 }}>
-            {parts.join(' · ')}
-          </Typography>
-        )}
-        <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
-          {pointPayload?.date}
-          {first.price ? ` · $${first.price}` : ''}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-          ${symbol} {typeof (pointPayload as { priceNorm?: number })?.priceNorm === 'number' ? (pointPayload as { priceNorm: number }).priceNorm.toFixed(2) : typeof pointPayload?.price === 'number' ? pointPayload.price.toFixed(2) : '—'}
-        </Typography>
-      </Paper>
-    )
-  }
-  const raw = pricePayload?.value ?? (pointPayload as { price?: number; priceNorm?: number } | undefined)?.price ?? (pointPayload as { priceNorm?: number })?.priceNorm
-  const value = typeof raw === 'number' ? raw : undefined
-  const pt = pointPayload as { benchmarkNorm?: number } | undefined
-  return (
-    <Paper variant="outlined" sx={{ p: 1.5 }}>
-      <Typography variant="caption" color="text.secondary" display="block">
-        {label != null ? new Date(String(label)).toLocaleDateString('en-US', { dateStyle: 'medium' }) : ''}
-      </Typography>
-      <Typography variant="caption" sx={{ fontSize: '0.8rem' }}>
-        ${symbol} {value != null ? value.toFixed(2) : '—'}
-      </Typography>
-      {pt?.benchmarkNorm != null && Number.isFinite(pt.benchmarkNorm) && (
-        <Typography variant="caption" sx={{ fontSize: '0.8rem', color: 'text.secondary', display: 'block' }}>
-          {benchmarkTicker ? `$${benchmarkTicker}` : 'Benchmark'} {pt.benchmarkNorm.toFixed(2)}
-        </Typography>
-      )}
-    </Paper>
-  )
-}
+const MAX_COMPARE_SYMBOLS = 3
 
 export interface TickerTimelineChartProps {
   symbol: string
@@ -221,152 +54,34 @@ export interface TickerTimelineChartProps {
   defaultRange?: ChartRange
 }
 
-function mergeWithBenchmark(
-  main: { date: string; price: number }[],
-  benchmark: { dates: string[]; prices: number[] } | null
-): { date: string; price: number; priceNorm: number; benchmarkNorm: number }[] {
-  if (!main.length) return []
-  if (!benchmark?.dates?.length) {
-    return main.map((d) => ({ ...d, priceNorm: d.price, benchmarkNorm: 0 }))
+/** Find the chart-data point closest to a given action_date. Used to snap
+ *  decision markers onto the actual price-line points the chart renders. */
+function getClosestPoint(
+  chartData: { date: string; price: number }[],
+  actionDate: string
+): { date: string; price: number } {
+  if (!chartData.length) return { date: actionDate, price: 0 }
+  const exact = chartData.find((d) => d.date === actionDate)
+  if (exact) return exact
+  let best = chartData[0]
+  let bestDiff = Math.abs(Date.parse(actionDate) - Date.parse(best.date))
+  for (const p of chartData) {
+    const d = Math.abs(Date.parse(actionDate) - Date.parse(p.date))
+    if (d < bestDiff) { bestDiff = d; best = p }
   }
-  const benchByDate = new Map<string, number>()
-  benchmark.dates.forEach((d, i) => benchByDate.set(d, benchmark.prices[i] ?? 0))
-  const sortedBenchDates = [...benchmark.dates].sort()
-  const getBenchPrice = (date: string): number => {
-    if (benchByDate.has(date)) return benchByDate.get(date)!
-    const idx = sortedBenchDates.findIndex((d) => d >= date)
-    if (idx <= 0) return sortedBenchDates.length ? (benchByDate.get(sortedBenchDates[0]) ?? 0) : 0
-    return benchByDate.get(sortedBenchDates[idx - 1]) ?? 0
-  }
-  const refPrice = main[0].price
-  const refBench = getBenchPrice(main[0].date)
-  if (!refPrice || !refBench) return main.map((d) => ({ ...d, priceNorm: d.price, benchmarkNorm: 0 }))
-  return main.map((d) => ({
-    ...d,
-    priceNorm: (d.price / refPrice) * 100,
-    benchmarkNorm: (getBenchPrice(d.date) / refBench) * 100,
-  }))
+  return best
 }
-
-/** Merge main series with multiple compare series; each compare normalized to 100 at range start. */
-function mergeWithBenchmarks(
-  main: { date: string; price: number }[],
-  benchmarks: Array<{ symbol: string; dates: string[]; prices: number[] }>
-): { date: string; price: number; priceNorm: number; benchmarkNorm: number; [key: `compare_${string}`]: number }[] {
-  if (!main.length) return []
-  const refPrice = main[0].price
-  if (!refPrice) return main.map((d) => ({ ...d, priceNorm: d.price, benchmarkNorm: 0 }))
-  const getBenchPrice = (dates: string[], prices: number[], date: string): number => {
-    const byDate = new Map<string, number>()
-    dates.forEach((d, i) => byDate.set(d, prices[i] ?? 0))
-    const sorted = [...dates].sort()
-    if (byDate.has(date)) return byDate.get(date)!
-    const idx = sorted.findIndex((d) => d >= date)
-    if (idx <= 0) return sorted.length ? (byDate.get(sorted[0]) ?? 0) : 0
-    return byDate.get(sorted[idx - 1]) ?? 0
-  }
-  return main.map((d) => {
-    const out: { date: string; price: number; priceNorm: number; benchmarkNorm: number; [key: `compare_${string}`]: number } = {
-      ...d,
-      priceNorm: (d.price / refPrice) * 100,
-      benchmarkNorm: 0,
-    }
-    benchmarks.forEach((b) => {
-      if (!b.dates?.length) return
-      const refB = getBenchPrice(b.dates, b.prices, main[0].date)
-      if (!refB) return
-      const key = `compare_${b.symbol}` as `compare_${string}`
-      out[key] = (getBenchPrice(b.dates, b.prices, d.date) / refB) * 100
-    })
-    return out
-  })
-}
-
-const MAX_COMPARE_SYMBOLS = 3
-
-/** Custom X-axis tick component with rotation for better readability */
-function CustomXAxisTick(props: { x?: number; y?: number; payload?: { value?: string }; rotation?: number; fontSize?: number }) {
-  const { x = 0, y = 0, payload, rotation = -45, fontSize = FONT_SIZE_AXIS } = props
-  if (!payload?.value) return null
-  const formatted = new Date(payload.value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <text
-        x={0}
-        y={0}
-        dy={4}
-        textAnchor="end"
-        fill="#334155"
-        fontSize={fontSize}
-        style={{ transform: `rotate(${rotation}deg)`, transformOrigin: '0 0', whiteSpace: 'nowrap' }}
-      >
-        {formatted}
-      </text>
-    </g>
-  )
-}
-
-/** Memoized dot component for chart points to avoid re-rendering on every update */
-const ChartDot = memo(function ChartDot(props: {
-  cx?: number
-  cy?: number
-  payload?: ChartPointEnriched
-}) {
-  const { cx, cy, payload: pt } = props
-  if (cx == null || cy == null) return <g />
-  if (pt?._clusterRep === false) return <g />
-  const clusterDecisions = pt?._clusterDecisions
-  const clusterCounts = pt?._clusterCounts
-  const isCluster = pt?._clusterRep === true && clusterCounts && clusterDecisions?.length
-  const decisions = isCluster ? clusterDecisions! : pt?.decisions
-  if (!decisions?.length) return <g />
-  const counts = isCluster ? clusterCounts! : getDecisionCountsByType(decisions)
-  const first = decisions[0]
-  const totalCount = counts.buy + counts.sell + counts.other
-  const hasBuy = counts.buy > 0
-  const hasSell = counts.sell > 0
-  const r = first.action?.type === 'pass' ? SINGLE_DOT_R_PASS : SINGLE_DOT_R
-  return (
-    <g className="timeline-decision-marker" style={{ cursor: 'pointer' }}>
-      {/* Cones — drawn first so dot stacks on top. Multiply blend so
-          overlapping cones from clusters darken/saturate. Geometry comes
-          from the shared `conePath` helper so all three charts agree. */}
-      {(hasBuy || hasSell) && (
-        <g style={{ pointerEvents: 'none', mixBlendMode: 'multiply' }}>
-          {hasBuy && (
-            <path d={conePath(cx, cy, 'buy')} fill="url(#ticker-buy-glow)" opacity={Math.min(0.95, 0.55 + (counts.buy - 1) * 0.12)} />
-          )}
-          {hasSell && (
-            <path d={conePath(cx, cy, 'sell')} fill="url(#ticker-sell-glow)" opacity={Math.min(0.95, 0.55 + (counts.sell - 1) * 0.12)} />
-          )}
-        </g>
-      )}
-      {/* Shared dot — single circle, or split (green top / red bottom)
-          for mixed buy+sell markers, plus the count number when N>1. */}
-      <DecisionDot
-        cx={cx}
-        cy={cy}
-        r={r}
-        hasBuy={hasBuy}
-        hasSell={hasSell}
-        count={totalCount}
-        buyColor={DECISION_COLORS.buy}
-        sellColor={DECISION_COLORS.sell}
-        otherColor={DECISION_COLORS.other}
-      />
-    </g>
-  )
-})
 
 export default function TickerTimelineChart({ symbol, actions, companyName, height = 320, defaultRange = '1y' }: TickerTimelineChartProps) {
   const [range, setRange] = useState<ChartRange>(defaultRange)
   const [userChangedRange, setUserChangedRange] = useState(false)
   const [chartData, setChartData] = useState<{ date: string; price: number }[]>([])
 
-  // Sync with defaultRange when it changes (e.g. from auto-range compute), unless user manually picked one
+  // Sync with defaultRange when it changes (e.g. from auto-range compute), unless user manually picked one.
   useEffect(() => {
     if (!userChangedRange) setRange(defaultRange)
   }, [defaultRange, userChangedRange])
+
   const [compareSymbols, setCompareSymbols] = useState<string[]>(['SPY'])
   const [compareDataList, setCompareDataList] = useState<Array<{ symbol: string; dates: string[]; prices: number[] }>>([])
   const [loading, setLoading] = useState(true)
@@ -380,18 +95,12 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
   const justFinishedDragRef = useRef(false)
   const companyKey = normalizeTickerToCompany(symbol)
   const displaySymbol = companyKey || (symbol?.toUpperCase() ?? '')
-  // Responsive chart chrome — shrink margins, axis fonts, and x-axis band on
-  // narrow viewports so the plot area gets to keep most of the width.
-  const chartIsNarrow = wrapperWidth > 0 && wrapperWidth < 480
-  const plotLeft = chartIsNarrow ? 36 : 48
-  const plotRight = chartIsNarrow ? 12 : 20
-  const plotTop = 12
-  // Tight bottom margin — Recharts reserves this for x-axis + legend; kept
-  // just big enough to hold tilted date labels + the small symbol legend.
-  const plotBottom = chartIsNarrow ? 40 : 48
-  const axisFontSize = chartIsNarrow ? 10 : 11
-  const xAxisHeight = chartIsNarrow ? 44 : 56
-  const xAxisRotation = chartIsNarrow ? -60 : -45
+
+  // Use the same responsive margins as TimelineChartVisx so the drag-to-
+  // measure overlay aligns pixel-perfect with the chart's plot area.
+  const chartMargin = useMemo(() => getTimelineChartResponsiveMargin(wrapperWidth || 600), [wrapperWidth])
+  const plotLeft = chartMargin.left
+  const plotRight = chartMargin.right
 
   useEffect(() => {
     if (!symbol?.trim()) {
@@ -439,19 +148,7 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
     return () => { cancelled = true }
   }, [symbol, range, companyName, compareSymbols.join(',')])
 
-  const chartDataWithBenchmark = useMemo(() => {
-    if (compareDataList.length === 0) {
-      return chartData.map((d) => ({ ...d, priceNorm: d.price, benchmarkNorm: 0 }))
-    }
-    if (compareDataList.length === 1) {
-      return mergeWithBenchmark(chartData, { dates: compareDataList[0].dates, prices: compareDataList[0].prices })
-    }
-    return mergeWithBenchmarks(
-      chartData,
-      compareDataList.map((b) => ({ symbol: b.symbol, dates: b.dates, prices: b.prices }))
-    )
-  }, [chartData, compareDataList])
-
+  // Filter actions to the currently-fetched range and the right ticker.
   const minDate = chartData[0]?.date ?? ''
   const maxDate = chartData.length > 0 ? new Date().toISOString().slice(0, 10) : ''
   const actionsInRange = useMemo(
@@ -467,45 +164,51 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
     [actions, companyKey, minDate, maxDate]
   )
 
+  // Cap chart data to MAX_CHART_POINTS by even-step sampling. Speeds up
+  // marker clustering on long ranges; SVG handles the raw count fine.
   const downsampledChartData = useMemo(() => {
-    if (chartDataWithBenchmark.length <= MAX_CHART_POINTS) return chartDataWithBenchmark
-    const step = (chartDataWithBenchmark.length - 1) / (MAX_CHART_POINTS - 1)
-    const out: typeof chartDataWithBenchmark = []
+    if (chartData.length <= MAX_CHART_POINTS) return chartData
+    const step = (chartData.length - 1) / (MAX_CHART_POINTS - 1)
+    const out: typeof chartData = []
     for (let i = 0; i < MAX_CHART_POINTS; i++) {
-      const idx = i === MAX_CHART_POINTS - 1 ? chartDataWithBenchmark.length - 1 : Math.round(i * step)
-      out.push(chartDataWithBenchmark[idx])
+      const idx = i === MAX_CHART_POINTS - 1 ? chartData.length - 1 : Math.round(i * step)
+      out.push(chartData[idx])
     }
     return out
-  }, [chartDataWithBenchmark])
+  }, [chartData])
 
-  const mergedChartData = useMemo((): ChartPointWithDecisions[] => {
+  // Bucket decisions by their nearest chart-data date, then attach to that
+  // point. TimelineChartVisx clusters & renders markers from the
+  // `decisions` field; we don't need to cluster here.
+  const chartPoints: TimelineChartPoint[] = useMemo(() => {
     const byDate = new Map<string, Array<{ action: ActionWithEntry; type: 'buy' | 'sell' | 'other' }>>()
     for (const a of actionsInRange) {
       const closest = getClosestPoint(downsampledChartData, a.action_date ?? '')
       const key = closest.date
       if (!byDate.has(key)) byDate.set(key, [])
-      byDate.get(key)!.push({
-        action: a,
-        type: getChartCategory(a.type),
-      })
+      byDate.get(key)!.push({ action: a, type: getChartCategory(a.type) })
     }
     return downsampledChartData.map((d) => ({
-      ...d,
+      date: d.date,
+      price: d.price,
       decisions: byDate.get(d.date),
     }))
   }, [downsampledChartData, actionsInRange])
 
-  const chartDisplayDataEnriched = useMemo(
-    () => enrichChartDataWithClusters(mergedChartData),
-    [mergedChartData]
-  )
+  // Y-axis domain — raw prices with 5% headroom each side. The chart
+  // expands further as needed to fit benchmark overlays mapped onto this
+  // scale.
+  const yDomain: [number, number] | null = useMemo(() => {
+    if (chartData.length === 0) return null
+    const prices = chartData.map((d) => d.price)
+    const lo = Math.min(...prices)
+    const hi = Math.max(...prices)
+    const span = hi - lo || 1
+    return [lo - span * 0.05, hi + span * 0.05]
+  }, [chartData])
 
-  const hasBenchmark = compareDataList.length > 0 && chartDataWithBenchmark.some((d) => {
-    if (compareDataList.length === 1 && 'benchmarkNorm' in d) return (d as { benchmarkNorm?: number }).benchmarkNorm != null && (d as { benchmarkNorm: number }).benchmarkNorm > 0
-    return compareDataList.some((b) => (d as Record<string, unknown>)[`compare_${b.symbol}`] != null)
-  })
-  const displayValueKey = hasBenchmark ? 'priceNorm' : 'price'
-
+  // Range summary: current price, total %change, CAGR (skips sub-month
+  // windows where it's noisy), date range, min/max.
   const rangeSummary = useMemo(() => {
     if (!chartData.length) return null
     const first = chartData[0]
@@ -514,8 +217,6 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
     const pctChange = ((last.price - first.price) / first.price) * 100
     const min = Math.min(...chartData.map((d) => d.price))
     const max = Math.max(...chartData.map((d) => d.price))
-    // Annualised CAGR from the start date → end date. Skips sub-month ranges
-    // where the number is noisy and misleading.
     const startMs = new Date(first.date).getTime()
     const endMs = new Date(last.date).getTime()
     const years = (endMs - startMs) / (365.25 * 24 * 60 * 60 * 1000)
@@ -535,44 +236,24 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
     }
   }, [chartData])
 
-  const yAxisDomain = useMemo(() => {
-    if (chartDisplayDataEnriched.length === 0) return undefined
-    const values: number[] = []
-    chartDisplayDataEnriched.forEach((d) => {
-      const v = hasBenchmark ? (d as { priceNorm?: number }).priceNorm : d.price
-      if (typeof v === 'number' && Number.isFinite(v)) values.push(v)
-      if (hasBenchmark && compareDataList.length === 1 && typeof (d as { benchmarkNorm?: number }).benchmarkNorm === 'number') {
-        values.push((d as { benchmarkNorm: number }).benchmarkNorm)
-      }
-      if (hasBenchmark && compareDataList.length > 1) {
-        compareDataList.forEach((b) => {
-          const val = (d as unknown as Record<string, unknown>)[`compare_${b.symbol}`]
-          if (typeof val === 'number' && Number.isFinite(val)) values.push(val)
-        })
-      }
-    })
-    if (values.length === 0) return undefined
-    const min = Math.min(...values)
-    const max = Math.max(...values)
-    const span = max - min || 1
-    const padding = span * 0.15
-    return [min - padding, max + padding] as [number, number]
-  }, [chartDisplayDataEnriched, hasBenchmark, compareDataList])
+  // Pre-computed (date, price) array used by the measure-drag stats popup.
+  // Always raw prices — TimelineChartVisx's display scale is also raw.
+  const dataForStats = useMemo(
+    () => chartPoints.map((d) => ({ date: d.date, price: d.price })),
+    [chartPoints]
+  )
 
+  // Stats for the committed measure-selection (after mouse-up).
   const rangeStats = useMemo((): RangeStats | null => {
-    if (!measureSelection || mergedChartData.length === 0) return null
-    const dataForStats = mergedChartData.map((d) => ({ date: d.date, price: (hasBenchmark ? d.priceNorm : d.price) ?? d.price }))
+    if (!measureSelection || dataForStats.length === 0) return null
     return computeRangeStats(dataForStats, measureSelection.startIndex, measureSelection.endIndex)
-  }, [measureSelection, mergedChartData, hasBenchmark])
+  }, [measureSelection, dataForStats])
 
   const [selecting, setSelecting] = useState<{ startX: number; endX: number } | null>(null)
   const [crosshairX, setCrosshairX] = useState<number | null>(null)
 
-  const dataForStats = useMemo(
-    () => mergedChartData.map((d) => ({ date: d.date, price: (hasBenchmark ? d.priceNorm : d.price) ?? d.price })),
-    [mergedChartData, hasBenchmark]
-  )
-
+  // Stats for the live drag (before mouse-up). Used to render a floating
+  // pill that follows the drag rectangle.
   const liveSelectionStats = useMemo((): RangeStats | null => {
     if (!selecting || wrapperWidth <= 0 || dataForStats.length === 0) return null
     const plotWidth = wrapperWidth - plotLeft - plotRight
@@ -585,7 +266,7 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
     let endIndex = Math.max(0, Math.min(Math.ceil((plotX2 / plotWidth) * dataLen), dataLen - 1))
     if (endIndex <= startIndex) endIndex = Math.min(startIndex + 1, dataLen - 1)
     return computeRangeStats(dataForStats, startIndex, endIndex)
-  }, [selecting, wrapperWidth, dataForStats])
+  }, [selecting, wrapperWidth, dataForStats, plotLeft, plotRight])
 
   useEffect(() => {
     const el = chartWrapperRef.current
@@ -602,8 +283,11 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
       cancelAnimationFrame(t)
       ro.disconnect()
     }
-  }, [loading, mergedChartData.length])
+  }, [loading, chartPoints.length])
 
+  // ---------------- measure-drag handlers ----------------
+  // Mouse-down on a non-marker → start selecting. We skip when the click
+  // landed on a decision marker so the marker can handle its own click.
   const handleMeasureMouseDown = (e: React.MouseEvent) => {
     const target = e.target as Element | null
     if (target?.closest?.('circle') || (target as SVGElement)?.tagName === 'circle') return
@@ -619,6 +303,7 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
     if (!el) return
     const x = e.clientX - el.getBoundingClientRect().left
     if (selecting) {
+      // Throttle setState to one update per frame for smooth dragging.
       selectEndXRef.current = x
       if (rafSelectRef.current == null) {
         rafSelectRef.current = requestAnimationFrame(() => {
@@ -630,23 +315,14 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
       setCrosshairX(x)
     }
   }
-  const handleMeasureMouseUp = () => {
-    if (!selecting || !chartWrapperRef.current) {
-      setSelecting(null)
-      return
-    }
-    if (Math.abs(selecting.endX - selecting.startX) < 20) {
-      setSelecting(null)
-      return
-    }
+  const commitSelection = (sel: { startX: number; endX: number }) => {
+    if (!chartWrapperRef.current) return
+    if (Math.abs(sel.endX - sel.startX) < 20) return  // accidental drag
     const rect = chartWrapperRef.current.getBoundingClientRect()
     const plotWidth = rect.width - plotLeft - plotRight
-    if (plotWidth <= 0) {
-      setSelecting(null)
-      return
-    }
-    const dataLen = mergedChartData.length
-    const [x1, x2] = selecting.startX < selecting.endX ? [selecting.startX, selecting.endX] : [selecting.endX, selecting.startX]
+    if (plotWidth <= 0) return
+    const dataLen = chartPoints.length
+    const [x1, x2] = sel.startX < sel.endX ? [sel.startX, sel.endX] : [sel.endX, sel.startX]
     const plotX1 = Math.max(0, x1 - plotLeft)
     const plotX2 = Math.min(plotWidth, x2 - plotLeft)
     const startIndex = Math.max(0, Math.min(Math.floor((plotX1 / plotWidth) * dataLen), dataLen - 1))
@@ -654,6 +330,10 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
     if (endIndex <= startIndex) endIndex = Math.min(startIndex + 1, dataLen - 1)
     setMeasureSelection({ startIndex, endIndex })
     justFinishedDragRef.current = true
+  }
+  const handleMeasureMouseUp = () => {
+    if (!selecting) return
+    commitSelection(selecting)
     setSelecting(null)
   }
   const handleMeasureMouseLeave = () => {
@@ -693,31 +373,18 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
   }
 
   const handleTouchEnd = () => {
-    if (!selecting || !chartWrapperRef.current) {
-      setSelecting(null)
-      return
-    }
-    if (Math.abs(selecting.endX - selecting.startX) < 20) {
-      setSelecting(null)
-      return
-    }
-    const rect = chartWrapperRef.current.getBoundingClientRect()
-    const plotWidth = rect.width - plotLeft - plotRight
-    if (plotWidth <= 0) {
-      setSelecting(null)
-      return
-    }
-    const dataLen = mergedChartData.length
-    const [x1, x2] = selecting.startX < selecting.endX ? [selecting.startX, selecting.endX] : [selecting.endX, selecting.startX]
-    const plotX1 = Math.max(0, x1 - plotLeft)
-    const plotX2 = Math.min(plotWidth, x2 - plotLeft)
-    const startIndex = Math.max(0, Math.min(Math.floor((plotX1 / plotWidth) * dataLen), dataLen - 1))
-    let endIndex = Math.max(0, Math.min(Math.ceil((plotX2 / plotWidth) * dataLen), dataLen - 1))
-    if (endIndex <= startIndex) endIndex = Math.min(startIndex + 1, dataLen - 1)
-    setMeasureSelection({ startIndex, endIndex })
-    justFinishedDragRef.current = true
+    if (!selecting) return
+    commitSelection(selecting)
     setSelecting(null)
   }
+
+  // Benchmark data for the chart — pass all chosen compares as an array.
+  // TimelineChartVisx maps each onto the ticker's price scale (anchored to
+  // the first visible date) and renders distinct dashed grey lines.
+  const benchmarkDataForChart = useMemo(
+    () => compareDataList.map((b) => ({ ticker: b.symbol, dates: b.dates, prices: b.prices })),
+    [compareDataList]
+  )
 
   if (!symbol?.trim()) return null
 
@@ -754,6 +421,7 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 1, sm: 2 }, mb: 2, minWidth: 0, overflow: 'hidden' }}>
+      {/* Header row — title + compare control */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5, mb: 1 }}>
         <Typography variant="subtitle2" fontWeight={600}>
           Price &amp; decisions
@@ -788,6 +456,7 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           )}
         </Box>
       </Box>
+
       {/* Range selector — its own row so all buttons fit without scroll arrows on narrow viewports. */}
       <Box sx={{ mb: 1, mx: -0.25 }}>
         <Tabs
@@ -822,6 +491,8 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           ))}
         </Tabs>
       </Box>
+
+      {/* Range summary line — current price, %change, CAGR, date range. */}
       {rangeSummary && (
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
           <Typography variant="h6" fontWeight={700} component="span">
@@ -851,6 +522,13 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           </Typography>
         </Box>
       )}
+
+      {/* Chart area — TimelineChartVisx renders the line, axes, decision
+          markers, hover tooltip, and benchmark overlays. This wrapper Box
+          owns the drag-to-measure overlay (dim band + stats pill) and
+          crosshair. The drag handlers compute against `plotLeft`/`plotRight`
+          (which match TimelineChartVisx's responsive margins) so the
+          overlay aligns pixel-perfect with the chart's plot area. */}
       <Box
         ref={chartWrapperRef}
         tabIndex={0}
@@ -862,12 +540,10 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           minWidth: 0,
           minHeight: 120,
           position: 'relative',
-          cursor: selecting ? 'crosshair' : 'crosshair',
+          cursor: 'crosshair',
           userSelect: selecting ? 'none' : 'auto',
           outline: 'none',
           '&:focus': { outline: 'none' },
-          '& .recharts-wrapper': { outline: 'none' },
-          '& .recharts-surface': { outline: 'none' },
         }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
@@ -886,115 +562,41 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
         onDoubleClick={() => setMeasureSelection(null)}
       >
         <Box sx={{ width: '100%', height: '100%', minWidth: 0, pointerEvents: selecting ? 'none' : 'auto', outline: 'none' }}>
-          {wrapperWidth > 0 && wrapperHeight > 0 ? (
-          <ResponsiveContainer width={wrapperWidth} height={wrapperHeight}>
-            <ComposedChart
-              data={chartDisplayDataEnriched}
-              margin={{ top: plotTop, right: plotRight, left: plotLeft, bottom: plotBottom }}
-              onClick={() => {
-                if (justFinishedDragRef.current) {
-                  justFinishedDragRef.current = false
-                  return
-                }
-                setMeasureSelection(null)
-              }}
-              onDoubleClick={() => setMeasureSelection(null)}
-            >
-              {/* Shared cone gradient defs — `ticker-buy-glow` / `ticker-sell-glow`
-                  ids are referenced by ChartDot. */}
-              <defs>
-                <DecisionMarkerGradients idPrefix="ticker" />
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" opacity={GRID_OPACITY} stroke="#cbd5e1" />
-              {measureSelection != null && yAxisDomain && mergedChartData[measureSelection.startIndex] && mergedChartData[measureSelection.endIndex] && (
-                <ReferenceArea
-                  x1={mergedChartData[measureSelection.startIndex].date}
-                  x2={mergedChartData[measureSelection.endIndex].date}
-                  y1={yAxisDomain[0]}
-                  y2={yAxisDomain[1]}
-                  fill="rgba(59, 130, 246, 0.12)"
-                  stroke="none"
-                  strokeWidth={0}
+          {wrapperWidth > 0 && wrapperHeight > 0 && yDomain && chartPoints.length > 0 && (
+            <ParentSize>
+              {({ width: pw, height: ph }) => (pw > 10 && ph > 10) ? (
+                <TimelineChartVisx
+                  data={chartPoints}
+                  symbol={displaySymbol}
+                  yDomain={yDomain}
+                  width={pw}
+                  height={ph}
+                  selectedActionId={null}
+                  selectedTicker={null}
+                  onSelectAction={() => { /* no external selection list */ }}
+                  onChartClick={() => {
+                    // Background click clears any committed measure-selection,
+                    // but only if we didn't just finish a drag (which would
+                    // also fire a click as a side effect of mouseup).
+                    if (justFinishedDragRef.current) {
+                      justFinishedDragRef.current = false
+                      return
+                    }
+                    setMeasureSelection(null)
+                  }}
+                  onMouseLeave={() => { /* no list to clear */ }}
+                  showBrush={false}
+                  benchmarkData={benchmarkDataForChart.length ? benchmarkDataForChart : null}
+                  disableMarkerClick
                 />
-              )}
-              <XAxis
-                dataKey="date"
-                tick={<CustomXAxisTick rotation={xAxisRotation} fontSize={axisFontSize} />}
-                axisLine={{ stroke: '#64748b' }}
-                tickLine={{ stroke: '#94a3b8' }}
-                interval={Math.max(0, Math.floor(chartDisplayDataEnriched.length / (chartIsNarrow ? 5 : 8)) - 1)}
-                height={xAxisHeight}
-              />
-              <YAxis
-                domain={yAxisDomain ?? ['auto', 'auto']}
-                tick={{ fontSize: axisFontSize, fill: '#334155' }}
-                tickFormatter={(v) => (typeof v === 'number' ? v.toFixed(0) : v)}
-                axisLine={{ stroke: '#64748b' }}
-                tickLine={{ stroke: '#94a3b8' }}
-                width={plotLeft}
-              />
-              <Tooltip
-                contentStyle={{ fontSize: FONT_SIZE_TOOLTIP, padding: 0 }}
-                content={({ active, payload, label }: { active?: boolean; payload?: ReadonlyArray<{ name?: string; value?: number; payload?: unknown }>; label?: string | number }) => (
-                  <TooltipContent active={active} payload={payload} label={label} symbol={displaySymbol} benchmarkSymbol={hasBenchmark ? compareSymbols[0] : undefined} />
-                )}
-              />
-              <Legend wrapperStyle={{ fontSize: FONT_SIZE_AXIS }} />
-              {hasBenchmark && compareDataList.length === 1 && (
-                <Line
-                  type="monotone"
-                  dataKey="benchmarkNorm"
-                  name={`$${compareSymbols[0]}`}
-                  stroke={BENCHMARK_LINE_COLOR}
-                  strokeWidth={BENCHMARK_LINE_WIDTH}
-                  connectNulls
-                  dot={false}
-                  strokeDasharray="4 2"
-                />
-              )}
-              {hasBenchmark && compareDataList.length > 1 && compareDataList.map((b, i) => (
-                <Line
-                  key={b.symbol}
-                  type="monotone"
-                  dataKey={`compare_${b.symbol}` as keyof typeof chartDisplayDataEnriched[0]}
-                  name={`$${b.symbol}`}
-                  stroke={[BENCHMARK_LINE_COLOR, BENCHMARK_LINE_COLOR, '#6366f1'][i % 3]}
-                  strokeWidth={BENCHMARK_LINE_WIDTH}
-                  connectNulls
-                  dot={false}
-                  strokeDasharray={i === 0 ? '4 2' : i === 1 ? '1 3' : '8 2'}
-                />
-              ))}
-              <Line
-                type="monotone"
-                dataKey={displayValueKey}
-                name={displaySymbol}
-                stroke={CHART_LINE_COLOR}
-                strokeWidth={CHART_LINE_WIDTH}
-                connectNulls
-                dot={(dotProps: Record<string, unknown>) => {
-                  const pt = dotProps.payload as ChartPointEnriched | undefined
-                  if (!pt?.decisions?.length && pt?._clusterRep !== true) return <circle key={dotProps.key as string} r={0} />
-                  return <ChartDot cx={dotProps.cx as number} cy={dotProps.cy as number} payload={pt} />
-                }}
-                activeDot={false}
-              />
-          </ComposedChart>
-        </ResponsiveContainer>
-          ) : null}
+              ) : null}
+            </ParentSize>
+          )}
         </Box>
+
+        {/* Crosshair (no drag in progress) */}
         {crosshairX != null && !selecting && (
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              pointerEvents: 'none',
-              zIndex: 9,
-            }}
-          >
+          <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 9 }}>
             <Box
               sx={{
                 position: 'absolute',
@@ -1007,18 +609,10 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
             />
           </Box>
         )}
+
+        {/* Drag overlay (during selection) */}
         {selecting && (
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              pointerEvents: 'none',
-              zIndex: 10,
-            }}
-          >
+          <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 10 }}>
             <Box
               sx={{
                 position: 'absolute',
@@ -1027,18 +621,20 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
                 left: Math.min(selecting.startX, selecting.endX),
                 width: Math.abs(selecting.endX - selecting.startX),
                 bgcolor: 'rgba(59, 130, 246, 0.1)',
-                borderRadius: 0,
               }}
             />
           </Box>
         )}
+
+        {/* Range stats pill — floats over the chart while dragging or
+            after a committed selection. */}
         {(() => {
           const stats = selecting ? liveSelectionStats : rangeStats
           const showTooltip = (selecting && liveSelectionStats) || (measureSelection && rangeStats && wrapperWidth > 0)
           if (!showTooltip || !stats) return null
           let tooltipLeft = selecting
             ? (selecting.startX + selecting.endX) / 2
-            : plotLeft + ((measureSelection!.startIndex + measureSelection!.endIndex) / 2 / Math.max(1, mergedChartData.length)) * (wrapperWidth - plotLeft - plotRight)
+            : plotLeft + ((measureSelection!.startIndex + measureSelection!.endIndex) / 2 / Math.max(1, chartPoints.length)) * (wrapperWidth - plotLeft - plotRight)
           const tooltipHalfWidth = 84
           if (wrapperWidth > 0) {
             tooltipLeft = Math.max(tooltipHalfWidth, Math.min(wrapperWidth - tooltipHalfWidth, tooltipLeft))
