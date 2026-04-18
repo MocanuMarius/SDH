@@ -11,8 +11,25 @@
  */
 
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { Box, Typography, Paper, CircularProgress, Alert, FormControl, Select, MenuItem, Chip } from '@mui/material'
+import {
+  Box,
+  Typography,
+  Paper,
+  CircularProgress,
+  Alert,
+  FormControl,
+  Select,
+  MenuItem,
+  Chip,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+} from '@mui/material'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import TuneIcon from '@mui/icons-material/Tune'
 import { ParentSize } from '@visx/responsive'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
 import type { ActionWithEntry } from '../services/actionsService'
@@ -77,6 +94,11 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
 
   const [compareSymbols, setCompareSymbols] = useState<string[]>(['SPY'])
   const [compareDataList, setCompareDataList] = useState<Array<{ symbol: string; dates: string[]; prices: number[] }>>([])
+  // Chart settings modal (compare tickers) — replaces the old always-
+  // visible compare row that was eating a lot of horizontal space on
+  // mobile. Opens from the gear in the range-selector row (same pattern
+  // as TimelinePage).
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [measureSelection, setMeasureSelection] = useState<{ startIndex: number; endIndex: number } | null>(null)
@@ -419,50 +441,43 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 1, sm: 2 }, mb: 2, minWidth: 0, overflow: 'hidden' }}>
-      {/* Header row — title + compare control */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5, mb: 1 }}>
-        <Typography variant="subtitle2" fontWeight={600}>
-          Price &amp; decisions
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', ml: 'auto' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>Compare</Typography>
-          {compareSymbols.map((s) => (
-            <Chip
-              key={s}
-              label={s}
-              size="small"
-              onDelete={() => setCompareSymbols((prev) => prev.filter((x) => x !== s))}
-              deleteIcon={<DeleteOutlineIcon fontSize="small" />}
-            />
-          ))}
-          {compareSymbols.length < MAX_COMPARE_SYMBOLS && (
-            <FormControl size="small" sx={{ minWidth: 90 }} variant="outlined">
-              <Select
-                value=""
-                displayEmpty
-                renderValue={() => '+ Add'}
-                onChange={(e) => {
-                  const v = e.target.value as string
-                  if (v && !compareSymbols.includes(v)) setCompareSymbols((prev) => [...prev, v].slice(0, MAX_COMPARE_SYMBOLS))
-                }}
-              >
-                {BENCHMARK_OPTIONS.filter((b) => !compareSymbols.includes(b.symbol)).map((b) => (
-                  <MenuItem key={b.symbol} value={b.symbol}>{b.label}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
+      {/* Range presets + settings gear — the old always-visible "Compare"
+          row was eating two lines on mobile and cluttering the chart
+          chrome; it now lives in a modal behind the gear, matching the
+          TimelinePage pattern. Title dropped as well since the parent
+          page (IdeaDetailPage) already carries the ticker in its sticky
+          PageHeader. */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          mb: 1,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <RangeSelectorButtons
+            value={range}
+            onChange={(v) => { setRange(v); setUserChangedRange(true) }}
+            variant="tabs"
+          />
         </Box>
-      </Box>
-
-      {/* Range presets — uses the shared component (tabs variant matches
-          the per-ticker page's outlined-chip styling). */}
-      <Box sx={{ mb: 1, mx: -0.25 }}>
-        <RangeSelectorButtons
-          value={range}
-          onChange={(v) => { setRange(v); setUserChangedRange(true) }}
-          variant="tabs"
-        />
+        {/* Selected-compares count — compact cue that a benchmark is
+            active without re-introducing the full compare chip strip. */}
+        {compareSymbols.length > 0 && (
+          <Typography variant="caption" color="text.secondary">
+            vs {compareSymbols.join(', ')}
+          </Typography>
+        )}
+        <IconButton
+          size="small"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Chart settings"
+          sx={{ color: 'text.secondary', flexShrink: 0 }}
+        >
+          <TuneIcon fontSize="small" />
+        </IconButton>
       </Box>
 
       {/* Range summary line — current price, %change, CAGR, date range. */}
@@ -615,6 +630,65 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           return <MeasureStatsPill stats={stats} left={tooltipLeft} />
         })()}
       </Box>
+
+      {/* Chart settings modal — the full Compare-tickers multiselect
+          lives here. Previously this control ate a second row of chrome
+          above the chart; hiding it behind the gear keeps the at-rest
+          chart chrome tight and leaves the range presets visible, which
+          is what the user interacts with 95 % of the time. */}
+      <Dialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Chart settings</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+              Compare — overlay up to {MAX_COMPARE_SYMBOLS} benchmarks on the chart
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+              {compareSymbols.map((s) => (
+                <Chip
+                  key={s}
+                  label={s}
+                  size="small"
+                  onDelete={() => setCompareSymbols((prev) => prev.filter((x) => x !== s))}
+                  deleteIcon={<DeleteOutlineIcon fontSize="small" />}
+                />
+              ))}
+              {compareSymbols.length < MAX_COMPARE_SYMBOLS && (
+                <FormControl size="small" sx={{ minWidth: 140 }} variant="outlined">
+                  <Select
+                    value=""
+                    displayEmpty
+                    renderValue={() => '+ Add benchmark'}
+                    onChange={(e) => {
+                      const v = e.target.value as string
+                      if (v && !compareSymbols.includes(v)) setCompareSymbols((prev) => [...prev, v].slice(0, MAX_COMPARE_SYMBOLS))
+                    }}
+                  >
+                    {BENCHMARK_OPTIONS.filter((b) => !compareSymbols.includes(b.symbol)).map((b) => (
+                      <MenuItem key={b.symbol} value={b.symbol}>{b.label}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+              {compareSymbols.length === 0 && (
+                <Typography variant="caption" color="text.disabled">
+                  No overlays — ticker is shown alone.
+                </Typography>
+              )}
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSettingsOpen(false)} variant="contained" size="small" sx={{ textTransform: 'none' }}>
+            Done
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   )
 }

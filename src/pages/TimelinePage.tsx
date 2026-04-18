@@ -41,6 +41,7 @@ import RelativeDate from '../components/RelativeDate'
 import DecisionChip from '../components/DecisionChip'
 import { getChartCategory, getDecisionTypeColor } from '../theme/decisionTypes'
 import { isAutomatedEntry } from '../utils/entryTitle'
+import { relativeBucket, formatDayHeader } from '../utils/relativeBucket'
 
 /** Assign each action to the chart point whose date is closest to the action date (no spreading by capacity). */
 function getClosestChartPointByDate(
@@ -1279,46 +1280,11 @@ export default function TimelinePage() {
 // the chart. Replaces a flat dense list with date-section grouping so the
 // user can scan by day. Each row is a decision: type chip, ticker, optional
 // price, and a 1-line reason snippet. Clicking a row selects it on the chart.
+//
+// `relativeBucket` + `formatDayHeader` used to live inline here; both got
+// lifted to `utils/relativeBucket` so the per-ticker page can re-use the
+// exact same labels.
 // ─────────────────────────────────────────────────────────────────────────────
-
-function formatDayHeader(dateStr: string): string {
-  if (!dateStr) return '—'
-  const d = new Date(dateStr)
-  if (Number.isNaN(d.getTime())) return dateStr
-  // e.g. "Mon, Apr 14 '26" — secondary on the header now, so smaller.
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: '2-digit' })
-}
-
-/**
- * Coarse "how far back is this day" bucket — the scannable primary label
- * on each date section. Users care "was this recent vs long-dormant"
- * before they care about the exact day, so this leads. Falls back to
- * "Over a month ago" / "Over a year ago" bins instead of rendering noisy
- * per-month values ("3 months ago, 5 months ago, 7 months ago" reads
- * worse than "over a month ago" × 3).
- */
-function relativeBucket(dateStr: string): string {
-  if (!dateStr) return '—'
-  const d = new Date(dateStr + 'T12:00:00Z')
-  if (Number.isNaN(d.getTime())) return dateStr
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const diffDays = Math.round((today.getTime() - that.getTime()) / 86400000)
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 0) {
-    // Future-dated action (rare — someone logging a forward-dated decision)
-    if (diffDays === -1) return 'Tomorrow'
-    if (diffDays > -14) return `In ${-diffDays} days`
-    return 'In the future'
-  }
-  if (diffDays < 7) return `${diffDays} days ago`
-  if (diffDays < 14) return '1 week ago'
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-  if (diffDays < 365) return 'Over a month ago'
-  return 'Over a year ago'
-}
 
 function DecisionsInRange({
   actions,

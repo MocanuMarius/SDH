@@ -8,7 +8,6 @@ import {
   Paper,
   CircularProgress,
   Alert,
-  Chip,
   Table,
   TableBody,
   TableCell,
@@ -18,7 +17,6 @@ import {
   Button,
   IconButton,
   Link,
-  Breadcrumbs,
   Stack,
 } from '@mui/material'
 import TimelineIcon from '@mui/icons-material/Timeline'
@@ -40,7 +38,8 @@ import DecisionChip from '../components/DecisionChip'
 import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import OptionTypeChip from '../components/OptionTypeChip'
-import { StatusChip, statusFromLatestActionType, EmptyState } from '../components/system'
+import { PageHeader, StatusChip, statusFromLatestActionType, EmptyState } from '../components/system'
+import { relativeBucket, formatDayHeader } from '../utils/relativeBucket'
 import {
   computeCagrFromChart,
   formatCagrPercent,
@@ -216,31 +215,36 @@ export default function IdeaDetailPage() {
     )
   }
 
+  const latestAction = actions.length > 0
+    ? [...actions].sort((a, b) => (b.action_date || '').localeCompare(a.action_date || ''))[0]
+    : null
+
   return (
     <Box sx={{ minWidth: 0 }}>
-      <Breadcrumbs sx={{ mb: 1.5, fontSize: '0.85rem' }}>
-        <Link component={RouterLink} to="/tickers" underline="hover" color="inherit">
-          Tickers
-        </Link>
-        <Typography fontSize="inherit" color="text.primary">
-          ${decodedTicker}
-        </Typography>
-      </Breadcrumbs>
-      <Box display="flex" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 0.75 }}>
-        <Chip
-          label={`$${decodedTicker}`}
-          sx={{ fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1.1rem' } }}
-        />
-        {company && (
-          <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: { xs: '50vw', sm: 'none' } }}>
-            {company}
-          </Typography>
-        )}
-        {actions.length > 0 && (() => {
-          const latest = [...actions].sort((a, b) => (b.action_date || '').localeCompare(a.action_date || ''))[0]
-          return <StatusChip kind={statusFromLatestActionType(latest.type)} />
-        })()}
-      </Box>
+      {/* Sticky header via the shared PageHeader — matches every other
+          full page (Timeline, Journal, Tickers). On mobile it sticks
+          under the AppBar so the user always knows which ticker they're
+          looking at while they scroll through decisions. Eyebrow carries
+          the "Tickers /" breadcrumb bit the old ad-hoc block provided. */}
+      <PageHeader
+        eyebrow={
+          <Link component={RouterLink} to="/tickers" underline="hover" color="inherit">
+            Tickers
+          </Link>
+        }
+        title={
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', sm: 'flex-start' } }}>
+            <Box component="span">${decodedTicker}</Box>
+            {company && (
+              <Box component="span" sx={{ fontWeight: 400, fontSize: '0.55em', color: 'text.secondary' }}>
+                {company}
+              </Box>
+            )}
+          </Box>
+        }
+        actions={latestAction ? <StatusChip kind={statusFromLatestActionType(latestAction.type)} /> : undefined}
+        dense
+      />
 
       {/* Inline log-decision bar — newspaper-tape strip that lets the user
           log a decision without opening a modal. Pre-fills the ticker, uses
@@ -386,6 +390,19 @@ export default function IdeaDetailPage() {
         // Each row's "between" pill describes the price change FROM the next-older
         // decision shown right below it INTO that row's decision date.
         const sortedActions = [...actions].sort((a, b) => (b.action_date || '').localeCompare(a.action_date || ''))
+
+        // Group actions by action_date so we can render newspaper-style
+        // section headers before each day. One ticker usually has one
+        // decision per day — the header still adds value by carrying the
+        // coarse "how long ago" bucket the user scans first.
+        const dateGroups: { date: string; items: ActionWithEntry[] }[] = []
+        for (const a of sortedActions) {
+          const key = (a.action_date || '').slice(0, 10) || 'unknown'
+          const last = dateGroups[dateGroups.length - 1]
+          if (last && last.date === key) last.items.push(a)
+          else dateGroups.push({ date: key, items: [a] })
+        }
+
         const renderBetween = (newer: ActionWithEntry, older: ActionWithEntry | 'now') => {
           // Delta is precomputed chronologically from older.id → newer's date.
           // For the "to today" pill above the newest row, use the newest action's own delta
@@ -423,57 +440,112 @@ export default function IdeaDetailPage() {
             </Box>
           )
         }
+
+        // Newspaper-style section opener — same visual grammar as the
+        // Timeline page's DecisionsInRange headers. Sticky within the
+        // scrolling parent so the user always knows which day they're on.
+        const renderDateHeader = (date: string) => (
+          <Box
+            sx={{
+              position: 'sticky',
+              top: { xs: 104, sm: 0 },
+              zIndex: 1,
+              bgcolor: 'background.default',
+              borderTop: 1,
+              borderBottom: 1,
+              borderColor: 'divider',
+              px: 1,
+              py: 0.5,
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 1,
+            }}
+          >
+            <Typography
+              component="span"
+              sx={{
+                fontFamily: '"Source Serif 4", Georgia, serif',
+                fontWeight: 700,
+                fontSize: '0.9rem',
+              }}
+            >
+              {relativeBucket(date)}
+            </Typography>
+            <Typography
+              component="span"
+              variant="caption"
+              sx={{ color: 'text.disabled', fontSize: '0.7rem', ml: 'auto' }}
+            >
+              {formatDayHeader(date)}
+            </Typography>
+          </Box>
+        )
+
+        // Track flat action index across groups so between-pill logic stays
+        // intact when iterating group-by-group.
+        let flatIdx = 0
+
         return isMobile ? (
-          /* Mobile: card layout, newest-first, with between-pill */
-          <Stack spacing={1}>
-            {sortedActions.map((a, idx) => {
-              const older = sortedActions[idx + 1]
-              const topPill = idx === 0 && !chartLoading ? renderBetween(a, 'now') : null
-              const between = !chartLoading && older ? renderBetween(a, older) : null
-              return (
-                <Fragment key={a.id}>
-                  {topPill}
-                  <Paper variant="outlined" sx={{ p: 1.5 }}>
-                    <Box display="flex" alignItems="center" gap={0.75} flexWrap="wrap" sx={{ mb: 0.5 }}>
-                      <DecisionChip type={a.type} size="small" />
-                      <OptionTypeChip ticker={a.ticker} />
-                      {a.price && (
-                        <Typography variant="body2" fontWeight={600}>
-                          {a.price}{a.currency ? ` ${a.currency}` : ''}
+          /* Mobile: section-grouped card layout. Each date group owns a
+             sticky header; the between-pill still lands between the
+             decision it transitioned FROM and the newer one ABOVE it. */
+          <Stack spacing={0.5}>
+            {dateGroups.map(({ date, items }) => {
+              const groupCards = items.map((a) => {
+                const myIdx = flatIdx++
+                const older = sortedActions[myIdx + 1]
+                const topPill = myIdx === 0 && !chartLoading ? renderBetween(a, 'now') : null
+                const between = !chartLoading && older ? renderBetween(a, older) : null
+                return (
+                  <Fragment key={a.id}>
+                    {topPill}
+                    <Paper variant="outlined" sx={{ p: 1.5 }}>
+                      <Box display="flex" alignItems="center" gap={0.75} flexWrap="wrap" sx={{ mb: 0.5 }}>
+                        <DecisionChip type={a.type} size="small" />
+                        <OptionTypeChip ticker={a.ticker} />
+                        {a.price && (
+                          <Typography variant="body2" fontWeight={600}>
+                            {a.price}{a.currency ? ` ${a.currency}` : ''}
+                          </Typography>
+                        )}
+                        {/* Edit pencil — opens ActionFormDialog in edit mode. */}
+                        <IconButton
+                          size="small"
+                          onClick={() => setEditingAction(a)}
+                          aria-label="Edit decision"
+                          sx={{ p: 0.25, color: 'text.secondary', ml: 'auto' }}
+                        >
+                          <EditOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                      {a.reason && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                          <TickerLinks text={a.reason} variant="chip" dense />
                         </Typography>
                       )}
-                      <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
-                        <RelativeDate date={a.action_date} variant="caption" sx={{ color: 'inherit' }} />
-                      </Typography>
-                      {/* Edit pencil — opens ActionFormDialog in edit mode. */}
-                      <IconButton
-                        size="small"
-                        onClick={() => setEditingAction(a)}
-                        aria-label="Edit decision"
-                        sx={{ p: 0.25, color: 'text.secondary' }}
-                      >
-                        <EditOutlinedIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                    {a.reason && (
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                        <TickerLinks text={a.reason} variant="chip" dense />
-                      </Typography>
-                    )}
-                    {a.entry && (
-                      <Button
-                        component={RouterLink}
-                        to={`/entries/${a.entry.id}`}
-                        size="small"
-                        sx={{ textTransform: 'none', px: 0, fontSize: '0.75rem' }}
-                      >
-                        {getEntryDisplayTitle(a.entry, [a]).slice(0, 50)}
-                        {getEntryDisplayTitle(a.entry, [a]).length > 50 ? '…' : ''}
-                      </Button>
-                    )}
-                  </Paper>
-                  {between}
-                </Fragment>
+                      {a.entry && (
+                        <Button
+                          component={RouterLink}
+                          to={`/entries/${a.entry.id}`}
+                          size="small"
+                          sx={{ textTransform: 'none', px: 0, fontSize: '0.75rem' }}
+                        >
+                          {getEntryDisplayTitle(a.entry, [a]).slice(0, 50)}
+                          {getEntryDisplayTitle(a.entry, [a]).length > 50 ? '…' : ''}
+                        </Button>
+                      )}
+                    </Paper>
+                    {between}
+                  </Fragment>
+                )
+              })
+              return (
+                <Box key={date}>
+                  {renderDateHeader(date)}
+                  <Stack spacing={1} sx={{ mt: 0.75, mb: 0.5 }}>
+                    {groupCards}
+                  </Stack>
+                </Box>
               )
             })}
           </Stack>
@@ -484,7 +556,6 @@ export default function IdeaDetailPage() {
                 <TableRow>
                   <TableCell>Type</TableCell>
                   <TableCell>Ticker</TableCell>
-                  <TableCell>Date</TableCell>
                   <TableCell>Price</TableCell>
                   <TableCell>Reason</TableCell>
                   <TableCell>Entry</TableCell>
@@ -492,69 +563,99 @@ export default function IdeaDetailPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {sortedActions.map((a, idx) => {
-                  const older = sortedActions[idx + 1]
-                  const topPill = idx === 0 && !chartLoading ? renderBetween(a, 'now') : null
-                  const between = !chartLoading && older ? renderBetween(a, older) : null
-                  return (
-                    <Fragment key={a.id}>
-                      {topPill && (
-                        <TableRow sx={{ '& td': { borderBottom: 'none', py: 0 } }}>
-                          <TableCell colSpan={7} sx={{ p: 0, pt: 0.5, pb: 0.5, px: 1 }}>
-                            {topPill}
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      <TableRow>
-                        <TableCell><DecisionChip type={a.type} size="small" /></TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-                            {a.ticker ? getTickerDisplayLabel(a.ticker) || `$${a.ticker}` : '—'}
-                            <OptionTypeChip ticker={a.ticker} />
-                          </Box>
-                        </TableCell>
-                        <TableCell><RelativeDate date={a.action_date} /></TableCell>
-                        <TableCell>
-                          {a.price}
-                          {a.currency ? ` ${a.currency}` : ''}
-                        </TableCell>
-                        <TableCell>{a.reason ? <TickerLinks text={a.reason} variant="chip" dense /> : '—'}</TableCell>
-                        <TableCell>
-                          {a.entry ? (
-                            <Button
-                              component={RouterLink}
-                              to={`/entries/${a.entry.id}`}
-                              size="small"
-                              sx={{ textTransform: 'none' }}
-                            >
-                              {getEntryDisplayTitle(a.entry, [a]).slice(0, 40)}
-                              {getEntryDisplayTitle(a.entry, [a]).length > 40 ? '…' : ''}
-                            </Button>
-                          ) : (
-                            '—'
-                          )}
-                        </TableCell>
-                        <TableCell sx={{ p: 0.5 }}>
-                          <IconButton
-                            size="small"
-                            onClick={() => setEditingAction(a)}
-                            aria-label="Edit decision"
-                            sx={{ color: 'text.secondary' }}
+                {dateGroups.map(({ date, items }) => (
+                  <Fragment key={date}>
+                    {/* Section header row — full-width date subhead.
+                        Serif primary (bucket) + tiny right-aligned exact
+                        date. colSpan=6 matches the column count below. */}
+                    <TableRow>
+                      <TableCell colSpan={6} sx={{ bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider', py: 0.5, px: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                          <Typography
+                            component="span"
+                            sx={{
+                              fontFamily: '"Source Serif 4", Georgia, serif',
+                              fontWeight: 700,
+                              fontSize: '0.9rem',
+                            }}
                           >
-                            <EditOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                      {between && (
-                        <TableRow sx={{ '& td': { borderBottom: 'none', py: 0 } }}>
-                          <TableCell colSpan={7} sx={{ p: 0, pt: 0.25, pb: 0.5, px: 1 }}>
-                            {between}
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </Fragment>
-                  )
-                })}
+                            {relativeBucket(date)}
+                          </Typography>
+                          <Typography
+                            component="span"
+                            variant="caption"
+                            sx={{ color: 'text.disabled', fontSize: '0.7rem', ml: 'auto' }}
+                          >
+                            {formatDayHeader(date)}
+                          </Typography>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                    {items.map((a) => {
+                      const myIdx = flatIdx++
+                      const older = sortedActions[myIdx + 1]
+                      const topPill = myIdx === 0 && !chartLoading ? renderBetween(a, 'now') : null
+                      const between = !chartLoading && older ? renderBetween(a, older) : null
+                      return (
+                        <Fragment key={a.id}>
+                          {topPill && (
+                            <TableRow sx={{ '& td': { borderBottom: 'none', py: 0 } }}>
+                              <TableCell colSpan={6} sx={{ p: 0, pt: 0.5, pb: 0.5, px: 1 }}>
+                                {topPill}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          <TableRow>
+                            <TableCell><DecisionChip type={a.type} size="small" /></TableCell>
+                            <TableCell>
+                              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                                {a.ticker ? getTickerDisplayLabel(a.ticker) || `$${a.ticker}` : '—'}
+                                <OptionTypeChip ticker={a.ticker} />
+                              </Box>
+                            </TableCell>
+                            <TableCell>
+                              {a.price}
+                              {a.currency ? ` ${a.currency}` : ''}
+                            </TableCell>
+                            <TableCell>{a.reason ? <TickerLinks text={a.reason} variant="chip" dense /> : '—'}</TableCell>
+                            <TableCell>
+                              {a.entry ? (
+                                <Button
+                                  component={RouterLink}
+                                  to={`/entries/${a.entry.id}`}
+                                  size="small"
+                                  sx={{ textTransform: 'none' }}
+                                >
+                                  {getEntryDisplayTitle(a.entry, [a]).slice(0, 40)}
+                                  {getEntryDisplayTitle(a.entry, [a]).length > 40 ? '…' : ''}
+                                </Button>
+                              ) : (
+                                '—'
+                              )}
+                            </TableCell>
+                            <TableCell sx={{ p: 0.5 }}>
+                              <IconButton
+                                size="small"
+                                onClick={() => setEditingAction(a)}
+                                aria-label="Edit decision"
+                                sx={{ color: 'text.secondary' }}
+                              >
+                                <EditOutlinedIcon fontSize="small" />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                          {between && (
+                            <TableRow sx={{ '& td': { borderBottom: 'none', py: 0 } }}>
+                              <TableCell colSpan={6} sx={{ p: 0, pt: 0.25, pb: 0.5, px: 1 }}>
+                                {between}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
+                      )
+                    })}
+                  </Fragment>
+                ))}
               </TableBody>
             </Table>
           </TableContainer>
