@@ -1,0 +1,44 @@
+# Build check — runs `npm run build` on every push and PR so a broken
+# deploy doesn't first surface from a Vercel email.
+#
+# Catches things `npm run lint` doesn't: duplicate imports, type errors
+# that vite picks up, missing assets, etc. (Today's TimelineIcon
+# duplicate-import slipped through lint and broke prod — this would
+# have caught it.)
+
+name: Build check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        # Mirror Vercel's installCommand so we surface the same resolution.
+        run: npm install --legacy-peer-deps
+
+      - name: Lint (errors only — warnings allowed)
+        # The repo's own `npm run lint` script enforces --max-warnings 10
+        # which would fail on pre-existing react-hooks/exhaustive-deps
+        # warnings unrelated to this PR. We only block on real errors here.
+        run: npx eslint . --ext ts,tsx --report-unused-disable-directives
+
+      - name: Build
+        run: npm run build
