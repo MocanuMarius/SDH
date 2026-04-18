@@ -363,6 +363,24 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
                 onMouseMove={handleMouseMove}
                 onMouseLeave={() => setHoverIdx(null)}
               >
+                {/* Cone gradients + plot clip — matches the timeline chart's
+                    visual language so the popup and the full chart speak the
+                    same vocabulary (dot + radiating light cone, not arrows). */}
+                <defs>
+                  <linearGradient id="quick-buy-glow" x1="0" y1="1" x2="0" y2="0">
+                    <stop offset="0" stopColor="#16a34a" stopOpacity="0.85" />
+                    <stop offset="0.35" stopColor="#16a34a" stopOpacity="0.55" />
+                    <stop offset="1" stopColor="#16a34a" stopOpacity="0" />
+                  </linearGradient>
+                  <linearGradient id="quick-sell-glow" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stopColor="#dc2626" stopOpacity="0.85" />
+                    <stop offset="0.35" stopColor="#dc2626" stopOpacity="0.55" />
+                    <stop offset="1" stopColor="#dc2626" stopOpacity="0" />
+                  </linearGradient>
+                  <clipPath id="quick-plot-clip">
+                    <rect x={0} y={0} width={svg.innerW} height={svg.innerH} />
+                  </clipPath>
+                </defs>
                 <g transform={`translate(${M.left},${M.top})`}>
                   {/* Grid lines */}
                   {svg.yTicks.map((v) => (
@@ -398,19 +416,41 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
                   {/* Ticker line */}
                   <path d={svg.tPath} stroke="#1e40af" strokeWidth={2.5} fill="none" />
 
-                  {/* Decision markers */}
+                  {/* Decision markers — dot on the line + cone glow radiating
+                      up (buy) or down (sell). Same shape language as the
+                      timeline chart. Cones go in a clipped, multiply-blended
+                      group so overlapping cones darken/saturate. Dots render
+                      separately on top. */}
+                  <g clipPath="url(#quick-plot-clip)" style={{ pointerEvents: 'none', mixBlendMode: 'multiply' }}>
+                    {markers.map((m, i) => {
+                      const cx = svg.xScale(new Date(m.date))
+                      const cy = svg.yScale(m.pct)
+                      const isBuy = m.category === 'buy'
+                      const h = 28          // cone height in px
+                      const hw = 14         // cone half-width
+                      const baseY = isBuy ? cy - h : cy + h
+                      const path = `M ${cx} ${cy} L ${cx + hw} ${baseY} L ${cx - hw} ${baseY} Z`
+                      return (
+                        <path
+                          key={`cone-${i}`}
+                          d={path}
+                          fill={isBuy ? 'url(#quick-buy-glow)' : 'url(#quick-sell-glow)'}
+                          opacity={0.85}
+                        />
+                      )
+                    })}
+                  </g>
                   {markers.map((m, i) => {
                     const cx = svg.xScale(new Date(m.date))
                     const cy = svg.yScale(m.pct)
-                    const s = 8
-                    const isBuy = m.category === 'buy'
-                    const pts = isBuy
-                      ? `${cx},${cy - s - 4} ${cx - s},${cy + s * 0.4 - 4} ${cx + s},${cy + s * 0.4 - 4}`
-                      : `${cx},${cy + s + 4} ${cx - s},${cy - s * 0.4 + 4} ${cx + s},${cy - s * 0.4 + 4}`
                     return (
-                      <g key={i}>
-                        <polygon points={pts} fill={m.color} stroke="#fff" strokeWidth={1} opacity={0.95} />
-                      </g>
+                      <circle
+                        key={`dot-${i}`}
+                        cx={cx} cy={cy} r={4}
+                        fill={m.color}
+                        stroke="#fff"
+                        strokeWidth={1}
+                      />
                     )
                   })}
 
@@ -473,11 +513,11 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
                 <Typography variant="caption" color="text.secondary">S&P 500</Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <svg width={12} height={12}><polygon points="6,1 1,11 11,11" fill="#16a34a" /></svg>
+                <svg width={12} height={12}><circle cx={6} cy={6} r={4} fill="#16a34a" stroke="#fff" strokeWidth={1} /></svg>
                 <Typography variant="caption" color="text.secondary">Buy</Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <svg width={12} height={12}><polygon points="6,11 1,1 11,1" fill="#dc2626" /></svg>
+                <svg width={12} height={12}><circle cx={6} cy={6} r={4} fill="#dc2626" stroke="#fff" strokeWidth={1} /></svg>
                 <Typography variant="caption" color="text.secondary">Sell</Typography>
               </Box>
             </Box>
