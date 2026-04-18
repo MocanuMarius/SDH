@@ -347,6 +347,9 @@ function MobileBottomNav({ onOpenNav }: { onOpenNav: () => void }) {
         right: 0,
         bgcolor: 'text.primary',
         borderTop: '1px solid rgba(255,255,255,0.10)',
+        // Mirror of the AppBar shadow but pointing UPWARD so the bar reads
+        // as floating above the content, not glued to the bottom edge.
+        boxShadow: '0 -1px 3px rgba(15, 23, 42, 0.18), 0 -1px 1px rgba(15, 23, 42, 0.12)',
         pb: 'env(safe-area-inset-bottom)',
         '& .MuiBottomNavigationAction-root': {
           color: 'rgba(255,255,255,0.62)',
