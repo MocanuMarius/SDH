@@ -29,8 +29,7 @@ import { tokens } from '../theme'
 import { ParentSize } from '@visx/responsive'
 import TimelineChartVisx, { getTimelineChartResponsiveMargin, type DecisionOverlayInfo } from '../components/TimelineChartVisx'
 import RangeSelectorButtons from '../components/charts/RangeSelectorButtons'
-import MeasureStatsPill from '../components/charts/MeasureStatsPill'
-import HoverPricePill from '../components/charts/HoverPricePill'
+import ChartHoverOverlays from '../components/charts/ChartHoverOverlays'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
 import { useEncodedUrlState } from '../hooks/useEncodedUrlState'
 import { encodeUrlState, decodeUrlState } from '../utils/urlState'
@@ -1046,52 +1045,25 @@ export default function TimelinePage() {
                 zIndex: 5,
               }}
             />
-            {(() => {
-              if (!measureSelection || !rangeStats || !chartSize) return null
-              const margins = getPlotMargins()
-              const tooltipLeft = margins.left + ((measureSelection.startIndex + measureSelection.endIndex) / 2 / Math.max(1, chartDisplayData.length)) * (chartSize.w - margins.left - margins.right)
-              const half = 84
-              const adjustedLeft = Math.max(half, Math.min(chartSize.w - half, tooltipLeft))
-              return <MeasureStatsPill stats={rangeStats} left={adjustedLeft} />
-            })()}
-            {/* Hover crosshair + price pill — desktop only. Skipped
-                entirely while a measure-drag is active so the drag
-                overlay stays visually clean. The crosshair snaps to
-                the nearest chart data point; the pill shows that
-                point's date + price. */}
-            {(() => {
-              if (crosshairX == null || dragActive || !chartSize || chartDisplayData.length === 0) return null
-              const margins = getPlotMargins()
-              const plotWidth = chartSize.w - margins.left - margins.right
-              if (plotWidth <= 0) return null
-              const plotX = Math.max(0, Math.min(plotWidth, crosshairX - margins.left))
-              const idx = Math.max(0, Math.min(chartDisplayData.length - 1, Math.round((plotX / plotWidth) * (chartDisplayData.length - 1))))
-              const pt = chartDisplayData[idx]
-              if (!pt) return null
-              const snappedX = margins.left + (idx / Math.max(1, chartDisplayData.length - 1)) * plotWidth
-              const half = 70
-              const clampedLeft = Math.max(margins.left + half, Math.min(chartSize.w - margins.right - half, snappedX))
-              return (
-                <>
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: 0,
-                      bottom: 0,
-                      left: snappedX,
-                      // MUI treats numeric width in [0,1] as a fraction —
-                      // `width: 1` renders 100% (a full-width band!).
-                      // `width: '1px'` keeps it a 1-pixel crosshair line.
-                      width: '1px',
-                      pointerEvents: 'none',
-                      zIndex: 9,
-                      bgcolor: 'rgba(0,0,0,0.2)',
-                    }}
-                  />
-                  <HoverPricePill left={clampedLeft} date={pt.date} price={pt.price} />
-                </>
-              )
-            })()}
+            {/* Shared hover + measure-stats overlays — the crosshair,
+                hover-price pill, and committed-measure stats pill all
+                live in one component so the Timeline and per-ticker
+                pages stay visually identical. Live drag band is still
+                rendered imperatively via selectionOverlayRef above for
+                perf (avoids re-rendering hundreds of decision markers
+                on every mousemove). */}
+            {chartSize && (
+              <ChartHoverOverlays
+                crosshairX={crosshairX}
+                dragActive={dragActive}
+                wrapperWidth={chartSize.w}
+                plotLeft={getPlotMargins().left}
+                plotRight={getPlotMargins().right}
+                chartData={chartDisplayData}
+                measureSelection={measureSelection}
+                rangeStats={rangeStats}
+              />
+            )}
           </Box>
 
           {/* Decision overlay — moved here below the chart so it gets a
