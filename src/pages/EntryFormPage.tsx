@@ -27,7 +27,7 @@ import { ensurePassedForUser } from '../services/passedService'
 import { buildDecisionBlockMarkdown, type DecisionBlockFields } from '../utils/decisionBlockMarkdown'
 import { stripLegacyMarkdown } from '../utils/stripLegacyMarkdown'
 import type { ActionInsert } from '../types/database'
-import { PageHeader, ListCard, ItemRow } from '../components/system'
+import { PageHeader, ListCard, ItemRow, AddPlusButton } from '../components/system'
 import { generateEntryId } from '../utils/id'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { useEntry, useInvalidate } from '../hooks/queries'
@@ -622,22 +622,7 @@ export default function EntryFormPage() {
           title="Decisions"
           description="Buys, sells, passes, research notes — what you did or decided."
           count={pendingDecisions.length}
-          headerAction={
-            <IconButton
-              size="small"
-              onClick={() => setDecisionDialogOpen(true)}
-              aria-label="Add decision"
-              sx={{
-                color: 'primary.contrastText',
-                bgcolor: 'primary.main',
-                '&:hover': { bgcolor: 'primary.dark' },
-                width: 28,
-                height: 28,
-              }}
-            >
-              <AddIcon fontSize="small" />
-            </IconButton>
-          }
+          headerAction={<AddPlusButton label="Add decision" onClick={() => setDecisionDialogOpen(true)} />}
         >
           <AnimatePresence initial={false}>
             {pendingDecisions.map((d, i) => (

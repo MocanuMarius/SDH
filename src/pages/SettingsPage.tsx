@@ -9,10 +9,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  IconButton,
   Tooltip,
 } from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import { Reorder } from 'motion/react'
 import { getReasonPresets, setReasonPresets, removeReasonPresetAtIndex, updateReasonPresetColor } from '../utils/reasonPresets'
@@ -29,33 +27,10 @@ import {
 import type { CustomDecisionType } from '../utils/customDecisionTypes'
 import TagChip from '../components/TagChip'
 import DecisionChip from '../components/DecisionChip'
-import { PageHeader, ListCard, ItemRow } from '../components/system'
+import { PageHeader, ListCard, ItemRow, AddPlusButton } from '../components/system'
 
 const DEFAULT_COLOR = '#6366f1'
 
-/**
- * The "+" IconButton that sits in a ListCard's header — same style across
- * Decisions on the entry form, Reminders on the entry detail, and the three
- * preset sections here.
- */
-function AddPlusButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <IconButton
-      size="small"
-      onClick={onClick}
-      aria-label={label}
-      sx={{
-        color: 'primary.contrastText',
-        bgcolor: 'primary.main',
-        '&:hover': { bgcolor: 'primary.dark' },
-        width: 28,
-        height: 28,
-      }}
-    >
-      <AddIcon fontSize="small" />
-    </IconButton>
-  )
-}
 
 function ColorSwatch({ color, onChange, label }: { color?: string; onChange: (c: string) => void; label: string }) {
   return (

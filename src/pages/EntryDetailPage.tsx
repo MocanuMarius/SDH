@@ -35,7 +35,7 @@ import {
   useReminders,
   useInvalidate,
 } from '../hooks/queries'
-import { ListCard, ItemRow, EmptyState } from '../components/system'
+import { ListCard, ItemRow, EmptyState, AddPlusButton } from '../components/system'
 import TimelineIcon from '@mui/icons-material/Timeline'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
 import ActionFormDialog from '../components/ActionFormDialog'
@@ -416,22 +416,7 @@ export default function EntryDetailPage() {
           title="Reminders"
           description="Nudges you'll get back on the activity drawer — for follow-ups, reviews, or decision horizons."
           count={entryReminders.length}
-          headerAction={
-            <IconButton
-              size="small"
-              onClick={() => setReminderDialogOpen(true)}
-              aria-label="Add reminder"
-              sx={{
-                color: 'primary.contrastText',
-                bgcolor: 'primary.main',
-                '&:hover': { bgcolor: 'primary.dark' },
-                width: 28,
-                height: 28,
-              }}
-            >
-              <AddIcon fontSize="small" />
-            </IconButton>
-          }
+          headerAction={<AddPlusButton label="Add reminder" onClick={() => setReminderDialogOpen(true)} />}
         >
           {entryReminders.map((r) => {
             const when = r.reminder_date

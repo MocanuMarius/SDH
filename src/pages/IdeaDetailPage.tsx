@@ -39,7 +39,6 @@ import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import OptionTypeChip from '../components/OptionTypeChip'
 import { StatusChip, statusFromLatestActionType, EmptyState } from '../components/system'
-import TimelineIcon from '@mui/icons-material/Timeline'
 import {
   computeCagrFromChart,
   formatCagrPercent,

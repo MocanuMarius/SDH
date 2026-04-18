@@ -23,3 +23,6 @@ export type { MetricTileProps } from './MetricTile'
 
 export { default as ListCard, ItemRow } from './ListCard'
 export type { ListCardProps, ItemRowProps } from './ListCard'
+
+export { default as AddPlusButton } from './AddPlusButton'
+export type { AddPlusButtonProps } from './AddPlusButton'
