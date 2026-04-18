@@ -150,14 +150,11 @@ export default function SettingsPage() {
         {/* Custom Decision Types */}
         <ListCard
           title="Custom Decision Types"
-          description="Add your own decision types beyond the built-in ones — Hedge, Rebalance, Earnings play, etc. Drag to reorder, click the dot for a colour."
           count={customTypes.length}
           headerAction={<AddPlusButton label="Add custom decision type" onClick={() => setNewTypeDialogOpen(true)} />}
         >
           {customTypes.length === 0 ? (
-            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>
-              None yet. Click + to add one.
-            </Typography>
+            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>None yet.</Typography>
           ) : (
             <Reorder.Group
               axis="y"
@@ -185,14 +182,11 @@ export default function SettingsPage() {
         {/* Decision Reason Presets */}
         <ListCard
           title="Decision Reason Presets"
-          description="Quick-select reasons when adding decisions. Drag to reorder, click the dot for a colour."
           count={reasonPresets.length}
           headerAction={<AddPlusButton label="Add reason preset" onClick={() => setNewReasonDialogOpen(true)} />}
         >
           {reasonPresets.length === 0 ? (
-            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>
-              None yet. Click + to add one.
-            </Typography>
+            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>None yet.</Typography>
           ) : (
             <Reorder.Group
               axis="y"
@@ -222,14 +216,11 @@ export default function SettingsPage() {
         {/* Entry Tag Presets */}
         <ListCard
           title="Entry Tag Presets"
-          description="Tags for categorising journal entries. Drag to reorder, click the dot for a colour."
           count={tagPresets.length}
           headerAction={<AddPlusButton label="Add tag preset" onClick={() => setNewTagDialogOpen(true)} />}
         >
           {tagPresets.length === 0 ? (
-            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>
-              None yet. Click + to add one.
-            </Typography>
+            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>None yet.</Typography>
           ) : (
             <Reorder.Group
               axis="y"

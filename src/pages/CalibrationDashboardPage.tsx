@@ -59,10 +59,9 @@ export default function CalibrationDashboardPage() {
       <EmptyState
         icon={<InsightsIcon />}
         title="No predictions to calibrate yet"
-        description="Calibration tracks how well your forecasts pan out. Add a prediction to any entry (open the entry form, tick + Add prediction, then set the % and date) and resolved predictions will appear here."
         action={
           <Button component={RouterLink} to="/entries/new" variant="contained" size="small">
-            New entry with prediction
+            New entry
           </Button>
         }
       />

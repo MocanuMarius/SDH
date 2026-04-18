@@ -14,7 +14,6 @@ import TimelineIcon from '@mui/icons-material/Timeline'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import SettingsIcon from '@mui/icons-material/Settings'
 import LogoutIcon from '@mui/icons-material/Logout'
-import EventNoteIcon from '@mui/icons-material/EventNote'
 import SchoolIcon from '@mui/icons-material/School'
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import { Badge } from '@mui/material'
@@ -27,7 +26,6 @@ const NAV_ITEMS = [
   { to: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
   { to: '/actions', label: 'Trades', icon: TouchAppIcon },
   { to: '/skill-engineering', label: 'Practice', icon: SchoolIcon },
-  { to: '/decisions', label: 'Long-term horizons', icon: EventNoteIcon },
   { to: '/import', label: 'Import', icon: FileDownloadIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ]

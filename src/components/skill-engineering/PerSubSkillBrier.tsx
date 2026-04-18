@@ -88,10 +88,6 @@ export default function PerSubSkillBrier() {
         <Typography variant="body2" fontWeight={600}>
           No resolved sub-skill predictions yet.
         </Typography>
-        <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
-          Tag your predictions with a sub-skill when creating them, then record outcomes. This
-          panel will surface Brier and rank sub-skills so you can attack your weakest.
-        </Typography>
       </Alert>
     )
   }

@@ -206,11 +206,6 @@ export default function IdeasPage() {
       ) : ideas.length === 0 ? (
         <EmptyState
           title={search.trim() ? 'No tickers match your search' : 'No tickers yet'}
-          description={
-            search.trim()
-              ? 'Try a different ticker or company name.'
-              : 'Log a Buy, Sell, or Pass decision inside a journal entry — the ticker will land here automatically.'
-          }
         />
       ) : (
         <DataGrid

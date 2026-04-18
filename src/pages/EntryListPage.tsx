@@ -789,19 +789,14 @@ export default function EntryListPage() {
           <EmptyState
             icon={<ArticleOutlinedIcon />}
             title="No journal entries yet"
-            description="Every investment decision starts with a thesis. Create your first entry — pick a ticker, write a paragraph, attach a buy/sell decision."
             action={
               <Button component={RouterLink} to="/entries/new" variant="contained" size="small" sx={{ textTransform: 'none' }}>
-                Create first entry
+                New entry
               </Button>
             }
           />
         ) : (
-          <EmptyState
-            dense
-            title="No entries match the current filters"
-            description="Try a different bucket, clear the tag selection, or widen the search term."
-          />
+          <EmptyState dense title="No entries match the current filters" />
         )
       ) : gridView ? (
         <Grid container spacing={1} sx={{ alignItems: 'flex-start' }}>

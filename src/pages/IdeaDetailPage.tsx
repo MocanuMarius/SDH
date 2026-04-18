@@ -342,7 +342,6 @@ export default function IdeaDetailPage() {
           dense
           icon={<TimelineIcon />}
           title={`No decisions on $${(ticker ?? '').toUpperCase()} yet`}
-          description="Use the Log decision button above to record a buy, sell, pass or research note for this ticker."
         />
       ) : (() => {
         // Newest-first ordering: top row = most recent decision.

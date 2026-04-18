@@ -620,7 +620,6 @@ export default function EntryFormPage() {
             the + button on the header opens the InsertDecisionBlockDialog modal. */}
         <ListCard
           title="Decisions"
-          description="Buys, sells, passes, research notes — what you did or decided."
           count={pendingDecisions.length}
           headerAction={<AddPlusButton label="Add decision" onClick={() => setDecisionDialogOpen(true)} />}
         >
@@ -693,7 +692,6 @@ export default function EntryFormPage() {
 
         <RowCard
           title="Market Sentiment"
-          description="How bullish or bearish the overall market feels to you"
           hasValue={market_feeling !== null}
           onClear={() => setMarketFeeling(null)}
         >
@@ -724,7 +722,6 @@ export default function EntryFormPage() {
 
         <RowCard
           title="Market Conditions"
-          description="Tag the backdrop (bull / bear / earnings season / …)"
           hasValue={market_context.trim().length > 0}
           onClear={() => setMarketContext('')}
         >
@@ -756,7 +753,6 @@ export default function EntryFormPage() {
 
         <ListCard
           title="Predictions"
-          description="Falsifiable forecasts with a target date — percent move by a given day."
           count={predictions.length}
           hasValue={predictions.length > 0}
         >
@@ -817,7 +813,6 @@ export default function EntryFormPage() {
 
         <ListCard
           title="Entry Rules"
-          description="Conditions you'd need to see before entering the position."
           count={entryRulesList.length}
           hasValue={entryRulesList.length > 0}
         >
@@ -863,7 +858,6 @@ export default function EntryFormPage() {
 
         <ListCard
           title="Exit Rules"
-          description="When you'd reassess or close the position — stops, thesis breaks, price targets."
           count={exitRulesList.length}
           hasValue={exitRulesList.length > 0}
         >

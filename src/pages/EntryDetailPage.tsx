@@ -420,7 +420,6 @@ export default function EntryDetailPage() {
       <Box sx={{ mt: 2 }}>
         <ListCard
           title="Reminders"
-          description="Nudges you'll get back on the activity drawer — for follow-ups, reviews, or decision horizons."
           count={entryReminders.length}
           headerAction={<AddPlusButton label="Add reminder" onClick={() => setReminderDialogOpen(true)} />}
         >
@@ -514,7 +513,6 @@ export default function EntryDetailPage() {
                 dense
                 icon={<TimelineIcon />}
                 title="No decisions on this entry yet"
-                description="Log what you did — a buy, sell, pass, or research note — and it lines up with this thesis for later review."
                 action={
                   <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setActionDialogOpen(true)} sx={{ textTransform: 'none' }}>
                     Add decision
@@ -561,7 +559,6 @@ export default function EntryDetailPage() {
                 dense
                 icon={<QueryStatsIcon />}
                 title="No predictions on this entry yet"
-                description="A falsifiable forecast — percent move by a specific date — gives your thesis something to fail cleanly against."
                 action={
                   <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setEditingPrediction(null); setPredictionDialogOpen(true); }} sx={{ textTransform: 'none' }}>
                     Add prediction

@@ -337,7 +337,6 @@ export default function ActionsPage() {
         <EmptyState
           icon={<InsightsIcon />}
           title="No trades logged yet"
-          description="Every structured decision you log — a buy, sell, pass, trim — lands here. Create a journal entry and attach decisions, or use the global + to log a standalone one."
           action={
             <Button
               component={RouterLink}
@@ -346,7 +345,7 @@ export default function ActionsPage() {
               size="small"
               sx={{ textTransform: 'none' }}
             >
-              New journal entry
+              New entry
             </Button>
           }
         />

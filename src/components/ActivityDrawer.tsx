@@ -487,7 +487,6 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
           <EmptyState
             icon={<NotificationsNoneIcon />}
             title="All clear"
-            description="No reminders or stale tickers right now. Add a reminder from any entry to revisit it later."
             dense
           />
         ) : (

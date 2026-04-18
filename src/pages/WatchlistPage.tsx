@@ -436,7 +436,6 @@ export default function WatchlistPage() {
               <EmptyState
                 icon={<BookmarksIcon />}
                 title="No alerts yet"
-                description="Add a price trigger for any ticker you're watching. When it crosses your threshold you'll get a Telegram ping and the alert lands in the Triggered tab."
               />
             ) : filteredItems.length === 0 ? (
               <EmptyState dense title="No alerts match your search" />
@@ -554,9 +553,7 @@ export default function WatchlistPage() {
         <Card>
           <CardContent>
             {history.length === 0 ? (
-              <Typography color="textSecondary">
-                No alerts triggered yet. When your price alerts fire, they will appear here.
-              </Typography>
+              <Typography color="textSecondary">No alerts triggered yet.</Typography>
             ) : (
               <Stack spacing={0} divider={<Divider />}>
                 {history.map((h) => (
@@ -699,9 +696,7 @@ export default function WatchlistPage() {
               <CircularProgress size={28} />
             </Box>
           ) : logEntries.length === 0 ? (
-            <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
-              No log entries yet. Events will appear here as the alert is triggered.
-            </Typography>
+            <Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>No log entries yet.</Typography>
           ) : (
             <Stack spacing={0} divider={<Divider />}>
               {logEntries.map((entry) => {

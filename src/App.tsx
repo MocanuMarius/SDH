@@ -42,7 +42,6 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import TouchAppIcon from '@mui/icons-material/TouchApp'
 import WatchlistIcon from '@mui/icons-material/Bookmarks'
 import ImportIcon from '@mui/icons-material/FileDownload'
-import AssignmentIcon from '@mui/icons-material/Assignment'
 import PsychologyIcon from '@mui/icons-material/Psychology'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { useRealtimeSync } from './hooks/useRealtimeSync'
@@ -67,7 +66,6 @@ const IdeasPage = lazy(() => import('./pages/IdeasPage'))
 const IdeaDetailPage = lazy(() => import('./pages/IdeaDetailPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
-const LongTermDecisionsPage = lazy(() => import('./pages/LongTermDecisionsPage'))
 const ImportHub = lazy(() => import('./pages/ImportHub'))
 const SkillEngineeringDashboard = lazy(() => import('./pages/SkillEngineeringDashboard'))
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
@@ -99,7 +97,6 @@ const PRIMARY_NAV = [
 const SECONDARY_NAV = [
   { to: '/actions', label: 'Trades', icon: TouchAppIcon },
   { to: '/skill-engineering', label: 'Practice', icon: PsychologyIcon },
-  { to: '/decisions', label: 'Long-term horizons', icon: AssignmentIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
   { to: '/import', label: 'Import', icon: ImportIcon },
 ]
@@ -407,7 +404,9 @@ function AppRoutes() {
       <Route path="/analytics/performance" element={<Navigate to="/analytics" replace />} />
       <Route path="/insights" element={<Navigate to="/analytics" replace />} />
       <Route path="/calibration" element={<Navigate to="/analytics/calibration" replace />} />
-      <Route path="/decisions" element={<ProtectedLayout><Page><LongTermDecisionsPage /></Page></ProtectedLayout>} />
+      {/* /decisions (Long-term horizons) was removed — redirect any old
+          bookmarks to the journal so they don't 404. */}
+      <Route path="/decisions" element={<Navigate to="/" replace />} />
       <Route path="/tickers" element={<ProtectedLayout><Page><IdeasPage /></Page></ProtectedLayout>} />
       <Route path="/tickers/:ticker" element={<ProtectedLayout><Page><IdeaDetailPage /></Page></ProtectedLayout>} />
       <Route path="/ideas" element={<Navigate to="/tickers" replace />} />
