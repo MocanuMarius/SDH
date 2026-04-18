@@ -30,6 +30,7 @@ import { ParentSize } from '@visx/responsive'
 import TimelineChartVisx, { getTimelineChartResponsiveMargin, type DecisionOverlayInfo } from '../components/TimelineChartVisx'
 import RangeSelectorButtons from '../components/charts/RangeSelectorButtons'
 import MeasureStatsPill from '../components/charts/MeasureStatsPill'
+import HoverPricePill from '../components/charts/HoverPricePill'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
 import { useEncodedUrlState } from '../hooks/useEncodedUrlState'
 import type { ActionWithEntry } from '../services/actionsService'
@@ -182,6 +183,9 @@ export default function TimelinePage() {
   // stay visible at rest. Modal opens over the chart.
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [measureSelection, setMeasureSelection] = useState<{ startIndex: number; endIndex: number } | null>(null)
+  // Desktop-only hover crosshair + price pill. Updated from mousemove
+  // when NOT dragging; cleared on mouseleave. Null = no crosshair shown.
+  const [crosshairX, setCrosshairX] = useState<number | null>(null)
   /** True while range-drag is active — only toggled on start/end (no per-frame updates). */
   const [dragActive, setDragActive] = useState(false)
   const [_liveDragStats, setLiveDragStats] = useState<RangeStats | null>(null)
@@ -607,12 +611,20 @@ export default function TimelinePage() {
   }
 
   const handleChartMouseMove = (e: React.MouseEvent) => {
-    if (!isDraggingRef.current) return
     const el = chartWrapperRef.current
     if (!el) return
     const rect = el.getBoundingClientRect()
-    selectEndXRef.current = e.clientX - rect.left
-    scheduleDragOverlayFrame()
+    const x = e.clientX - rect.left
+    if (isDraggingRef.current) {
+      selectEndXRef.current = x
+      scheduleDragOverlayFrame()
+      return
+    }
+    // Not dragging → update hover crosshair. Rendering is cheap (one
+    // state update; React 19 batches), and the block that reads this
+    // state is gated on `!dragActive` so drag overlays never fight the
+    // crosshair.
+    setCrosshairX(x)
   }
 
   const handleChartMouseUp = () => {
@@ -623,6 +635,7 @@ export default function TimelinePage() {
     log('mouseleave (wrapper)', { wasDragging: isDraggingRef.current })
     cancelActiveDrag()
     setSelectedActionId(null)
+    setCrosshairX(null)
   }
 
   const getXFromTouch = (clientX: number): number => {
@@ -995,6 +1008,44 @@ export default function TimelinePage() {
               const half = 84
               const adjustedLeft = Math.max(half, Math.min(chartSize.w - half, tooltipLeft))
               return <MeasureStatsPill stats={rangeStats} left={adjustedLeft} />
+            })()}
+            {/* Hover crosshair + price pill — desktop only. Skipped
+                entirely while a measure-drag is active so the drag
+                overlay stays visually clean. The crosshair snaps to
+                the nearest chart data point; the pill shows that
+                point's date + price. */}
+            {(() => {
+              if (crosshairX == null || dragActive || !chartSize || chartDisplayData.length === 0) return null
+              const margins = getPlotMargins()
+              const plotWidth = chartSize.w - margins.left - margins.right
+              if (plotWidth <= 0) return null
+              const plotX = Math.max(0, Math.min(plotWidth, crosshairX - margins.left))
+              const idx = Math.max(0, Math.min(chartDisplayData.length - 1, Math.round((plotX / plotWidth) * (chartDisplayData.length - 1))))
+              const pt = chartDisplayData[idx]
+              if (!pt) return null
+              const snappedX = margins.left + (idx / Math.max(1, chartDisplayData.length - 1)) * plotWidth
+              const half = 70
+              const clampedLeft = Math.max(margins.left + half, Math.min(chartSize.w - margins.right - half, snappedX))
+              return (
+                <>
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 0,
+                      bottom: 0,
+                      left: snappedX,
+                      // MUI treats numeric width in [0,1] as a fraction —
+                      // `width: 1` renders 100% (a full-width band!).
+                      // `width: '1px'` keeps it a 1-pixel crosshair line.
+                      width: '1px',
+                      pointerEvents: 'none',
+                      zIndex: 9,
+                      bgcolor: 'rgba(0,0,0,0.2)',
+                    }}
+                  />
+                  <HoverPricePill left={clampedLeft} date={pt.date} price={pt.price} />
+                </>
+              )
             })()}
           </Box>
 

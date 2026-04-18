@@ -39,6 +39,7 @@ import { computeRangeStats, type RangeStats } from '../utils/chartRangeStats'
 import TimelineChartVisx, { type TimelineChartPoint, getTimelineChartResponsiveMargin } from './TimelineChartVisx'
 import RangeSelectorButtons from './charts/RangeSelectorButtons'
 import MeasureStatsPill from './charts/MeasureStatsPill'
+import HoverPricePill from './charts/HoverPricePill'
 
 // Cap the number of points sent to the chart. SVG renders thousands fine,
 // but downsampling speeds up clustering & marker layout for long ranges.
@@ -582,21 +583,51 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           )}
         </Box>
 
-        {/* Crosshair (no drag in progress) */}
-        {crosshairX != null && !selecting && (
-          <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 9 }}>
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                left: crosshairX,
-                width: 1,
-                bgcolor: 'rgba(0,0,0,0.2)',
-              }}
-            />
-          </Box>
-        )}
+        {/* Crosshair + hover-price pill (no drag in progress, desktop
+            only — the hover event simply never fires on touch). The
+            pill shows the nearest chart-data point's date + price so the
+            user gets a concrete readout as they scan the line, matching
+            what most real charting libs ship by default. */}
+        {(() => {
+          if (crosshairX == null || selecting || wrapperWidth <= 0) return null
+          const plotWidth = wrapperWidth - plotLeft - plotRight
+          if (plotWidth <= 0 || dataForStats.length === 0) return null
+          const plotX = Math.max(0, Math.min(plotWidth, crosshairX - plotLeft))
+          // Nearest-index lookup — the chart evenly distributes data
+          // along the X range, so fractional index = plotX/plotWidth.
+          const idx = Math.max(0, Math.min(dataForStats.length - 1, Math.round((plotX / plotWidth) * (dataForStats.length - 1))))
+          const pt = dataForStats[idx]
+          if (!pt) return null
+          // Snap the crosshair to the resolved data point so the line
+          // and the pill label agree visually.
+          const snappedX = plotLeft + (idx / Math.max(1, dataForStats.length - 1)) * plotWidth
+          return (
+            <>
+              <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 9 }}>
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: snappedX,
+                    // MUI treats numeric width in [0,1] as a fraction —
+                    // `width: 1` renders 100%, not 1 pixel. Use '1px'
+                    // so the crosshair is a thin line, not a full band.
+                    width: '1px',
+                    bgcolor: 'rgba(0,0,0,0.2)',
+                  }}
+                />
+              </Box>
+              {(() => {
+                // Keep the pill inside the plot horizontally — if it'd
+                // overflow near the right edge, pull it leftward.
+                const half = 70
+                const clampedLeft = Math.max(plotLeft + half, Math.min(wrapperWidth - plotRight - half, snappedX))
+                return <HoverPricePill left={clampedLeft} date={pt.date} price={pt.price} />
+              })()}
+            </>
+          )
+        })()}
 
         {/* Drag overlay (during selection) */}
         {selecting && (
