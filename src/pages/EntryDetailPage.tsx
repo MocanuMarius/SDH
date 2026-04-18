@@ -36,6 +36,7 @@ import {
   useInvalidate,
 } from '../hooks/queries'
 import { ListCard, ItemRow, EmptyState, AddPlusButton } from '../components/system'
+import TickerDollarField from '../components/TickerDollarField'
 import TimelineIcon from '@mui/icons-material/Timeline'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
 import ActionFormDialog from '../components/ActionFormDialog'
@@ -311,16 +312,21 @@ export default function EntryDetailPage() {
       )}
 
       {/* Quick note — append a timestamped note without editing the full entry.
-          Multi-line auto-grow; Cmd/Ctrl+Enter or Enter (no shift) submits. */}
-      <TextField
+          Multi-line auto-grow; Cmd/Ctrl+Enter or Enter (no shift) submits.
+          Uses TickerDollarField so typing $ pops the same ticker autocomplete
+          you get in the entry title and body. The dropdown's own Enter handler
+          (when open) preventDefaults, so Enter-to-submit only fires when
+          autocomplete is closed — no conflict. */}
+      <TickerDollarField
         size="small"
-        placeholder="Add a note…"
+        placeholder="Add a note… ($ for tickers)"
         value={quickNote}
-        onChange={(e) => setQuickNote(e.target.value)}
+        onChange={setQuickNote}
         onKeyDown={(e) => {
-          // Submit on Enter alone, or Cmd/Ctrl+Enter even with Shift held.
-          // Shift+Enter inserts a newline (default textarea behavior).
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
+            // Don't fire if defaultPrevented — TickerDollarField may have
+            // captured Enter to select an autocomplete result.
+            if (e.defaultPrevented) return
             e.preventDefault()
             handleAddNote()
           }
