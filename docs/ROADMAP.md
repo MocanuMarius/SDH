@@ -31,43 +31,6 @@ that contradict an earlier choice.
 
 ## Upcoming — in the order we plan to tackle them
 
-### 2. React Compiler + framework audit
-
-**Why.** The app has grown — bundle is ~900 KB raw and the component
-tree keeps deepening. Now's the right time to check:
-1. Are we using the best React 19 features (React Compiler for
-   auto-memoisation)?
-2. Which big dependencies are pulling their weight? Any we can
-   de-duplicate / retire?
-3. Are there cross-cutting patterns (e.g. custom hooks, utilities) we
-   could centralise instead of re-implementing per page?
-
-**Scope.**
-- Audit `package.json` + our usage of each big dep:
-  - `@mui/material`, `@mui/x-data-grid` — what surfaces use DataGrid,
-    could we replace with a lighter table in some places?
-  - `@tanstack/react-query` — good, keep.
-  - `@visx/*` — check if we're using all sub-packages we import.
-  - `recharts` — only used by InsightsPage after consolidation.
-    Still worth it or collapse into visx?
-  - `motion` — where is it used? Is it essential?
-  - `html2canvas` — where? Essential?
-  - `vite-plugin-node-polyfills` — still needed?
-- Enable React Compiler (`babel-plugin-react-compiler` is already in
-  devDeps — verify it's wired, or wire it).
-- Verify the compiler's output + measure impact on bundle size + render
-  perf.
-- Report findings back with a concrete diff plan.
-
-**Open questions.**
-- React Compiler is stable in React 19; does MUI + react-query play
-  nicely with it? Test with a small page first.
-- Do we want to enable it in production or just dev? (Usually both.)
-
-**Status.** todo
-
----
-
 ### 3. Timeline chart: drop the bottom brush, tighten the layout
 
 **Why.** The brush rail below the plot area doesn't add much value —
@@ -255,6 +218,38 @@ idea.
 ---
 
 ## Done (rolling log)
+
+- **#2 React Compiler + framework audit.** Commit `<next>`.
+  Audit findings:
+  - **React Compiler** was already wired in `vite.config.ts` via
+    `babel-plugin-react-compiler` in the `@vitejs/plugin-react` Babel
+    plugin list. Confirmed active; auto-memoisation is running on every
+    component. No change needed.
+  - **Unused deps removed:** `html2canvas` (zero source imports) and
+    `vite-plugin-node-polyfills` (listed in deps but never referenced
+    by the vite config). Trims ~40 KB from node_modules and a few
+    hundred lines from the lockfile.
+  - **Kept, confirmed load-bearing:**
+    - `motion` (motion.dev, framer-motion successor) — used by
+      SwipeableCard, EntryFormPage animations, SettingsPage Reorder.
+    - `@mui/x-data-grid` — used by ActionsPage + IdeasPage for the
+      sort/filter-heavy tables. Already split into its own 650 KB
+      chunk so it only downloads on those pages.
+    - `recharts` — only used by InsightsPage. Kept for now (collapsing
+      into visx would be a bigger rewrite than the audit warrants).
+    - `@visx/brush` — scheduled for removal when item #3 drops the
+      brush rail; the package stays until then.
+  - **Chunking** already in good shape from earlier manualChunks split;
+    no new bucket needed.
+
+- **#1 Smarter cluster-threshold algorithm.** Commit `8c5bd60`.
+  Replaced greedy left-to-right sweep with hierarchical-style
+  clustering: start with every marker as its own cluster, merge the
+  tightest pair until all gaps ≥ MIN_GAP. Threshold dropped to
+  `DOT_R*2 + 6` since the algorithm no longer needs a safety buffer.
+  Long chains of closely-spaced decisions now show as many points as
+  the chart has room for; only genuinely crowded ones merge.
+
 
 - Timeline decision-click banner lifted from in-plot floater to
   rounded-Paper overlay sitting precisely over the range-selector row.
