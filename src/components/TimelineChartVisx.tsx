@@ -759,29 +759,73 @@ function TimelineChartVisx({
               const xEnd = Math.max(...group.map((m) => m.cx)) + clusterMaxHW + 4
               const yStart = dir === 'buy' ? anchorY - clusterMaxH - 4 : anchorY - 4
               const ySize = clusterMaxH + 8
+              const isHovered = hoveredKey === clusterKey && !isActive
+              // Hover preview text: "1 buy" / "3 sells" + tickers (clipped to 3).
+              // Shown above the buy cluster, below the sell cluster, in a small
+              // dark pill so the user can see what they'd commit to before clicking.
+              const dirLabel = dir === 'buy'
+                ? `${totalCount} buy${totalCount > 1 ? 's' : ''}`
+                : `${totalCount} sell${totalCount > 1 ? 's' : ''}`
+              const tickerHint = tickers.length === 0
+                ? ''
+                : tickers.length <= 3
+                  ? ' · ' + tickers.map((t) => `$${t}`).join(' ')
+                  : ` · $${tickers[0]} +${tickers.length - 1} more`
+              const hoverLabel = `${dirLabel}${tickerHint}`
+              const hoverPad = 6
+              const hoverFont = 11
+              const hoverW = hoverLabel.length * (hoverFont * 0.6) + hoverPad * 2
+              const hoverH = hoverFont + hoverPad
+              const hoverX = Math.max(2, Math.min(innerWidth - hoverW - 2, avgCx - hoverW / 2))
+              const hoverY = dir === 'buy'
+                ? anchorY - clusterMaxH - hoverH - 4
+                : anchorY + clusterMaxH + 4
               els.push(
-                <rect
-                  key={`hit-${clusterKey}`}
-                  className="timeline-decision-marker"
-                  x={xStart} y={yStart}
-                  width={xEnd - xStart} height={ySize}
-                  fill="transparent"
-                  style={{ cursor: 'pointer' }}
-                  onMouseDown={(e) => {
-                    // Stop the TimelinePage wrapper's onMouseDown from firing
-                    // and starting a range-select drag — on desktop that was
-                    // swallowing the click and the overlay never opened.
-                    e.stopPropagation()
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    if (firstId) onSelectAction(firstId)
-                    if (isActive) { setActiveArrow(null); setTickerLines([]) }
-                    else setActiveArrow({ point: repMarker.point, direction: dir, ticker: tickers.join(', '), tickers, count: totalCount, cx: avgCx, cy: anchorY, key: clusterKey })
-                  }}
-                  onMouseEnter={() => setHoveredKey(clusterKey)}
-                  onMouseLeave={() => setHoveredKey(null)}
-                />
+                <g key={`hit-${clusterKey}`}>
+                  <rect
+                    className="timeline-decision-marker"
+                    x={xStart} y={yStart}
+                    width={xEnd - xStart} height={ySize}
+                    fill="transparent"
+                    style={{ cursor: 'pointer' }}
+                    onMouseDown={(e) => {
+                      // Stop the TimelinePage wrapper's onMouseDown from firing
+                      // and starting a range-select drag — on desktop that was
+                      // swallowing the click and the overlay never opened.
+                      e.stopPropagation()
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (firstId) onSelectAction(firstId)
+                      if (isActive) { setActiveArrow(null); setTickerLines([]) }
+                      else setActiveArrow({ point: repMarker.point, direction: dir, ticker: tickers.join(', '), tickers, count: totalCount, cx: avgCx, cy: anchorY, key: clusterKey })
+                    }}
+                    onMouseEnter={() => setHoveredKey(clusterKey)}
+                    onMouseLeave={() => setHoveredKey(null)}
+                  />
+                  {isHovered && hoverLabel && (
+                    <g style={{ pointerEvents: 'none' }}>
+                      <rect
+                        x={hoverX} y={hoverY}
+                        width={hoverW} height={hoverH}
+                        rx={3}
+                        fill="rgba(15, 23, 42, 0.92)"
+                      />
+                      <text
+                        x={hoverX + hoverW / 2}
+                        y={hoverY + hoverH / 2}
+                        fill="#fff"
+                        fontSize={hoverFont}
+                        fontWeight={600}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        style={{ userSelect: 'none' }}
+                      >
+                        {hoverLabel}
+                      </text>
+                    </g>
+                  )}
+                </g>
               )
             }
             buyGroups.forEach((group, gi) => addHitRect(group, 'buy', gi))
