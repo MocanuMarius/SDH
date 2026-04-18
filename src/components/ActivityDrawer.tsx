@@ -502,15 +502,18 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: RemindersDr
     }
   }
 
-  // Only past-due explicit reminders are shown in the Reminders section.
-  // Upcoming (future-dated) reminders are stored but deliberately not
-  // rendered here — they'll re-surface as past-due when their date arrives.
-  const pastDue = reminders.filter((r) => isOverdue(r.reminder_date))
+  // Reminders section shows a near-term window only: past-due (needs
+  // action now) + anything due in the next 7 days. Further-out reminders
+  // (in a month, in 2 months…) stay in the DB and will surface here as
+  // they approach. Keeps the drawer focused on "what needs attention
+  // this week".
+  const nearTermCutoff = addDaysToToday(7)
+  const nearTermReminders = reminders.filter((r) => r.reminder_date <= nearTermCutoff)
   const visibleIdeaAlerts = ideaAlerts.filter((a) => !snoozedIdeaTickers.has(a.ticker))
 
   const isEmpty =
     !loading &&
-    pastDue.length === 0 &&
+    nearTermReminders.length === 0 &&
     visibleIdeaAlerts.length === 0 &&
     passReviews.length === 0
 
@@ -628,12 +631,15 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: RemindersDr
               </Box>
             )}
 
-            {/* ── Past due — explicit user-set reminders that have lapsed ── */}
-            {pastDue.length > 0 && (
+            {/* ── Reminders — past due + due within the next 7 days. Rows
+                style themselves by urgency (red left rule + pink tint on
+                past-due, amber on today, default otherwise), sorted
+                oldest-first so the most-lapsed surfaces on top. ── */}
+            {nearTermReminders.length > 0 && (
               <Box sx={{ mb: 2 }}>
-                <SectionHeader title="Past due" count={pastDue.length} />
+                <SectionHeader title="Reminders" count={nearTermReminders.length} />
                 <Stack spacing={0.75}>
-                  {pastDue.map((r) => renderReminderCard(r, {
+                  {nearTermReminders.map((r) => renderReminderCard(r, {
                     onOpenNav: onClose,
                     onSnoozeWeek: () => handleLaterSelect(r, 7),
                     onDismiss: () => setDismissConfirmId(r.id),
@@ -643,7 +649,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: RemindersDr
               </Box>
             )}
 
-            {pastDue.length > 0 && visibleIdeaAlerts.length > 0 && (
+            {nearTermReminders.length > 0 && visibleIdeaAlerts.length > 0 && (
               <Divider sx={{ my: 1.5 }} />
             )}
 
