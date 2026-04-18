@@ -31,37 +31,6 @@ that contradict an earlier choice.
 
 ## Upcoming — in the order we plan to tackle them
 
-### 4. Decisions-in-range date header restyle
-
-**Why.** "Fri, Apr 17, 27" is precise but hard to grok at a glance.
-Users scan for "how recent is this?" before "what exact day?". Put the
-relative-time label first in bold, push the exact date into a smaller
-secondary position.
-
-**Scope.**
-- `DecisionsInRange` date section header in `TimelinePage.tsx`.
-- New layout:
-  ```
-  Today · 1 decision          [tiny: Fri, Apr 17, 27]
-  1 week ago · 3 decisions    [tiny: Fri, Apr 10, 27]
-  > 1 month ago · 2 decisions [tiny: Mon, Mar 15, 27]
-  ```
-- Relative label comes from `formatDateRelative` (past form:
-  "today" / "yesterday" / "N days ago" / "1 week ago" / "N weeks ago" /
-  "1 month ago" / "N months ago" / "N years ago").
-- Explore a coarser bucket for the leading label when it's >1 month:
-  "over a month ago" — more scannable than "3 months ago, 5 months ago,
-  7 months ago" back-to-back.
-
-**Open questions.**
-- Do we bucket entries together when their relative labels match? E.g.
-  all "1 week ago" decisions under one header? Probably not — the day
-  granularity is still useful, just de-emphasised.
-
-**Status.** todo
-
----
-
 ### 5. Move Benchmark / Show-decisions / Broker-imports into a chart-settings modal
 
 **Why.** Those three filter controls sit above the chart eating
@@ -196,7 +165,16 @@ idea.
 
 ## Done (rolling log)
 
-- **#3 Drop brush + tighten layout.** Commit `<next>`.
+- **#4 Decisions-in-range date header restyle.** Commit `<next>`.
+  Added `relativeBucket(dateStr)` that returns scannable primary labels
+  ("Today", "Yesterday", "N days ago", "1 week ago", "N weeks ago",
+  "Over a month ago", "Over a year ago"). Used as the serif-bold
+  primary label on each date section; the exact date ("Mon, Apr 14 '26")
+  is pushed to a tiny secondary on the right. Coarse buckets past one
+  month so a long scroll of varying "3/4/5/6 months ago" labels reads
+  as one consistent "Over a month ago" block instead of visual noise.
+
+- **#3 Drop brush + tighten layout.** Commit `536ca5e`.
   TimelinePage now passes `showBrush={false}` to the chart — the 40-px
   brush rail is gone, chart plot reclaims that vertical room. Axis label
   fonts trimmed 11→10 on left, 14→11 on right, 10→9 / 12→10 on mobile

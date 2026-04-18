@@ -1299,8 +1299,39 @@ function formatDayHeader(dateStr: string): string {
   if (!dateStr) return '—'
   const d = new Date(dateStr)
   if (Number.isNaN(d.getTime())) return dateStr
-  // e.g. "Mon, Apr 14 · '26"
+  // e.g. "Mon, Apr 14 '26" — secondary on the header now, so smaller.
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: '2-digit' })
+}
+
+/**
+ * Coarse "how far back is this day" bucket — the scannable primary label
+ * on each date section. Users care "was this recent vs long-dormant"
+ * before they care about the exact day, so this leads. Falls back to
+ * "Over a month ago" / "Over a year ago" bins instead of rendering noisy
+ * per-month values ("3 months ago, 5 months ago, 7 months ago" reads
+ * worse than "over a month ago" × 3).
+ */
+function relativeBucket(dateStr: string): string {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr + 'T12:00:00Z')
+  if (Number.isNaN(d.getTime())) return dateStr
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diffDays = Math.round((today.getTime() - that.getTime()) / 86400000)
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  if (diffDays < 0) {
+    // Future-dated action (rare — someone logging a forward-dated decision)
+    if (diffDays === -1) return 'Tomorrow'
+    if (diffDays > -14) return `In ${-diffDays} days`
+    return 'In the future'
+  }
+  if (diffDays < 7) return `${diffDays} days ago`
+  if (diffDays < 14) return '1 week ago'
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
+  if (diffDays < 365) return 'Over a month ago'
+  return 'Over a year ago'
 }
 
 function DecisionsInRange({
@@ -1364,18 +1395,28 @@ function DecisionsInRange({
                 gap: 1,
               }}
             >
+              {/* Primary — coarse relative bucket ("Today" / "3 days ago" /
+                  "Over a month ago") so the eye can scan age first. */}
               <Typography
                 component="span"
                 sx={{
                   fontFamily: '"Source Serif 4", Georgia, serif',
                   fontWeight: 700,
-                  fontSize: '0.85rem',
+                  fontSize: '0.9rem',
                 }}
               >
-                {formatDayHeader(date)}
+                {relativeBucket(date)}
               </Typography>
-              <Typography component="span" variant="caption" color="text.secondary">
+              <Typography component="span" variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                 {items.length} {items.length === 1 ? 'decision' : 'decisions'}
+              </Typography>
+              {/* Secondary — exact date, tiny, pushed right. */}
+              <Typography
+                component="span"
+                variant="caption"
+                sx={{ color: 'text.disabled', fontSize: '0.7rem', ml: 'auto' }}
+              >
+                {formatDayHeader(date)}
               </Typography>
             </Box>
             {items.map((a) => (
