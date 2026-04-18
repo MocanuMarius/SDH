@@ -31,36 +31,6 @@ that contradict an earlier choice.
 
 ## Upcoming — in the order we plan to tackle them
 
-### 5. Move Benchmark / Show-decisions / Broker-imports into a chart-settings modal
-
-**Why.** Those three filter controls sit above the chart eating
-persistent visual real estate for options most users set once and
-forget. The range presets (1M, 3M, 6M, …) deserve to stay visible
-because they're the primary navigation; the rest doesn't.
-
-**Scope.**
-- Keep: range preset buttons (1M/3M/6M/YTD/1Y/2Y/3Y/5Y/MAX) visible
-  above the chart.
-- Move into a settings modal: Benchmark dropdown, Show-decisions type
-  filter, Hide-broker-imports chip, From/To date inputs.
-- Settings affordance: a small gear icon anchored at the chart's
-  bottom-right corner (inside the plot area, doesn't push layout).
-- Modal opens over the chart with these fields, OK / Cancel semantics.
-  All changes already flow through URL state once that's wired so the
-  deep-link shape doesn't change.
-
-**Open questions.**
-- Desktop default — maybe keep the filter bar visible on wide screens
-  (≥md) where there's no space pressure? Or be uniform across widths
-  for consistency? Leaning uniform.
-- Gear icon placement: inside the plot (absolute bottom-right) vs in
-  the chart toolbar row? Inside the plot keeps the toolbar row empty
-  for the range presets.
-
-**Status.** todo
-
----
-
 ### 6. Desktop chart interactions are borderline unusable
 
 **Why.** The cursor is stuck on `crosshair` (from the range-drag),
@@ -165,7 +135,23 @@ idea.
 
 ## Done (rolling log)
 
-- **#4 Decisions-in-range date header restyle.** Commit `<next>`.
+- **#5 Chart settings modal.** Commit `<next>`.
+  Retired the outer filter bar entirely (Benchmark dropdown, Show-decisions
+  Select, Hide-broker-imports chip). Range presets stay visible at rest
+  inside the chart's top control row. Added a `<TuneIcon>` gear button in
+  the same row (right side, next to the conditional Reset-zoom button)
+  that opens a Dialog holding:
+    - Benchmark dropdown
+    - Show-decisions type filter
+    - Broker-imports toggle
+    - Custom date range (From / To) — also moved off the always-visible
+      toolbar.
+  Chose the toolbar-row gear over a plot-anchored bottom-right FAB:
+  less visual noise when the chart is busy, and it sits where the
+  eye already is while adjusting range presets. Same URL-param wiring
+  so deep-links unchanged.
+
+- **#4 Decisions-in-range date header restyle.** Commit `50e341c`.
   Added `relativeBucket(dateStr)` that returns scannable primary labels
   ("Today", "Yesterday", "N days ago", "1 week ago", "N weeks ago",
   "Over a month ago", "Over a year ago"). Used as the serif-bold

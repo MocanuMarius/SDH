@@ -20,6 +20,11 @@ import {
   TextField,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
+import TuneIcon from '@mui/icons-material/Tune'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogActions from '@mui/material/DialogActions'
 import { tokens } from '../theme'
 import { ParentSize } from '@visx/responsive'
 import TimelineChartVisx, { getTimelineChartResponsiveMargin, type DecisionOverlayInfo } from '../components/TimelineChartVisx'
@@ -176,6 +181,12 @@ export default function TimelinePage() {
   // banner over the range-selector bar — same precise footprint, never
   // covers the timeline plot. Null when no marker is active.
   const [decisionOverlay, setDecisionOverlay] = useState<DecisionOverlayInfo | null>(null)
+
+  // Chart-settings modal — Benchmark / Show-decisions / Hide-broker-imports
+  // and From/To date inputs used to eat persistent visual room above +
+  // inside the chart. Moved behind a gear affordance so only range presets
+  // stay visible at rest. Modal opens over the chart.
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [measureSelection, setMeasureSelection] = useState<{ startIndex: number; endIndex: number } | null>(null)
   /** True while range-drag is active — only toggled on start/end (no per-frame updates). */
   const [dragActive, setDragActive] = useState(false)
@@ -795,78 +806,14 @@ export default function TimelinePage() {
         }
         dense
       />
-      {/* Filter row — every control is 36px tall so the bar reads as one line. */}
-      <Box
-        sx={{
-          mb: 1.5,
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          gap: 1,
-          '& .MuiOutlinedInput-root': { minHeight: 36 },
-        }}
-      >
-        <FormControl size="small" sx={{ minWidth: 140 }} variant="outlined">
-          <InputLabel>Benchmark</InputLabel>
-          <Select
-            value={benchmarkSymbols.includes(symbolParam?.toUpperCase() ?? '') ? symbolParam : ''}
-            label="Benchmark"
-            onChange={(e) => setSearchParams({ symbol: e.target.value })}
-            displayEmpty
-            renderValue={(v) => {
-              if (!v && symbolParam && !benchmarkSymbols.includes(symbolParam.toUpperCase())) return symbolParam
-              const opt = BENCHMARK_OPTIONS.find(b => b.symbol === v)
-              return opt?.label ?? v ?? ''
-            }}
-          >
-            {BENCHMARK_OPTIONS.map((b) => (
-              <MenuItem key={b.symbol} value={b.symbol}>
-                {b.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 130 }} variant="outlined">
-          <InputLabel>Show decisions</InputLabel>
-          <Select
-            multiple
-            value={(['buy', 'sell', 'other'] as const).filter((t) => typeFilter[t])}
-            label="Show decisions"
-            onChange={(e) => {
-              const v = e.target.value as string[]
-              setTypeFilter({
-                buy: v.includes('buy'),
-                sell: v.includes('sell'),
-                other: v.includes('other'),
-              })
-            }}
-            renderValue={(selected) =>
-              selected.length === 3 ? 'All' : selected.map((t) => (t === 'other' ? 'Other' : t)).join(', ')
-            }
-          >
-            <MenuItem value="buy">
-              <Checkbox checked={typeFilter.buy} size="small" />
-              <ListItemText primary="Buy" sx={{ ml: 0.5 }} />
-            </MenuItem>
-            <MenuItem value="sell">
-              <Checkbox checked={typeFilter.sell} size="small" />
-              <ListItemText primary="Sell" sx={{ ml: 0.5 }} />
-            </MenuItem>
-            <MenuItem value="other">
-              <Checkbox checked={typeFilter.other} size="small" />
-              <ListItemText primary="Other" sx={{ ml: 0.5 }} />
-            </MenuItem>
-          </Select>
-        </FormControl>
-        <Chip
-          size="small"
-          label={hideAutomated ? 'Hide broker imports' : 'Show broker imports'}
-          onClick={() => setHideAutomated(!hideAutomated)}
-          variant={hideAutomated ? 'filled' : 'outlined'}
-          color={hideAutomated ? 'primary' : 'default'}
-          sx={{ height: 36, fontSize: '0.75rem', borderRadius: 1, fontWeight: 600, px: 0.5 }}
-        />
-      </Box>
+      {/* Settings state lives up here so the range-selector area and the
+          gear icon share a single open/close flag. Modal content lives
+          further down near the chart paper. */}
+      {/* Outer filter bar retired — Benchmark / Show-decisions / Broker
+          toggle live inside the chart settings modal now (gear icon at
+          the bottom-right of the chart Paper). Range presets stay visible
+          at rest inside the chart's top control row; they're the only
+          primary navigation the user needs at a glance. */}
 
       {error && (
         <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -936,35 +883,12 @@ export default function TimelinePage() {
               ))}
             </Box>
 
-            {/* From / To date inputs */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0, flexWrap: 'wrap' }}>
-              <TextField
-                size="small"
-                label="From"
-                type="date"
-                value={fromDate}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setFromDate(v)
-                  if (v) applyDateRange(v, toDate)
-                }}
-                InputLabelProps={{ shrink: true }}
-                sx={{ width: { xs: 130, sm: 148 } }}
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ mx: 0.25 }}>–</Typography>
-              <TextField
-                size="small"
-                label="To"
-                type="date"
-                value={toDate}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setToDate(v)
-                  if (v) applyDateRange(fromDate, v)
-                }}
-                InputLabelProps={{ shrink: true }}
-                sx={{ width: { xs: 130, sm: 148 } }}
-              />
+            {/* Right side of the range selector — Reset-zoom button (only
+                when a zoom is active) + settings gear (always). The gear
+                opens the full chart-settings modal with From/To dates,
+                benchmark picker, decision-type filter, and broker-import
+                toggle. */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
               {zoomRange != null && (
                 <Button
                   size="small"
@@ -974,6 +898,14 @@ export default function TimelinePage() {
                   Reset
                 </Button>
               )}
+              <IconButton
+                size="small"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Chart settings"
+                sx={{ color: 'text.secondary' }}
+              >
+                <TuneIcon fontSize="small" />
+              </IconButton>
             </Box>
           </Box>
 
@@ -1283,6 +1215,126 @@ export default function TimelinePage() {
           </Box>
         </Paper>
       )}
+
+      {/* Chart settings modal — holds everything that used to eat a
+          persistent row above the chart. Opens from the gear in the
+          range-selector. Controls are unchanged functionally; just
+          re-homed so the visible chrome stays tight at rest. */}
+      <Dialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Chart settings</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
+          <FormControl size="small" variant="outlined" fullWidth>
+            <InputLabel>Benchmark</InputLabel>
+            <Select
+              value={benchmarkSymbols.includes(symbolParam?.toUpperCase() ?? '') ? symbolParam : ''}
+              label="Benchmark"
+              onChange={(e) => setSearchParams({ symbol: e.target.value })}
+              displayEmpty
+              renderValue={(v) => {
+                if (!v && symbolParam && !benchmarkSymbols.includes(symbolParam.toUpperCase())) return symbolParam
+                const opt = BENCHMARK_OPTIONS.find(b => b.symbol === v)
+                return opt?.label ?? v ?? ''
+              }}
+            >
+              {BENCHMARK_OPTIONS.map((b) => (
+                <MenuItem key={b.symbol} value={b.symbol}>
+                  {b.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl size="small" variant="outlined" fullWidth>
+            <InputLabel>Show decisions</InputLabel>
+            <Select
+              multiple
+              value={(['buy', 'sell', 'other'] as const).filter((t) => typeFilter[t])}
+              label="Show decisions"
+              onChange={(e) => {
+                const v = e.target.value as string[]
+                setTypeFilter({
+                  buy: v.includes('buy'),
+                  sell: v.includes('sell'),
+                  other: v.includes('other'),
+                })
+              }}
+              renderValue={(selected) =>
+                selected.length === 3 ? 'All' : selected.map((t) => (t === 'other' ? 'Other' : t)).join(', ')
+              }
+            >
+              <MenuItem value="buy">
+                <Checkbox checked={typeFilter.buy} size="small" />
+                <ListItemText primary="Buy" sx={{ ml: 0.5 }} />
+              </MenuItem>
+              <MenuItem value="sell">
+                <Checkbox checked={typeFilter.sell} size="small" />
+                <ListItemText primary="Sell" sx={{ ml: 0.5 }} />
+              </MenuItem>
+              <MenuItem value="other">
+                <Checkbox checked={typeFilter.other} size="small" />
+                <ListItemText primary="Other" sx={{ ml: 0.5 }} />
+              </MenuItem>
+            </Select>
+          </FormControl>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" sx={{ flex: 1 }}>Broker imports</Typography>
+            <Chip
+              size="small"
+              label={hideAutomated ? 'Hidden' : 'Shown'}
+              onClick={() => setHideAutomated(!hideAutomated)}
+              variant={hideAutomated ? 'filled' : 'outlined'}
+              color={hideAutomated ? 'primary' : 'default'}
+              sx={{ height: 28, fontSize: '0.75rem', borderRadius: 1, fontWeight: 600 }}
+            />
+          </Box>
+
+          <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Custom date range
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TextField
+                size="small"
+                label="From"
+                type="date"
+                value={fromDate}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setFromDate(v)
+                  if (v) applyDateRange(v, toDate)
+                }}
+                InputLabelProps={{ shrink: true }}
+                sx={{ flex: 1 }}
+              />
+              <Typography variant="body2" color="text.secondary">–</Typography>
+              <TextField
+                size="small"
+                label="To"
+                type="date"
+                value={toDate}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setToDate(v)
+                  if (v) applyDateRange(fromDate, v)
+                }}
+                InputLabelProps={{ shrink: true }}
+                sx={{ flex: 1 }}
+              />
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSettingsOpen(false)} variant="contained" size="small" sx={{ textTransform: 'none' }}>
+            Done
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </Box>
   )
