@@ -20,6 +20,7 @@ import { listActions, type ActionWithEntry } from '../services/actionsService'
 import { fetchChartData, type ChartData } from '../services/chartApiService'
 import { getDecisionTypeColor, getChartCategory } from '../theme/decisionTypes'
 import DecisionChip from './DecisionChip'
+import { DecisionMarkerGradients, conePath } from './charts/decisionMarkers'
 
 interface Props {
   ticker: string | null
@@ -363,20 +364,10 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
                 onMouseMove={handleMouseMove}
                 onMouseLeave={() => setHoverIdx(null)}
               >
-                {/* Cone gradients + plot clip — matches the timeline chart's
-                    visual language so the popup and the full chart speak the
-                    same vocabulary (dot + radiating light cone, not arrows). */}
+                {/* Shared cone gradient defs from charts/decisionMarkers, plus
+                    a chart-local clipPath so cones can't bleed past the plot. */}
                 <defs>
-                  <linearGradient id="quick-buy-glow" x1="0" y1="1" x2="0" y2="0">
-                    <stop offset="0" stopColor="#16a34a" stopOpacity="0.85" />
-                    <stop offset="0.35" stopColor="#16a34a" stopOpacity="0.55" />
-                    <stop offset="1" stopColor="#16a34a" stopOpacity="0" />
-                  </linearGradient>
-                  <linearGradient id="quick-sell-glow" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0" stopColor="#dc2626" stopOpacity="0.85" />
-                    <stop offset="0.35" stopColor="#dc2626" stopOpacity="0.55" />
-                    <stop offset="1" stopColor="#dc2626" stopOpacity="0" />
-                  </linearGradient>
+                  <DecisionMarkerGradients idPrefix="quick" />
                   <clipPath id="quick-plot-clip">
                     <rect x={0} y={0} width={svg.innerW} height={svg.innerH} />
                   </clipPath>
@@ -425,16 +416,12 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
                     {markers.map((m, i) => {
                       const cx = svg.xScale(new Date(m.date))
                       const cy = svg.yScale(m.pct)
-                      const isBuy = m.category === 'buy'
-                      const h = 28          // cone height in px
-                      const hw = 14         // cone half-width
-                      const baseY = isBuy ? cy - h : cy + h
-                      const path = `M ${cx} ${cy} L ${cx + hw} ${baseY} L ${cx - hw} ${baseY} Z`
+                      const dir = m.category === 'buy' ? 'buy' : 'sell'
                       return (
                         <path
                           key={`cone-${i}`}
-                          d={path}
-                          fill={isBuy ? 'url(#quick-buy-glow)' : 'url(#quick-sell-glow)'}
+                          d={conePath(cx, cy, dir)}
+                          fill={`url(#quick-${dir}-glow)`}
                           opacity={0.85}
                         />
                       )

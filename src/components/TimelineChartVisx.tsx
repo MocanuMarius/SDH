@@ -12,6 +12,7 @@ import { Box, Paper, Typography, CircularProgress } from '@mui/material'
 import type { ActionWithEntry } from '../services/actionsService'
 import { fetchChartData } from '../services/chartApiService'
 import { getDecisionTypeColor, getDecisionTypeConfig } from '../theme/decisionTypes'
+import { DecisionMarkerGradients } from './charts/decisionMarkers'
 
 const CHART_LINE_COLOR = '#334155'
 const AXIS_COLOR = '#64748b'
@@ -405,18 +406,10 @@ function TimelineChartVisx({
           <clipPath id={`plot-clip-${chartId}`}>
             <rect x={0} y={0} width={innerWidth} height={innerHeight} />
           </clipPath>
-          {/* Buy glow: opaque near the dot (bottom of bbox), transparent at the top. */}
-          <linearGradient id={`buy-glow-${chartId}`} x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0" stopColor={ARROW_BUY_COLOR} stopOpacity="0.85" />
-            <stop offset="0.35" stopColor={ARROW_BUY_COLOR} stopOpacity="0.55" />
-            <stop offset="1" stopColor={ARROW_BUY_COLOR} stopOpacity="0" />
-          </linearGradient>
-          {/* Sell glow: opaque at the top (dot position), transparent at the bottom. */}
-          <linearGradient id={`sell-glow-${chartId}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor={ARROW_SELL_COLOR} stopOpacity="0.85" />
-            <stop offset="0.35" stopColor={ARROW_SELL_COLOR} stopOpacity="0.55" />
-            <stop offset="1" stopColor={ARROW_SELL_COLOR} stopOpacity="0" />
-          </linearGradient>
+          {/* Shared cone gradients — same defs as ticker chart and popup so
+              all three render with one shape language. The chartId-based
+              prefix lets multiple TimelineChartVisx instances coexist. */}
+          <DecisionMarkerGradients idPrefix={chartId} />
         </defs>
         <Group left={responsiveMargin.left} top={responsiveMargin.top}>
           {/* Grid lines */}
@@ -641,7 +634,7 @@ function TimelineChartVisx({
                     <path
                       key={`bc-${i}`}
                       d={conePath(m.cx, m.priceY, hw, h, -1)}
-                      fill={greyed ? ARROW_GREYED : `url(#buy-glow-${chartId})`}
+                      fill={greyed ? ARROW_GREYED : `url(#${chartId}-buy-glow)`}
                       opacity={op}
                     />
                   )
@@ -655,7 +648,7 @@ function TimelineChartVisx({
                     <path
                       key={`sc-${i}`}
                       d={conePath(m.cx, m.priceY, hw, h, 1)}
-                      fill={greyed ? ARROW_GREYED : `url(#sell-glow-${chartId})`}
+                      fill={greyed ? ARROW_GREYED : `url(#${chartId}-sell-glow)`}
                       opacity={op}
                     />
                   )

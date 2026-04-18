@@ -22,6 +22,7 @@ import type { ActionWithEntry } from '../services/actionsService'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import { DECISION_CHART_COLORS, getChartCategory } from '../theme/decisionTypes'
 import { computeRangeStats, type RangeStats } from '../utils/chartRangeStats'
+import { DecisionMarkerGradients, conePath } from './charts/decisionMarkers'
 
 const MAX_CHART_POINTS = 280
 const CHART_LINE_COLOR = '#334155'
@@ -314,9 +315,6 @@ function CustomXAxisTick(props: { x?: number; y?: number; payload?: { value?: st
 }
 
 /** Memoized dot component for chart points to avoid re-rendering on every update */
-const CONE_HEIGHT = 28
-const CONE_HALFW = 14
-
 const ChartDot = memo(function ChartDot(props: {
   cx?: number
   cy?: number
@@ -346,19 +344,18 @@ const ChartDot = memo(function ChartDot(props: {
     : hasSell ? DECISION_COLORS.sell
     : DECISION_COLORS.other
   const r = first.action?.type === 'pass' ? SINGLE_DOT_R_PASS : SINGLE_DOT_R
-  const buyConePath = `M ${cx} ${cy} L ${cx + CONE_HALFW} ${cy - CONE_HEIGHT} L ${cx - CONE_HALFW} ${cy - CONE_HEIGHT} Z`
-  const sellConePath = `M ${cx} ${cy} L ${cx + CONE_HALFW} ${cy + CONE_HEIGHT} L ${cx - CONE_HALFW} ${cy + CONE_HEIGHT} Z`
   return (
     <g className="timeline-decision-marker" style={{ cursor: 'pointer' }}>
       {/* Cones — drawn first so dot stacks on top. Multiply blend so
-          overlapping cones from clusters darken/saturate. */}
+          overlapping cones from clusters darken/saturate. Geometry comes
+          from the shared `conePath` helper so all three charts agree. */}
       {(hasBuy || hasSell) && (
         <g style={{ pointerEvents: 'none', mixBlendMode: 'multiply' }}>
           {hasBuy && (
-            <path d={buyConePath} fill="url(#ticker-buy-glow)" opacity={Math.min(0.95, 0.55 + (counts.buy - 1) * 0.12)} />
+            <path d={conePath(cx, cy, 'buy')} fill="url(#ticker-buy-glow)" opacity={Math.min(0.95, 0.55 + (counts.buy - 1) * 0.12)} />
           )}
           {hasSell && (
-            <path d={sellConePath} fill="url(#ticker-sell-glow)" opacity={Math.min(0.95, 0.55 + (counts.sell - 1) * 0.12)} />
+            <path d={conePath(cx, cy, 'sell')} fill="url(#ticker-sell-glow)" opacity={Math.min(0.95, 0.55 + (counts.sell - 1) * 0.12)} />
           )}
         </g>
       )}
@@ -932,20 +929,10 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
               }}
               onDoubleClick={() => setMeasureSelection(null)}
             >
-              {/* Cone glow gradients — same shape language as the timeline page
-                  and the popup ticker chart. Each ChartDot below paints a cone
-                  using these gradient ids. */}
+              {/* Shared cone gradient defs — `ticker-buy-glow` / `ticker-sell-glow`
+                  ids are referenced by ChartDot. */}
               <defs>
-                <linearGradient id="ticker-buy-glow" x1="0" y1="1" x2="0" y2="0">
-                  <stop offset="0" stopColor={DECISION_COLORS.buy} stopOpacity="0.85" />
-                  <stop offset="0.35" stopColor={DECISION_COLORS.buy} stopOpacity="0.55" />
-                  <stop offset="1" stopColor={DECISION_COLORS.buy} stopOpacity="0" />
-                </linearGradient>
-                <linearGradient id="ticker-sell-glow" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0" stopColor={DECISION_COLORS.sell} stopOpacity="0.85" />
-                  <stop offset="0.35" stopColor={DECISION_COLORS.sell} stopOpacity="0.55" />
-                  <stop offset="1" stopColor={DECISION_COLORS.sell} stopOpacity="0" />
-                </linearGradient>
+                <DecisionMarkerGradients idPrefix="ticker" />
               </defs>
               <CartesianGrid strokeDasharray="3 3" opacity={GRID_OPACITY} stroke="#cbd5e1" />
               {measureSelection != null && yAxisDomain && mergedChartData[measureSelection.startIndex] && mergedChartData[measureSelection.endIndex] && (
