@@ -101,6 +101,8 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
   const chartMargin = useMemo(() => getTimelineChartResponsiveMargin(wrapperWidth || 600), [wrapperWidth])
   const plotLeft = chartMargin.left
   const plotRight = chartMargin.right
+  // Stable string key — primitive dep for the fetch useEffect below.
+  const compareSymbolsKey = compareSymbols.join(',')
 
   useEffect(() => {
     if (!symbol?.trim()) {
@@ -146,7 +148,10 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [symbol, range, companyName, compareSymbols.join(',')])
+    // compareSymbolsKey: stable string dep so the fetch only re-runs when
+    // the actual selected compares change, not on every re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, range, companyName, compareSymbolsKey])
 
   // Filter actions to the currently-fetched range and the right ticker.
   const minDate = chartData[0]?.date ?? ''

@@ -419,7 +419,7 @@ export default function ValuationWidget({ entryId, defaultExpanded = false, hide
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [inputs, dirty, loaded, entryId, row?.notes])
+  }, [inputs, dirty, loaded, entryId, row?.notes, invalidate])
 
   const points = useMemo(() => projectEngines(inputs), [inputs])
   const summary = useMemo(() => summarizeEngines(inputs), [inputs])

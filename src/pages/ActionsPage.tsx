@@ -93,6 +93,9 @@ export default function ActionsPage() {
       ).filter(Boolean).slice(0, 40),
     [actions]
   )
+  // Stable string key — derived once per tickersToFetch identity change so
+  // the useEffect below uses a primitive dep instead of a complex expression.
+  const tickersKey = tickersToFetch.join(',')
 
   useEffect(() => {
     if (tickersToFetch.length === 0) return
@@ -112,7 +115,11 @@ export default function ActionsPage() {
       setCurrentPriceByTicker((prev) => ({ ...prev, ...next }))
     })
     return () => { cancelled = true }
-  }, [tickersToFetch.join(',')])
+    // tickersKey: stable string key derived from tickersToFetch so the
+    // effect re-runs only when the actual ticker SET changes, not on every
+    // tickersToFetch reference change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickersKey])
 
   const allTickers = useMemo(
     () =>
@@ -281,7 +288,7 @@ export default function ActionsPage() {
           ) : null,
       },
     ],
-    [openChart, isMobile]
+    [openChart, isMobile, tickersToFetch, currentPriceByTicker]
   )
 
   // Hide some columns on mobile

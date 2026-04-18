@@ -116,6 +116,8 @@ export default function EntryDetailPage() {
       )
     ).filter(Boolean)
   }, [actions, outcomesByActionId])
+  // Stable string key — primitive dep for the price-fetch useEffect below.
+  const openActionTickersKey = openActionTickers.join(',')
 
   useEffect(() => {
     if (openActionTickers.length === 0) return
@@ -132,7 +134,8 @@ export default function EntryDetailPage() {
         .catch(() => {})
     })
     return () => { cancelled = true }
-  }, [openActionTickers.join(',')])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openActionTickersKey])
 
   const handleAddNote = async () => {
     if (!quickNote.trim() || !id || !entry) return
