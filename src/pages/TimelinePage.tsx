@@ -242,15 +242,16 @@ export default function TimelinePage() {
 
   // Benchmark changes (e.g. SPY → QQQ) invalidate any saved zoom indices
   // because they refer to a different dataset — clear them when the
-  // symbol flips. Skip the first run so a URL-deep-linked zoom isn't
-  // clobbered on mount. `range` is deliberately NOT in this dep array:
-  // range-click handlers already clear zoom explicitly.
-  const hasMountedSymbolResetRef = useRef(false)
+  // symbol actually flips. Uses a last-seen-value compare instead of a
+  // first-mount flag so React 19 StrictMode's double-invoke-on-mount
+  // doesn't spuriously trigger a reset (the flag pattern got defeated
+  // because StrictMode re-runs the effect body, then the ref is already
+  // true and the guard falls through).
+  const lastSymbolRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!hasMountedSymbolResetRef.current) {
-      hasMountedSymbolResetRef.current = true
-      return
-    }
+    const prev = lastSymbolRef.current
+    lastSymbolRef.current = symbolParam
+    if (prev === null || prev === symbolParam) return
     setZoomRange(null)
     setMeasureSelection(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
