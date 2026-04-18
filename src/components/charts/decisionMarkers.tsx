@@ -43,6 +43,80 @@ export function conePath(
 }
 
 /**
+ * Solid coloured dot on the price line. When the marker carries BOTH buy
+ * and sell decisions on the same point, renders a split dot (green top
+ * semicircle, red bottom). Otherwise a single circle.
+ *
+ * Both directional charts (TimelineChartVisx, TickerTimelineChart) used
+ * to inline this SVG dance — now there's one source of truth.
+ *
+ * Pass `count > 1` to overlay the count number inside the dot. Pass
+ * `greyed` to render with the muted ARROW_GREYED colour (e.g. when a
+ * ticker filter excludes this marker).
+ */
+export function DecisionDot({
+  cx,
+  cy,
+  r = 5,
+  hasBuy,
+  hasSell,
+  count = 0,
+  greyed = false,
+  buyColor = MARKER_BUY_COLOR,
+  sellColor = MARKER_SELL_COLOR,
+  otherColor = '#475569',
+  stroke = '#fff',
+  strokeWidth = 1,
+}: {
+  cx: number
+  cy: number
+  r?: number
+  hasBuy: boolean
+  hasSell: boolean
+  count?: number
+  greyed?: boolean
+  buyColor?: string
+  sellColor?: string
+  otherColor?: string
+  stroke?: string
+  strokeWidth?: number
+}) {
+  const isMixed = hasBuy && hasSell
+  const solidFill = greyed
+    ? MARKER_GREYED
+    : hasBuy ? buyColor
+    : hasSell ? sellColor
+    : otherColor
+  return (
+    <g>
+      {isMixed ? (
+        <g>
+          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy} Z`} fill={greyed ? MARKER_GREYED : buyColor} />
+          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 0 ${cx + r} ${cy} Z`} fill={greyed ? MARKER_GREYED : sellColor} />
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
+        </g>
+      ) : (
+        <circle cx={cx} cy={cy} r={r} fill={solidFill} stroke={stroke} strokeWidth={strokeWidth} />
+      )}
+      {count > 1 && (
+        <text
+          x={cx}
+          y={cy}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="#fff"
+          fontSize={9}
+          fontWeight={600}
+          pointerEvents="none"
+        >
+          {count}
+        </text>
+      )}
+    </g>
+  )
+}
+
+/**
  * Bucket decisions on a marker into buy / sell / other counts. Every chart
  * does this same reduction to decide which cone(s) to draw and how to
  * colour the dot — single helper so the categorisation can't drift.

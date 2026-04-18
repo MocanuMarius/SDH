@@ -22,7 +22,7 @@ import type { ActionWithEntry } from '../services/actionsService'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import { DECISION_CHART_COLORS, getChartCategory } from '../theme/decisionTypes'
 import { computeRangeStats, type RangeStats } from '../utils/chartRangeStats'
-import { DecisionMarkerGradients, conePath, decisionCountsByType } from './charts/decisionMarkers'
+import { DecisionMarkerGradients, conePath, decisionCountsByType, DecisionDot } from './charts/decisionMarkers'
 
 const MAX_CHART_POINTS = 280
 const CHART_LINE_COLOR = '#334155'
@@ -325,16 +325,6 @@ const ChartDot = memo(function ChartDot(props: {
   const totalCount = counts.buy + counts.sell + counts.other
   const hasBuy = counts.buy > 0
   const hasSell = counts.sell > 0
-  const isMixed = hasBuy && hasSell
-  // Match the timeline chart's visual language: dot on the line + cone glow
-  // radiating up (buys) or down (sells). Mixed marker → split dot (green top
-  // + red bottom). "Other" types (pass / research) show a single neutral dot
-  // with no cone since there's no directional thesis.
-  const dotFill = isMixed
-    ? DECISION_COLORS.buy   // outer ring colour; we paint the bottom red below
-    : hasBuy ? DECISION_COLORS.buy
-    : hasSell ? DECISION_COLORS.sell
-    : DECISION_COLORS.other
   const r = first.action?.type === 'pass' ? SINGLE_DOT_R_PASS : SINGLE_DOT_R
   return (
     <g className="timeline-decision-marker" style={{ cursor: 'pointer' }}>
@@ -351,30 +341,19 @@ const ChartDot = memo(function ChartDot(props: {
           )}
         </g>
       )}
-      {/* Dot. Mixed = split (green top semicircle, red bottom semicircle). */}
-      {isMixed ? (
-        <g>
-          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy} Z`} fill={DECISION_COLORS.buy} />
-          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 0 ${cx + r} ${cy} Z`} fill={DECISION_COLORS.sell} />
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#fff" strokeWidth={1} />
-        </g>
-      ) : (
-        <circle cx={cx} cy={cy} r={r} fill={dotFill} stroke="#fff" strokeWidth={1} />
-      )}
-      {totalCount > 1 && (
-        <text
-          x={cx}
-          y={cy}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fill="#fff"
-          fontSize={9}
-          fontWeight={600}
-          pointerEvents="none"
-        >
-          {totalCount}
-        </text>
-      )}
+      {/* Shared dot — single circle, or split (green top / red bottom)
+          for mixed buy+sell markers, plus the count number when N>1. */}
+      <DecisionDot
+        cx={cx}
+        cy={cy}
+        r={r}
+        hasBuy={hasBuy}
+        hasSell={hasSell}
+        count={totalCount}
+        buyColor={DECISION_COLORS.buy}
+        sellColor={DECISION_COLORS.sell}
+        otherColor={DECISION_COLORS.other}
+      />
     </g>
   )
 })
