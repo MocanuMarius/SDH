@@ -314,6 +314,9 @@ function CustomXAxisTick(props: { x?: number; y?: number; payload?: { value?: st
 }
 
 /** Memoized dot component for chart points to avoid re-rendering on every update */
+const CONE_HEIGHT = 28
+const CONE_HALFW = 14
+
 const ChartDot = memo(function ChartDot(props: {
   cx?: number
   cy?: number
@@ -330,19 +333,45 @@ const ChartDot = memo(function ChartDot(props: {
   const counts = isCluster ? clusterCounts! : getDecisionCountsByType(decisions)
   const first = decisions[0]
   const totalCount = counts.buy + counts.sell + counts.other
-  const dominantType = counts.sell > 0 ? 'sell' : counts.buy > 0 ? 'buy' : 'other'
-  const fill = DECISION_COLORS[dominantType]
+  const hasBuy = counts.buy > 0
+  const hasSell = counts.sell > 0
+  const isMixed = hasBuy && hasSell
+  // Match the timeline chart's visual language: dot on the line + cone glow
+  // radiating up (buys) or down (sells). Mixed marker → split dot (green top
+  // + red bottom). "Other" types (pass / research) show a single neutral dot
+  // with no cone since there's no directional thesis.
+  const dotFill = isMixed
+    ? DECISION_COLORS.buy   // outer ring colour; we paint the bottom red below
+    : hasBuy ? DECISION_COLORS.buy
+    : hasSell ? DECISION_COLORS.sell
+    : DECISION_COLORS.other
   const r = first.action?.type === 'pass' ? SINGLE_DOT_R_PASS : SINGLE_DOT_R
+  const buyConePath = `M ${cx} ${cy} L ${cx + CONE_HALFW} ${cy - CONE_HEIGHT} L ${cx - CONE_HALFW} ${cy - CONE_HEIGHT} Z`
+  const sellConePath = `M ${cx} ${cy} L ${cx + CONE_HALFW} ${cy + CONE_HEIGHT} L ${cx - CONE_HALFW} ${cy + CONE_HEIGHT} Z`
   return (
     <g className="timeline-decision-marker" style={{ cursor: 'pointer' }}>
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill={fill}
-        stroke="#fff"
-        strokeWidth={1}
-      />
+      {/* Cones — drawn first so dot stacks on top. Multiply blend so
+          overlapping cones from clusters darken/saturate. */}
+      {(hasBuy || hasSell) && (
+        <g style={{ pointerEvents: 'none', mixBlendMode: 'multiply' }}>
+          {hasBuy && (
+            <path d={buyConePath} fill="url(#ticker-buy-glow)" opacity={Math.min(0.95, 0.55 + (counts.buy - 1) * 0.12)} />
+          )}
+          {hasSell && (
+            <path d={sellConePath} fill="url(#ticker-sell-glow)" opacity={Math.min(0.95, 0.55 + (counts.sell - 1) * 0.12)} />
+          )}
+        </g>
+      )}
+      {/* Dot. Mixed = split (green top semicircle, red bottom semicircle). */}
+      {isMixed ? (
+        <g>
+          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy} Z`} fill={DECISION_COLORS.buy} />
+          <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 0 ${cx + r} ${cy} Z`} fill={DECISION_COLORS.sell} />
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#fff" strokeWidth={1} />
+        </g>
+      ) : (
+        <circle cx={cx} cy={cy} r={r} fill={dotFill} stroke="#fff" strokeWidth={1} />
+      )}
       {totalCount > 1 && (
         <text
           x={cx}
@@ -903,6 +932,21 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
               }}
               onDoubleClick={() => setMeasureSelection(null)}
             >
+              {/* Cone glow gradients — same shape language as the timeline page
+                  and the popup ticker chart. Each ChartDot below paints a cone
+                  using these gradient ids. */}
+              <defs>
+                <linearGradient id="ticker-buy-glow" x1="0" y1="1" x2="0" y2="0">
+                  <stop offset="0" stopColor={DECISION_COLORS.buy} stopOpacity="0.85" />
+                  <stop offset="0.35" stopColor={DECISION_COLORS.buy} stopOpacity="0.55" />
+                  <stop offset="1" stopColor={DECISION_COLORS.buy} stopOpacity="0" />
+                </linearGradient>
+                <linearGradient id="ticker-sell-glow" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor={DECISION_COLORS.sell} stopOpacity="0.85" />
+                  <stop offset="0.35" stopColor={DECISION_COLORS.sell} stopOpacity="0.55" />
+                  <stop offset="1" stopColor={DECISION_COLORS.sell} stopOpacity="0" />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" opacity={GRID_OPACITY} stroke="#cbd5e1" />
               {measureSelection != null && yAxisDomain && mergedChartData[measureSelection.startIndex] && mergedChartData[measureSelection.endIndex] && (
                 <ReferenceArea
