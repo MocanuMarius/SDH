@@ -1,14 +1,9 @@
-import { useEffect, useRef, useState, useMemo, memo } from 'react'
+import { useEffect, useState, useMemo, memo } from 'react'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import {
   Autocomplete,
   Box,
   Button,
-  Card,
-  CardActionArea,
-  CardContent,
-  Collapse,
-  Divider,
   TextField,
   Typography,
   Alert,
@@ -22,14 +17,9 @@ import {
   ToggleButton,
   Tooltip,
 } from '@mui/material'
-import Grid from '@mui/material/Grid2'
-// AddIcon removed — "+" is inline text in the button now
 import SearchIcon from '@mui/icons-material/Search'
 import CreateIcon from '@mui/icons-material/Create'
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp'
-import ViewListIcon from '@mui/icons-material/ViewList'
-import GridViewIcon from '@mui/icons-material/GridView'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import EditIcon from '@mui/icons-material/Edit'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
@@ -41,21 +31,17 @@ import type { EntryWithActions } from '../services/entriesService'
 import { useDebounce } from '../hooks/useDebounce'
 import { useEntriesWithActions } from '../hooks/queries'
 import { getChartCategory } from '../theme/decisionTypes'
-import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import RelativeDate from '../components/RelativeDate'
-import TagChip from '../components/TagChip'
 import { investmentScoreBadge } from '../utils/investmentScore'
 import SwipeableCard from '../components/SwipeableCard'
 import PullToRefresh from '../components/PullToRefresh'
 import { EmptyState } from '../components/system'
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined'
 
-/** Initial entries to load (6 rows × 4 cols) */
-const INITIAL_PAGE_SIZE = 24
+/** Initial entries to load — dense one-line rows, so we can fit more. */
+const INITIAL_PAGE_SIZE = 50
 /** How many more to load per "Load more" click */
-const LOAD_MORE_SIZE = 8
-/** Desktop column count — used to insert row dividers */
-const GRID_COLS = 4
+const LOAD_MORE_SIZE = 25
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -132,17 +118,6 @@ function matchesInvestmentFilter(score: number | null, filter: InvestmentFilter)
   if (filter === 'spec') return score < 30
   if (filter === 'mixed') return score >= 30 && score < 70
   return score >= 70
-}
-
-/** Strip markdown and truncate body to first 200 chars */
-function bodyPreview(body: string): string {
-  const stripped = body
-    .replace(/###?\s?/g, '')
-    .replace(/\*\*/g, '')
-    .replace(/^>\s?/gm, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  return stripped.length > 200 ? `${stripped.slice(0, 200)}…` : stripped
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -266,234 +241,119 @@ function TickerActionBadge({ categories }: { categories: Set<BadgeCategory> }) {
 }
 
 /**
- * Grid card — collapsed shows ticker + buy/sell badge + date.
- * On expand, card overlays siblings via position:absolute so grid doesn't reflow.
+ * Journal list row — one dense line per entry, newspaper-table style.
  *
- * Two-state approach:
- *   `expanded`  — drives Collapse in/out animation
- *   `overlayed` — keeps card in absolute mode until Collapse finishes closing (onExited)
- *                 Prevents layout shift during the collapse animation.
+ *   [$UBER ↑] [$CSU ↑]  Title prose here                3d ago  [M65]
+ *
+ * Layout (left → right):
+ *  1. Tickers found in title + body (up to 3) with buy/sell badges.
+ *  2. Title prose (the title minus any ticker mentions) — flex, ellipsed.
+ *  3. Relative date — secondary colour, right-aligned, never wraps.
+ *  4. ProcessOutcome + InvestmentScore badges, hidden on very narrow viewports.
+ *
+ * Swipe-left on mobile reveals Open / Edit actions (unchanged from before).
+ * Hairline borderBottom between rows replaces the previous outlined-card
+ * treatment per "hairlines, not boxes" in docs/PRINCIPLES.md.
  */
-const EntryGridCard = memo(function EntryGridCard({ entry }: { entry: EntryWithActions }) {
-  const [expanded, setExpanded] = useState(false)
-  const [overlayed, setOverlayed] = useState(false)
-  const wrapperRef = useRef<HTMLDivElement>(null)
-  const [reservedHeight, setReservedHeight] = useState(0)
-
-  const allText = `${entry.title_markdown || ''} ${entry.body_markdown || ''}`
-  const tickers = extractTickers(allText)
-  const tickerActionMap = buildTickerActionMap(entry.actions)
-
-  const handleToggle = () => {
-    if (!expanded) {
-      // Opening: freeze wrapper height, enter overlay mode
-      if (wrapperRef.current) setReservedHeight(wrapperRef.current.offsetHeight)
-      setOverlayed(true)
-      setExpanded(true)
-    } else {
-      // Closing: collapse content but keep overlay until animation ends
-      setExpanded(false)
-    }
-  }
-
-  // Called by Collapse when the close animation fully completes
-  const handleExited = () => setOverlayed(false)
-
-  return (
-    <Box
-      ref={wrapperRef}
-      sx={{
-        position: 'relative',
-        // Keep height frozen while overlay is active (both opening and closing animation)
-        height: overlayed && reservedHeight > 0 ? reservedHeight : 'auto',
-      }}
-    >
-      <Card
-        variant="outlined"
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          transition: 'border-color 0.15s, box-shadow 0.2s',
-          '&:hover': { borderColor: 'primary.main' },
-          ...(overlayed
-            ? {
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                zIndex: 10,
-                boxShadow: expanded ? 6 : 1,
-                borderColor: expanded ? 'primary.main' : undefined,
-              }
-            : {
-                position: 'relative',
-              }),
-        }}
-      >
-        {/* Always-visible collapsed header — primary click opens the entry; chevron toggles preview */}
-        <CardActionArea component={RouterLink} to={`/entries/${entry.id}`} sx={{ flex: 'none' }}>
-          <CardContent sx={{ pb: 1 }}>
-            <Box display="flex" alignItems="flex-start" justifyContent="space-between" gap={1}>
-              <Box flex={1} minWidth={0}>
-                {tickers.length > 0 ? (
-                  <Box display="flex" gap={0.5} flexWrap="wrap" sx={{ mb: 0.25 }}>
-                    {tickers.slice(0, 3).map((t) => (
-                      <Box key={t} component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
-                        <Typography variant="h6" component="span" fontWeight={700} color="primary.main">
-                          {t}
-                        </Typography>
-                        <TickerActionBadge categories={tickerActionMap.get(t) ?? new Set()} />
-                      </Box>
-                    ))}
-                    {tickers.length > 3 && (
-                      <Chip
-                        label={`+${tickers.length - 3}`}
-                        size="small"
-                        variant="outlined"
-                        sx={{ alignSelf: 'center', height: 20, fontSize: '0.7rem' }}
-                      />
-                    )}
-                  </Box>
-                ) : (
-                  <Typography variant="body2" fontWeight={600} noWrap component="div" sx={{ mb: 0.25 }}>
-                    <PlainTextWithTickers source={entry.title_markdown || '(Untitled)'} inline dense tickerAsLink={false} />
-                  </Typography>
-                )}
-                <Typography variant="caption" color="text.secondary">
-                  <RelativeDate date={entry.date} sx={{ color: 'inherit' }} />
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-                <ProcessOutcomeBadge {...entryProcessOutcome(entry)} />
-                <InvestmentScoreBadge score={effectiveInvestmentScore(entry)} />
-                {/* Tooltip preview chevron — stops propagation so clicking it doesn't navigate */}
-                <Tooltip title={expanded ? 'Hide preview' : 'Show preview'}>
-                  <Box
-                    component="span"
-                    role="button"
-                    tabIndex={0}
-                    aria-label={expanded ? 'Hide preview' : 'Show preview'}
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggle() }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleToggle() } }}
-                    sx={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 24,
-                      height: 24,
-                      borderRadius: '50%',
-                      cursor: 'pointer',
-                      color: 'text.secondary',
-                      transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s, background-color 0.15s',
-                      '&:hover': { bgcolor: 'action.hover' },
-                    }}
-                  >
-                    <ExpandMoreIcon fontSize="small" />
-                  </Box>
-                </Tooltip>
-              </Box>
-            </Box>
-          </CardContent>
-        </CardActionArea>
-
-        {/* Expanded details */}
-        <Collapse in={expanded} timeout="auto" unmountOnExit onExited={handleExited}>
-          <CardContent sx={{ pt: 0, pb: 1.5 }}>
-            {/* Full title when tickers are shown in header */}
-            {tickers.length > 0 && (
-              <Typography variant="body2" fontWeight={600} component="div" sx={{ mb: 0.75 }}>
-                <PlainTextWithTickers source={entry.title_markdown || '(Untitled)'} inline dense tickerAsLink={false} />
-              </Typography>
-            )}
-
-            {/* Tags */}
-            {entry.tags.length > 0 && (
-              <Box display="flex" flexWrap="wrap" gap={0.5} sx={{ mb: 0.75 }}>
-                {entry.tags.map((t) => (
-                  <TagChip key={t} tag={t} sx={{ pointerEvents: 'none' }} />
-                ))}
-              </Box>
-            )}
-
-            {/* Body preview */}
-            {entry.body_markdown && (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.25, fontSize: '0.8rem', lineHeight: 1.5 }}>
-                {bodyPreview(entry.body_markdown)}
-              </Typography>
-            )}
-
-            {/* Open + Edit buttons */}
-            <Box display="flex" sx={{ borderRadius: 1, overflow: 'hidden' }}>
-              <Button
-                component={RouterLink}
-                to={`/entries/${entry.id}`}
-                size="small"
-                variant="contained"
-                disableElevation
-                startIcon={<OpenInNewIcon fontSize="small" />}
-                sx={{ flex: 1, textTransform: 'none', borderRadius: '4px 0 0 4px' }}
-              >
-                Open
-              </Button>
-              <Tooltip title="Edit entry">
-                <Button
-                  component={RouterLink}
-                  to={`/entries/${entry.id}/edit`}
-                  size="small"
-                  variant="contained"
-                  disableElevation
-                  aria-label="Edit"
-                  sx={{
-                    textTransform: 'none',
-                    borderRadius: '0 4px 4px 0',
-                    borderLeft: '1px solid rgba(255,255,255,0.3)',
-                    minWidth: 36,
-                    px: 1,
-                  }}
-                >
-                  <EditIcon fontSize="small" />
-                </Button>
-              </Tooltip>
-            </Box>
-          </CardContent>
-        </Collapse>
-      </Card>
-    </Box>
-  )
-})
-
-/** List-mode row — swipe left on mobile to reveal Open/Edit actions */
 const EntryListRow = memo(function EntryListRow({ entry }: { entry: EntryWithActions }) {
   const allText = `${entry.title_markdown || ''} ${entry.body_markdown || ''}`
   const tickers = extractTickers(allText)
   const tickerActionMap = buildTickerActionMap(entry.actions)
   const navigate = useNavigate()
 
+  // Title minus any ticker mentions — so "$UBER short speculation" shows
+  // just "short speculation" as the title text (no duplicate ticker next
+  // to the prominent left-side ticker chip). Collapse resulting whitespace.
+  const rawTitle = entry.title_markdown?.trim() || ''
+  const titleProse = rawTitle
+    .replace(/\$[A-Z][A-Z0-9.:]{0,9}/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const displayTitle = titleProse || (tickers.length > 0 ? '' : '(Untitled)')
+
   const content = (
-    <Box sx={{ px: 1.5, py: 1 }}>
-      <Box display="flex" alignItems="flex-start" justifyContent="space-between" gap={1}>
-        <Typography variant="body2" fontWeight={600} component="div" sx={{ flex: 1, minWidth: 0 }}>
-          <PlainTextWithTickers source={entry.title_markdown || '(Untitled)'} inline dense tickerAsLink={false} />
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-          <ProcessOutcomeBadge {...entryProcessOutcome(entry)} />
-          <InvestmentScoreBadge score={effectiveInvestmentScore(entry)} />
-        </Box>
-      </Box>
+    <Box
+      sx={{
+        px: { xs: 1.25, sm: 1.5 },
+        py: 0.75,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        minWidth: 0,
+        borderBottom: 1,
+        borderColor: 'divider',
+        '&:hover': { bgcolor: 'action.hover' },
+      }}
+    >
+      {/* Tickers — left side, fixed; badges inline so the category signal
+          (buy/sell/other) sticks to the ticker it describes. */}
       {tickers.length > 0 && (
-        <Box display="flex" gap={0.5} flexWrap="wrap" sx={{ mt: 0.25 }}>
-          {tickers.slice(0, 5).map((t) => (
-            <Box key={t} component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-              <Typography variant="caption" fontWeight={700} color="primary.main">{t}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+          {tickers.slice(0, 3).map((t) => (
+            <Box key={t} component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
+              <Typography
+                component="span"
+                sx={{
+                  fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+                  color: 'primary.main',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                {t}
+              </Typography>
               <TickerActionBadge categories={tickerActionMap.get(t) ?? new Set()} />
             </Box>
           ))}
+          {tickers.length > 3 && (
+            <Typography component="span" variant="caption" sx={{ color: 'text.secondary', ml: 0.25 }}>
+              +{tickers.length - 3}
+            </Typography>
+          )}
         </Box>
       )}
-      <Typography variant="caption" color="text.secondary">
-        <RelativeDate date={entry.date} sx={{ color: 'inherit' }} />
+
+      {/* Title prose — flex, truncates with ellipsis when long. */}
+      {displayTitle && (
+        <Typography
+          component="div"
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontSize: '0.85rem',
+            color: tickers.length > 0 ? 'text.secondary' : 'text.primary',
+            fontWeight: tickers.length > 0 ? 400 : 500,
+          }}
+        >
+          {displayTitle}
+        </Typography>
+      )}
+      {/* Spacer when only tickers (no title prose) so the date hugs the right */}
+      {!displayTitle && <Box sx={{ flex: 1 }} />}
+
+      {/* Date — always visible, right-aligned, secondary colour. */}
+      <Typography
+        component="span"
+        variant="caption"
+        sx={{
+          color: 'text.secondary',
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        <RelativeDate date={entry.date} variant="caption" sx={{ color: 'inherit' }} />
       </Typography>
+
+      {/* Badges — compact, hidden on xs to keep the row breathable on phones. */}
+      <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+        <ProcessOutcomeBadge {...entryProcessOutcome(entry)} />
+        <InvestmentScoreBadge score={effectiveInvestmentScore(entry)} />
+      </Box>
     </Box>
   )
 
@@ -525,7 +385,6 @@ export default function EntryListPage() {
   const [investmentFilter, setInvestmentFilter] = useState<InvestmentFilter>('all')
   const [pageSize, setPageSize] = useState(INITIAL_PAGE_SIZE)
   const [showScrollTop, setShowScrollTop] = useState(false)
-  const [gridView, setGridView] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   // ─── react-query: shared cache, auto-refetches when entries change anywhere ──
@@ -589,27 +448,6 @@ export default function EntryListPage() {
     return counts
   }, [entries, tagFilter])
 
-  /** Build grid items with a Divider after every GRID_COLS cards (one desktop row) */
-  const gridItems = useMemo(
-    () =>
-      filteredEntries.flatMap((entry, i) => {
-        const card = (
-          <Grid key={entry.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-            <EntryGridCard entry={entry} />
-          </Grid>
-        )
-        const isEndOfRow = (i + 1) % GRID_COLS === 0 && i < filteredEntries.length - 1
-        if (!isEndOfRow) return [card]
-        return [
-          card,
-          <Grid key={`divider-${i}`} size={{ xs: 12 }}>
-            <Divider sx={{ opacity: 0.35, my: 0.25 }} />
-          </Grid>,
-        ]
-      }),
-    [filteredEntries]
-  )
-
   return (
     <PullToRefresh onRefresh={handlePullRefresh}>
     <Box>
@@ -627,20 +465,10 @@ export default function EntryListPage() {
           boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
         }}
       >
-        {/* Row 1: title + toggle + new — toolbar elements share the same height
-            (32px) so the layout reads as one bar instead of three things stacked. */}
+        {/* Row 1: title + "new" CTA on the same line. Grid-vs-list toggle
+            removed — the dense-row layout below is the only view now. */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
           <Typography variant="h1" sx={{ flex: 1, mt: 0.5 }}>Journal</Typography>
-          <ToggleButtonGroup
-            value={gridView ? 'grid' : 'list'}
-            exclusive
-            size="small"
-            onChange={(_, v) => { if (v !== null) setGridView(v === 'grid') }}
-            sx={{ '& .MuiToggleButton-root': { height: 32, width: 32, px: 0, py: 0 } }}
-          >
-            <ToggleButton value="grid" aria-label="Grid view"><GridViewIcon sx={{ fontSize: 16 }} /></ToggleButton>
-            <ToggleButton value="list" aria-label="List view"><ViewListIcon sx={{ fontSize: 16 }} /></ToggleButton>
-          </ToggleButtonGroup>
           <Button
             component={RouterLink}
             to="/entries/new"
@@ -720,30 +548,43 @@ export default function EntryListPage() {
               disableCloseOnSelect
               renderTags={() => (
                 tagFilter.length > 0
-                  ? <Chip size="small" label={`${tagFilter.length} tag${tagFilter.length > 1 ? 's' : ''}`} sx={{ height: 22, fontSize: '0.65rem' }} />
+                  ? <Chip size="small" label={`${tagFilter.length} tag${tagFilter.length > 1 ? 's' : ''}`} sx={{ height: 20, fontSize: '0.65rem', ml: 0.25 }} />
                   : null
               )}
               renderInput={(params) => (
                 <TextField
                   {...params}
                   placeholder={tagFilter.length === 0 ? 'Tags' : ''}
-                  sx={{
-                    '& .MuiInputBase-root': {
-                      height: 26,
-                      minHeight: 26,
-                      fontSize: '0.7rem',
-                      py: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                    },
-                    '& .MuiInputBase-input': {
-                      py: '2px !important',
-                      lineHeight: 1,
-                    },
-                  }}
                 />
               )}
-              sx={{ minWidth: 80, flex: 1 }}
+              sx={{
+                minWidth: 100,
+                flex: 1,
+                // Match the 26px height used by the investment-bucket toggle
+                // group and the hide-automated chip to its right, and vertically
+                // centre the placeholder/value. The previous overrides on
+                // .MuiInputBase-input (`py: 2px !important`, `lineHeight: 1`)
+                // were forcing the label off-centre; letting MUI pad naturally
+                // and just pinning the outer height fixes it.
+                '& .MuiAutocomplete-inputRoot.MuiOutlinedInput-root': {
+                  minHeight: 26,
+                  height: 26,
+                  py: 0,
+                  px: 0.75,
+                  fontSize: '0.7rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                },
+                '& .MuiAutocomplete-input': {
+                  py: 0,
+                  fontSize: '0.7rem',
+                },
+                // Keep placeholder colour consistent with other filter controls.
+                '& input::placeholder': {
+                  color: 'text.secondary',
+                  opacity: 0.85,
+                },
+              }}
             />
           )}
         </Box>
@@ -756,35 +597,18 @@ export default function EntryListPage() {
         </Alert>
       )}
 
-      {/* ── Content — give a real gap below the sticky header so the list
-              doesn't crash into the filter chips. ── */}
-      <Box sx={{ mt: 2 }} />
+      {/* ── Content — give a small gap below the sticky header. ── */}
+      <Box sx={{ mt: 1.5 }} />
       {loading ? (
-        gridView ? (
-          <Grid container spacing={1} sx={{ alignItems: 'flex-start' }}>
-            {Array.from({ length: INITIAL_PAGE_SIZE }).map((_, i) => (
-              <Grid key={i} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                <Card variant="outlined">
-                  <CardContent>
-                    <Skeleton variant="text" width="50%" height={32} />
-                    <Skeleton variant="text" width="40%" height={18} sx={{ mt: 0.5 }} />
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        ) : (
-          <Stack spacing={1.5}>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Card key={i} variant="outlined">
-                <CardContent sx={{ py: 1.5 }}>
-                  <Skeleton variant="text" width="60%" height={24} />
-                  <Skeleton variant="text" width="30%" height={18} sx={{ mt: 0.5 }} />
-                </CardContent>
-              </Card>
-            ))}
-          </Stack>
-        )
+        <Stack spacing={0}>
+          {Array.from({ length: 10 }).map((_, i) => (
+            <Box key={i} sx={{ px: 1.5, py: 0.75, display: 'flex', alignItems: 'center', gap: 1, borderBottom: 1, borderColor: 'divider' }}>
+              <Skeleton variant="text" width={120} height={20} />
+              <Skeleton variant="text" sx={{ flex: 1 }} height={18} />
+              <Skeleton variant="text" width={60} height={18} />
+            </Box>
+          ))}
+        </Stack>
       ) : filteredEntries.length === 0 ? (
         entries.length === 0 ? (
           <EmptyState
@@ -799,12 +623,8 @@ export default function EntryListPage() {
         ) : (
           <EmptyState dense title="No entries match the current filters" />
         )
-      ) : gridView ? (
-        <Grid container spacing={1} sx={{ alignItems: 'flex-start' }}>
-          {gridItems}
-        </Grid>
       ) : (
-        <Stack spacing={0.75}>
+        <Stack spacing={0}>
           {filteredEntries.map((entry) => (
             <EntryListRow key={entry.id} entry={entry} />
           ))}
@@ -829,7 +649,7 @@ export default function EntryListPage() {
         sx={{
           position: 'fixed',
           // On mobile, sit above the 56px bottom nav; on desktop, use safe-area only
-          bottom: { xs: 72, sm: 'max(16px, env(safe-area-inset-bottom))' },
+          bottom: { xs: 78, sm: 'max(16px, env(safe-area-inset-bottom))' },
           right: { xs: 16, sm: 24 },
         }}
       >
@@ -844,7 +664,7 @@ export default function EntryListPage() {
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           sx={{
             position: 'fixed',
-            bottom: { xs: 72, sm: 'max(16px, env(safe-area-inset-bottom))' },
+            bottom: { xs: 78, sm: 'max(16px, env(safe-area-inset-bottom))' },
             right: { xs: 80, sm: 100 },
           }}
         >

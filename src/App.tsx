@@ -351,12 +351,35 @@ function MobileBottomNav({ onOpenNav }: { onOpenNav: () => void }) {
         // as floating above the content, not glued to the bottom edge.
         boxShadow: '0 -1px 3px rgba(15, 23, 42, 0.18), 0 -1px 1px rgba(15, 23, 42, 0.12)',
         pb: 'env(safe-area-inset-bottom)',
+        // Slightly taller bar + tighter, smaller labels. The old 0.68rem
+        // labels read as shouting and left no breathing room between icon
+        // and text; dropping to 0.6rem + 2px gap + a bit more letter
+        // spacing gives the chrome a calmer, newspaper-nav cadence.
+        height: 62,
+        minHeight: 62,
         '& .MuiBottomNavigationAction-root': {
           color: 'rgba(255,255,255,0.62)',
-          fontSize: '0.68rem',
-          textTransform: 'uppercase',
-          letterSpacing: '0.06em',
           minWidth: 0,
+          maxWidth: 'none',
+          px: 0.75,
+          pt: '6px',
+          pb: '4px',
+          gap: '2px',
+        },
+        '& .MuiBottomNavigationAction-label': {
+          fontSize: '0.58rem',
+          lineHeight: 1,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          fontWeight: 600,
+          mt: '3px',
+          // Keep the label from jumping when an item is selected (MUI
+          // grows it to 0.75rem by default; our smaller scale reads too
+          // differently if we kept that bump).
+          '&.Mui-selected': { fontSize: '0.58rem' },
+        },
+        '& .MuiBottomNavigationAction-root .MuiSvgIcon-root': {
+          fontSize: '1.25rem',
         },
         '& .Mui-selected': { color: '#fff !important' },
         '& .Mui-selected .MuiBottomNavigationAction-label': { fontWeight: 700 },
@@ -470,7 +493,8 @@ function AppLayout() {
         sx={{
           minHeight: '100vh',
           pt: { xs: '56px', sm: '64px' },
-          pb: { xs: isMobile ? 10 : 2, sm: 0 },
+          // Leave room for the 62px mobile bottom nav (bumped from 56px).
+          pb: { xs: isMobile ? 11 : 2, sm: 0 },
         }}
       >
         <Container
