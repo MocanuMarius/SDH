@@ -11,7 +11,7 @@ Housekeeping: when an item ships, move it to the "Done" log at the bottom
 rather than deleting — useful to flip back through when we make decisions
 that contradict an earlier choice.
 
-> Last updated: 2026-04-18
+> Last updated: 2026-04-18 (chart-fix + polish batch)
 
 ---
 
@@ -31,32 +31,84 @@ that contradict an earlier choice.
 
 ## Upcoming — in the order we plan to tackle them
 
-### 7. Centralise the per-page chart wrapper — still open for a deeper pass
-
-**Shipped (partial):** two shared presentational components live at
-`src/components/charts/`:
-  - `RangeSelectorButtons` (with "buttons" + "tabs" variants) used by
-    both TimelinePage (flat blue text-buttons) and TickerTimelineChart
-    (outlined chip tabs).
-  - `MeasureStatsPill` used by both pages for the drag-stats popup.
-
-**Still to do if we want a full wrapper.** A single
-`TimelineChartCard` component that owns the Paper frame + drag overlay
-+ crosshair + decision banner wouldn't be a mechanical move — the
-measure-drag pixel maths reference each page's layout margins, and the
-URL-state handshake on TimelinePage wouldn't survive a naive lift.
-Worth doing eventually but wasn't in scope for this batch; left open
-for a later roadmap item.
-
----
-
-*All upcoming items in this batch shipped — see Done log below.*
+*Nothing explicitly queued. Next likely candidates: additional
+TimelineChartCard wrapping (the Paper frame + decision banner still
+live per-page), markdown-layer migration run (the DB-side strip; the
+code is ready), broader InsightsPage / CalibrationDashboard polish.*
 
 ---
 
 ## Done (rolling log)
 
-- **#8 Stale-idea resolve: dedicated lightweight dialog.** Commit `<next>`.
+- **Chart-fix + polish batch (A–F).** Six-item sweep across the
+  Timeline, per-ticker, and entry-detail pages, shipped as self-
+  contained commits so each could be verified in the preview before
+  the next landed.
+
+  - **Y-axis geometry fix.** Commits `c9f0b44` (axis alignment) +
+    `0286e8a` (`nice()` + padding). Root cause of the recurring "the
+    chart is going below the y-axis" complaint was structural:
+    `AxisLeft` / `AxisRight` were missing `top=responsiveMargin.top`
+    so tick labels rendered 24 px above the gridlines + chart paths;
+    `AxisBottom` unconditionally subtracted `BRUSH_HEIGHT` from its
+    top, leaving the plot extending 40 px below the visible x-axis
+    when `showBrush={false}`. Fixing both aligns every price label
+    with the gridline it labels and no chart line ever visually
+    crosses an axis label.
+
+  - **A. Per-ticker page polish.** Commit `14753a3`. Replaced
+    IdeaDetailPage's ad-hoc Breadcrumbs+chip header with
+    `<PageHeader>` (sticky on mobile); moved the always-visible
+    "Compare" chip strip behind a gear-icon `Dialog` on
+    TickerTimelineChart (matching TimelinePage's pattern) with a
+    compact "vs SPY" inline cue for active overlays; grouped the
+    Decisions list into date sections with serif-bold relative
+    buckets ("Yesterday" / "Over a month ago") primary + exact date
+    secondary. Bucket helpers (`relativeBucket`, `formatDayHeader`)
+    lifted to `utils/relativeBucket.ts` so Timeline and per-ticker
+    share one source of truth.
+
+  - **B. Desktop chart hover tooltip.** Commit `5341bc9`. Hover the
+    price line → thin crosshair snaps to nearest data point, small
+    Paper pill reads "Mar 4, 26 · $692.14" above the crosshair. Same
+    affordance on both `/timeline` and `/tickers/:ticker` via the
+    shared `HoverPricePill`. Caught + fixed an MUI footgun on the
+    way in: `sx={{ width: 1 }}` is a *fraction* (100 %), not 1 px —
+    both crosshair call sites now use `width: '1px'` with a comment.
+
+  - **C. URL params consolidation.** Commit `cfe07b9`. Folded
+    `?symbol=` / `?types=` / `?hideAutomated=` into the single
+    `?s=<base64>` blob on TimelinePage. Old bookmarks self-migrate:
+    one `useEffect` reads legacy keys, merges their values into the
+    blob, strips them — all in a single `setSearchParams` call,
+    because react-router doesn't compose two successive
+    `.set(prev => ...)` updaters within the same tick (the second
+    was clobbering the first's `?s=` write on the first attempt).
+
+  - **D. Shared hover/measure overlays.** Commit `0ec3158`. Extracted
+    the crosshair + hover-price pill + committed-measure stats pill
+    duplicated across TimelinePage and TickerTimelineChart into one
+    `ChartHoverOverlays` component. The full `TimelineChartCard`
+    wrapper (Paper frame + decision banner + drag band) stays
+    deferred — the drag-band has different impls on each page (ref-
+    imperative vs React-state) for perf reasons the roadmap flagged.
+
+  - **E. Markdown-layer cleanup.** Commit `9a9834d`. Sharpened the
+    inline removal-checklist comment in `PlainTextWithTickers` —
+    genuinely blocked on a DB-side migration run (the
+    `strip-legacy-markdown` script requires service-role creds; anon
+    key hits RLS and silently returns 0 rows, which I wasted time
+    on before catching it). Code side is ready for removal as soon
+    as the migration has been run against live data.
+
+  - **F. Entry detail sticky header.** Commit `32bf8dd`. Swapped
+    EntryDetailPage's ad-hoc Breadcrumbs + title/actions rows for
+    `<PageHeader>`. Mobile title strip now sticks under the AppBar so
+    the user always knows which entry they're reading mid-scroll.
+    Edit / Remind me / Delete stay inline on desktop; a MoreVert
+    overflow menu collapses them on mobile.
+
+- **#8 Stale-idea resolve: dedicated lightweight dialog.** Commit `569298a`.
   **Audit findings**: the "Resolve" action on a stale-ticker card was
   opening the full OutcomeFormDialog — a 400+-line form with realised
   P&L, process score, outcome score, error-type checkboxes, post-mortem
