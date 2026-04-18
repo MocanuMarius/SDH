@@ -24,6 +24,7 @@ import { tokens } from '../theme'
 import { ParentSize } from '@visx/responsive'
 import TimelineChartVisx, { getTimelineChartResponsiveMargin, type DecisionOverlayInfo } from '../components/TimelineChartVisx'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
+import { useEncodedUrlState } from '../hooks/useEncodedUrlState'
 import type { ActionWithEntry } from '../services/actionsService'
 import { useActions } from '../hooks/queries'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
@@ -116,9 +117,28 @@ const BENCHMARK_OPTIONS: { symbol: string; label: string }[] = [
 export default function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const symbolParam = searchParams.get('symbol')?.trim()?.toUpperCase() || searchParams.get('symbol') || 'SPY'
-  // Default to 6 months — short enough that decisions don't clump too tightly
-  // on mobile, long enough to see meaningful trend.
-  const [range, setRange] = useState<ChartRange>('6m')
+  // Deep-link state — range, zoom window, and selected decision ride in
+  // a single `?s=<base64>` param so a shared URL restores the view byte-
+  // for-byte (including "drilled into a cluster from 2024" or "viewing
+  // decision #abc123"). Ephemeral things (measureSelection drag, hover)
+  // stay local state since they're not useful across sessions.
+  //
+  // Existing `?symbol=` / `?types=` / `?hideAutomated=` params are still
+  // parsed separately below — keeping them keeps manually-typed URLs and
+  // older bookmarks working without a migration step.
+  type TimelineUrlState = {
+    range: ChartRange
+    zoom: [number, number] | null
+    sel: string | null
+  }
+  const [urlState, setUrlState] = useEncodedUrlState<TimelineUrlState>('s', {
+    range: '6m',
+    zoom: null,
+    sel: null,
+  })
+  const range = urlState.range
+  const setRange = useCallback((v: ChartRange) => setUrlState({ range: v }), [setUrlState])
+
   const [chartData, setChartData] = useState<{ date: string; price: number }[]>([])
   const [symbol, setSymbol] = useState(symbolParam)
   // Range selector date inputs — synced from zoomRange; user edits trigger applyDateRange
@@ -133,13 +153,29 @@ export default function TimelinePage() {
   const actions: ActionWithEntry[] = useMemo(() => actionsQ.data ?? [], [actionsQ.data])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
+  // selectedActionId + zoomRange are backed by the `?s=` blob above.
+  // Wrappers keep the existing setter signatures so every call site keeps
+  // its shape — no drive-by refactor in this commit.
+  const selectedActionId = urlState.sel
+  const setSelectedActionId = useCallback(
+    (v: string | null) => setUrlState({ sel: v }),
+    [setUrlState],
+  )
+  const zoomRange = useMemo(
+    () => (urlState.zoom ? { startIndex: urlState.zoom[0], endIndex: urlState.zoom[1] } : null),
+    [urlState.zoom],
+  )
+  const setZoomRange = useCallback(
+    (v: { startIndex: number; endIndex: number } | null) =>
+      setUrlState({ zoom: v ? [v.startIndex, v.endIndex] : null }),
+    [setUrlState],
+  )
+
   // Decision-click overlay (used to live inside the chart plot, covering
   // it with a floating Paper). Lifted up here so we can render it as a
   // banner over the range-selector bar — same precise footprint, never
   // covers the timeline plot. Null when no marker is active.
   const [decisionOverlay, setDecisionOverlay] = useState<DecisionOverlayInfo | null>(null)
-  const [zoomRange, setZoomRange] = useState<{ startIndex: number; endIndex: number } | null>(null)
   const [measureSelection, setMeasureSelection] = useState<{ startIndex: number; endIndex: number } | null>(null)
   /** True while range-drag is active — only toggled on start/end (no per-frame updates). */
   const [dragActive, setDragActive] = useState(false)
@@ -207,6 +243,9 @@ export default function TimelinePage() {
   useEffect(() => {
     setZoomRange(null)
     setMeasureSelection(null)
+    // setZoomRange / setMeasureSelection are memo'd but we only care to
+    // re-run when the user picks a new range or symbol.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, symbolParam])
 
   // Fetch sentiment bands and news
@@ -331,7 +370,7 @@ export default function TimelinePage() {
     const endIdx   = to   ? dateToIndex(to, 'end')     : data.length - 1
     if (endIdx > startIdx) setZoomRange({ startIndex: startIdx, endIndex: endIdx })
     else if (startIdx === 0 && endIdx === data.length - 1) setZoomRange(null)
-  }, [mergedChartData, dateToIndex])
+  }, [mergedChartData, dateToIndex, setZoomRange])
 
   // Sync zoomRange → date inputs (one-way: external zoom changes update the inputs)
   useEffect(() => {
@@ -700,7 +739,7 @@ export default function TimelinePage() {
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [selectedActionId, actionsInRange, cancelActiveDrag])
+  }, [selectedActionId, actionsInRange, cancelActiveDrag, setSelectedActionId])
 
   useEffect(() => {
     if (!dragActive) return
@@ -728,7 +767,7 @@ export default function TimelinePage() {
     }
     setSelectedActionId(null)
     setMeasureSelection(null)
-  }, [])
+  }, [setSelectedActionId])
 
   return (
     <Box>
