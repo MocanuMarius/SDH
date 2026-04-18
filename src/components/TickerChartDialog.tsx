@@ -115,7 +115,6 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
     return () => { cancelled = true }
   }, [ticker])
 
-  // Measure container width
   // Build paired price data
   const tickerPairs = useMemo(() => {
     if (!tickerChartRaw) return []
@@ -256,7 +255,7 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
 
         {error && <Alert severity="warning" sx={{ mt: 1 }}>{error}</Alert>}
 
-        {!loading && !error && normalised && svg && (
+        {!loading && !error && normalised && (
           <>
             {/* Stats bar */}
             <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', mb: 1, mt: 0.5 }}>
