@@ -43,10 +43,11 @@ data/test/*-auth*
 
 # LLM / Claude artifacts and one-time planning docs (not app code)
 docs/*
-# …but keep the rolling principles + issues + flow audit docs in version control.
+# …but keep the rolling principles + issues + flow audit + roadmap in version control.
 !docs/PRINCIPLES.md
 !docs/ISSUES.md
 !docs/FLOW_AUDIT.md
+!docs/ROADMAP.md
 !docs/WATCHLIST_DIAGNOSTIC.sql
 FIX_PLAN.md
 SKILL_ENGINEERING_GUIDE.md
