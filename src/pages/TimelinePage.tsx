@@ -1152,7 +1152,7 @@ export default function TimelinePage() {
                       onSelectAction={setSelectedActionId}
                       onChartClick={handleChartBackgroundClick}
                       onMouseLeave={handleChartMouseLeave}
-                      onBrushChange={(start, end) => setMeasureSelection({ startIndex: start, endIndex: end })}
+                      showBrush={false}
                       onClusterZoom={(localStart, localEnd) => {
                         // The chart's `data` prop is already the visible
                         // slice (chartDisplayData). Translate the slice-
@@ -1329,10 +1329,10 @@ function DecisionsInRange({
   }, [actions])
 
   return (
-    <Box sx={{ mt: 2 }}>
+    <Box sx={{ mt: 0.75 }}>
       <Typography
         variant="overline"
-        sx={{ display: 'block', mb: 0.5, color: 'text.secondary', letterSpacing: '0.15em', fontWeight: 700 }}
+        sx={{ display: 'block', mb: 0.25, color: 'text.secondary', letterSpacing: '0.15em', fontWeight: 700 }}
       >
         Decisions in range · {actions.length}
       </Typography>

@@ -177,8 +177,11 @@ function TimelineChartVisx({
   const innerHeight = Math.max(0, height - responsiveMargin.top - responsiveMargin.bottom - (showBrush ? BRUSH_HEIGHT : 0))
 
   const isMobile = width < 600
-  const axisLabelFontSize = isMobile ? 10 : 11
-  const leftAxisLabelFontSize = isMobile ? 12 : 14
+  // Axis labels deliberately small so the plot area gets maximum
+  // horizontal + vertical real estate. Mobile drops one more pt since
+  // every pixel counts on narrow screens.
+  const axisLabelFontSize = isMobile ? 9 : 10
+  const leftAxisLabelFontSize = isMobile ? 10 : 11
   const numBottomTicks = width > 400 ? 8 : 5
   const markerGeom = useMemo(() => getMarkerGeom(width), [width])
   // CONE_HEIGHT_MAX is still used for cluster bbox sizing; CONE_HALFWIDTH_MAX

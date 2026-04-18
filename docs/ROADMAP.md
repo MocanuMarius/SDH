@@ -31,29 +31,6 @@ that contradict an earlier choice.
 
 ## Upcoming — in the order we plan to tackle them
 
-### 3. Timeline chart: drop the bottom brush, tighten the layout
-
-**Why.** The brush rail below the plot area doesn't add much value —
-drag-to-select + pinch already work. The brush takes ~40 px of vertical
-real estate, the axis labels are larger than they need to be, and
-there's wasted whitespace between the chart and the "DECISIONS IN
-RANGE" section.
-
-**Scope.**
-- Remove the `<Brush>` render from `TimelineChartVisx`. Keep the
-  draggable-selection and pinch-zoom behaviours (they live on the
-  parent wrapper, not the brush).
-- Reduce left + right axis label font sizes by ~2 px so the plot area
-  gets more horizontal room.
-- Tighten the vertical gap between the chart bottom and the "DECISIONS
-  IN RANGE" header.
-- Verify popup + per-ticker charts (they already pass `showBrush={false}`)
-  aren't affected.
-
-**Status.** todo
-
----
-
 ### 4. Decisions-in-range date header restyle
 
 **Why.** "Fri, Apr 17, 27" is precise but hard to grok at a glance.
@@ -219,7 +196,19 @@ idea.
 
 ## Done (rolling log)
 
-- **#2 React Compiler + framework audit.** Commit `<next>`.
+- **#3 Drop brush + tighten layout.** Commit `<next>`.
+  TimelinePage now passes `showBrush={false}` to the chart — the 40-px
+  brush rail is gone, chart plot reclaims that vertical room. Axis label
+  fonts trimmed 11→10 on left, 14→11 on right, 10→9 / 12→10 on mobile
+  so the y-axis eats less horizontal room too. "Decisions in range"
+  header margin dropped mt: 2 → mt: 0.75 + mb: 0.5 → mb: 0.25 so the
+  chart bottom doesn't leave an awkward gap above the list.
+  Note: @visx/brush stays in deps for now — TimelineChartVisx's Brush
+  component is rendered conditionally and still referenced when other
+  embedders don't pass showBrush={false}. Next audit pass may remove
+  it entirely once all consumers drop it.
+
+- **#2 React Compiler + framework audit.** Commit `d1d70e6`.
   Audit findings:
   - **React Compiler** was already wired in `vite.config.ts` via
     `babel-plugin-react-compiler` in the `@vitejs/plugin-react` Babel
