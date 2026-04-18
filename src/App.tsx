@@ -163,7 +163,18 @@ function AppBarNav({
 
   return (
     <>
-      <AppBar position="fixed" elevation={0} sx={{ borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
+      <AppBar
+        position="fixed"
+        elevation={0}
+        sx={{
+          // Subtle ink-drop shadow so the dark AppBar reads as floating
+          // above the warm-paper body. Border alone wasn't visible enough
+          // against the bg. Elevation kept off (=0) — we use a custom shadow
+          // tuned for the newspaper aesthetic instead of MUI's standard one.
+          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.18), 0 1px 1px rgba(15, 23, 42, 0.12)',
+          borderBottom: '1px solid rgba(255,255,255,0.10)',
+        }}
+      >
         <Toolbar sx={{ justifyContent: 'space-between', minHeight: { xs: 56, sm: 60 }, gap: 1 }}>
           {/* Masthead — serif wordmark, newspaper-style kicker beneath. */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexShrink: 0, minWidth: 0 }}>
@@ -463,7 +474,10 @@ function AppLayout() {
           maxWidth="lg"
           sx={{
             px: { xs: 1.5, sm: 2 },
-            py: { xs: 0.75, sm: 1.5 },
+            // Mobile: no top/bottom container padding — the sticky PageHeader
+            // sits flush under the AppBar so there's no 6px snap when scroll
+            // engages the sticky state. Bottom padding handled by main's pb.
+            py: { xs: 0, sm: 1.5 },
             maxWidth: 'lg',
             width: '100%',
             boxSizing: 'border-box',
