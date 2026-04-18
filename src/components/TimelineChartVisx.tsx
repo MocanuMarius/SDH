@@ -127,6 +127,20 @@ export interface TimelineChartVisxProps {
   onChartClick: () => void
   onMouseLeave: () => void
   onBrushChange?: (start: number, end: number) => void
+  /** Hide the brush rail at the bottom. Used by smaller embeddings (e.g. the
+   *  popup chart) where the brush would be visual noise. Defaults to true. */
+  showBrush?: boolean
+  /** Always-on benchmark overlay. The chart anchors to the first date in the
+   *  data window and maps benchmark prices onto the same y-scale (same trick
+   *  as the click-fetched overlay tickers). Used by the popup chart and the
+   *  per-ticker page where the user wants to see ticker-vs-benchmark in one
+   *  view without first clicking a decision marker. */
+  benchmarkData?: { ticker: string; dates: string[]; prices: number[] } | null
+  /** Suppress the click-to-overlay-tickers behaviour. Marker clicks still
+   *  call `onSelectAction` for selection, but no fetched overlay is drawn.
+   *  Used by the popup chart where the benchmark is already always-on so a
+   *  click overlay would be redundant. */
+  disableMarkerClick?: boolean
 }
 
 const BRUSH_HEIGHT = 40
@@ -145,6 +159,9 @@ function TimelineChartVisx({
   onChartClick,
   onMouseLeave,
   onBrushChange,
+  showBrush = true,
+  benchmarkData = null,
+  disableMarkerClick = false,
 }: TimelineChartVisxProps) {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)   // hover highlight only
   const [activeArrow, setActiveArrow] = useState<ArrowInfo | null>(null)  // click → overlay
@@ -153,7 +170,7 @@ function TimelineChartVisx({
 
   const responsiveMargin = getTimelineChartResponsiveMargin(width)
   const innerWidth = Math.max(0, width - responsiveMargin.left - responsiveMargin.right)
-  const innerHeight = Math.max(0, height - responsiveMargin.top - responsiveMargin.bottom - BRUSH_HEIGHT)
+  const innerHeight = Math.max(0, height - responsiveMargin.top - responsiveMargin.bottom - (showBrush ? BRUSH_HEIGHT : 0))
 
   const isMobile = width < 600
   const axisLabelFontSize = isMobile ? 10 : 11
@@ -176,10 +193,52 @@ function TimelineChartVisx({
     [data, innerWidth]
   )
 
-  // Expand yDomain to fit overlay ticker lines when active
+  // Always-on benchmark overlay: anchored to the first data point's price
+  // and mapped to the main chart's y-scale (same trick as the click-fetched
+  // overlay ticker lines below). Lets the popup chart and the per-ticker
+  // page show ticker-vs-benchmark without first clicking a marker.
+  const benchmarkLine: TickerLine | null = useMemo(() => {
+    if (!benchmarkData || !benchmarkData.dates.length || data.length === 0) return null
+    const firstDataDate = data[0].date
+    const firstDataPrice = data[0].price
+    if (!firstDataPrice || firstDataPrice <= 0) return null
+    // Find the benchmark price at-or-after the data's first date.
+    const b0Idx = benchmarkData.dates.findIndex((d) => d >= firstDataDate)
+    if (b0Idx < 0) return null
+    const b0 = benchmarkData.prices[b0Idx]
+    if (!b0 || b0 <= 0) return null
+    const points = benchmarkData.dates
+      .slice(b0Idx)
+      .map((date, i) => {
+        const price = benchmarkData.prices[b0Idx + i]
+        if (!price || price <= 0) return null
+        return { date, mappedPrice: firstDataPrice * (price / b0) }
+      })
+      .filter((p): p is { date: string; mappedPrice: number } => p !== null)
+    if (points.length < 2) return null
+    const lastMapped = points[points.length - 1].mappedPrice
+    const pctChange = ((lastMapped - firstDataPrice) / firstDataPrice) * 100
+    return {
+      ticker: benchmarkData.ticker,
+      // Use a neutral grey for the always-on benchmark so it reads as
+      // "background reference" vs the saturated colours used for click-
+      // fetched overlay tickers.
+      color: '#94a3b8',
+      points,
+      pctChange,
+    }
+  }, [benchmarkData, data])
+
+  // All overlays = always-on benchmark + click-fetched ticker lines. They
+  // share the y-domain expansion logic and the line-end label rendering.
+  const allOverlayLines = useMemo(() => {
+    return benchmarkLine ? [benchmarkLine, ...tickerLines] : tickerLines
+  }, [benchmarkLine, tickerLines])
+
+  // Expand yDomain to fit overlay lines when active.
   const activeDomain = useMemo((): [number, number] => {
-    if (tickerLines.length === 0) return yDomain
-    const allMapped = tickerLines.flatMap((tl) => tl.points.map((p) => p.mappedPrice))
+    if (allOverlayLines.length === 0) return yDomain
+    const allMapped = allOverlayLines.flatMap((tl) => tl.points.map((p) => p.mappedPrice))
     if (!allMapped.length) return yDomain
     const minMapped = Math.min(...allMapped)
     const maxMapped = Math.max(...allMapped)
@@ -188,7 +247,7 @@ function TimelineChartVisx({
       Math.min(yDomain[0], minMapped - pad),
       Math.max(yDomain[1], maxMapped + pad),
     ]
-  }, [yDomain, tickerLines])
+  }, [yDomain, allOverlayLines])
 
   const priceScale = useMemo(
     () =>
@@ -322,7 +381,7 @@ function TimelineChartVisx({
   // an "Entries in range" list item below the chart). Finds the data point
   // that carries that action and opens the overlay for it.
   useEffect(() => {
-    if (!selectedActionId) return
+    if (!selectedActionId || disableMarkerClick) return
     // Don't reopen if we're already showing this action.
     if (activeArrow && activeArrow.key === `ext-${selectedActionId}`) return
     for (const pt of data) {
@@ -418,19 +477,24 @@ function TimelineChartVisx({
           <path d={linePath} fill="none" stroke={CHART_LINE_COLOR} strokeWidth={2}
             strokeLinejoin="round" strokeLinecap="round" />
 
-          {/* Ticker overlay lines — rendered on hover */}
-          {tickerLines.map((tl) => {
+          {/* Overlay lines — always-on benchmark (if `benchmarkData` was passed)
+              + click-fetched ticker lines. Same drawing for both. */}
+          {allOverlayLines.map((tl) => {
             if (tl.points.length < 2) return null
             const d = tl.points.map((p, i) => {
               const x = dateScale(new Date(p.date))
               const y = priceScale(p.mappedPrice)
               return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
             }).join(' ')
+            // Always-on benchmark gets a dashed stroke so it reads as
+            // "reference" vs the click-fetched solid overlays.
+            const isBenchmark = tl === benchmarkLine
             return (
               <path key={tl.ticker} d={d} fill="none"
-                stroke={tl.color} strokeWidth={2}
+                stroke={tl.color} strokeWidth={isBenchmark ? 1.5 : 2}
                 strokeLinejoin="round" strokeLinecap="round"
-                opacity={0.85}
+                strokeDasharray={isBenchmark ? '4 3' : undefined}
+                opacity={isBenchmark ? 0.7 : 0.85}
                 style={{ pointerEvents: 'none' }}
               />
             )
@@ -464,8 +528,9 @@ function TimelineChartVisx({
             )
           })()}
 
-          {/* Ticker end labels + solid % badge */}
-          {tickerLines.map((tl) => {
+          {/* Overlay end labels — one per overlay line. Same renderer for the
+              always-on benchmark and the click-fetched tickers. */}
+          {allOverlayLines.map((tl) => {
             if (tl.points.length === 0) return null
             const last = tl.points[tl.points.length - 1]
             const pct = tl.pctChange
@@ -476,8 +541,10 @@ function TimelineChartVisx({
             // Pin badge to right edge, clamped
             const badgeX = Math.min(innerWidth - badgeW - 2, Math.max(2, dateScale(new Date(last.date)) - badgeW / 2))
             const badgeY = priceScale(last.mappedPrice) - badgeH / 2
-            // Dark solid color: darken by mixing with black
-            const bgColor = pct >= 0 ? '#14532d' : '#7f1d1d'
+            // Dark solid color: darken by mixing with black. Benchmark stays
+            // neutral-dark since it's the reference, not a comparison result.
+            const isBenchmark = tl === benchmarkLine
+            const bgColor = isBenchmark ? '#1e293b' : pct >= 0 ? '#14532d' : '#7f1d1d'
             return (
               <g key={`label-${tl.ticker}`} style={{ pointerEvents: 'none' }}>
                 {/* Connector dot at line end */}
@@ -784,6 +851,10 @@ function TimelineChartVisx({
                     onClick={(e) => {
                       e.stopPropagation()
                       if (firstId) onSelectAction(firstId)
+                      // When the embedder asked us to skip the overlay
+                      // (popup uses an always-on benchmark instead), we
+                      // still propagate the selection but don't fetch.
+                      if (disableMarkerClick) return
                       if (isActive) { setActiveArrow(null); setTickerLines([]) }
                       else setActiveArrow({ point: repMarker.point, direction: dir, ticker: tickers.join(', '), tickers, count: totalCount, cx: avgCx, cy: anchorY, key: clusterKey })
                     }}
@@ -898,19 +969,22 @@ function TimelineChartVisx({
           }}
         />
 
-        {/* Brush */}
-        <Group left={responsiveMargin.left} top={height - responsiveMargin.bottom - BRUSH_HEIGHT}>
-          <path d={brushLinePath} fill="none" stroke={CHART_LINE_COLOR}
-            strokeWidth={1} opacity={0.5} strokeLinejoin="round" strokeLinecap="round" />
-          <Brush
-            xScale={brushDateScale} yScale={brushPriceScale}
-            width={innerWidth} height={BRUSH_HEIGHT}
-            margin={{ left: 0, right: 0, top: 0, bottom: 0 }}
-            handleSize={8} onChange={handleBrushChange} onClick={() => {}}
-            selectedBoxStyle={{ fill: 'rgba(59, 130, 246, 0.3)', stroke: '#3b82f6' }}
-            useWindowMoveEvents
-          />
-        </Group>
+        {/* Brush — hidden when `showBrush={false}` (popup / per-ticker
+            page have their own range controls and don't need this rail). */}
+        {showBrush && (
+          <Group left={responsiveMargin.left} top={height - responsiveMargin.bottom - BRUSH_HEIGHT}>
+            <path d={brushLinePath} fill="none" stroke={CHART_LINE_COLOR}
+              strokeWidth={1} opacity={0.5} strokeLinejoin="round" strokeLinecap="round" />
+            <Brush
+              xScale={brushDateScale} yScale={brushPriceScale}
+              width={innerWidth} height={BRUSH_HEIGHT}
+              margin={{ left: 0, right: 0, top: 0, bottom: 0 }}
+              handleSize={8} onChange={handleBrushChange} onClick={() => {}}
+              selectedBoxStyle={{ fill: 'rgba(59, 130, 246, 0.3)', stroke: '#3b82f6' }}
+              useWindowMoveEvents
+            />
+          </Group>
+        )}
       </svg>
 
       {/* Full-chart loading veil — instant feedback when an overlay is being

@@ -4,7 +4,7 @@
  * Auto-fits the date range to encompass all decisions, with padding.
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import {
@@ -15,12 +15,12 @@ import CloseIcon from '@mui/icons-material/Close'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import ShowChartIcon from '@mui/icons-material/ShowChart'
 import { useNavigate } from 'react-router-dom'
-import { scaleTime, scaleLinear } from '@visx/scale'
+import { ParentSize } from '@visx/responsive'
 import { listActions, type ActionWithEntry } from '../services/actionsService'
 import { fetchChartData, type ChartData } from '../services/chartApiService'
-import { getDecisionTypeColor, getChartCategory } from '../theme/decisionTypes'
+import { getChartCategory } from '../theme/decisionTypes'
 import DecisionChip from './DecisionChip'
-import { DecisionMarkerGradients, conePath } from './charts/decisionMarkers'
+import TimelineChartVisx, { type TimelineChartPoint } from './TimelineChartVisx'
 
 interface Props {
   ticker: string | null
@@ -28,7 +28,6 @@ interface Props {
 }
 
 const CHART_H = 380
-const M = { top: 20, right: 20, bottom: 32, left: 58 }
 const BENCHMARK = 'SPY'
 
 function addDays(date: string, n: number): string {
@@ -45,14 +44,6 @@ function fmtPrice(n: number): string {
   if (n >= 1000) return n.toFixed(0)
   if (n >= 100) return n.toFixed(1)
   return n.toFixed(2)
-}
-
-function fmtDateShort(d: Date): string {
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })
-}
-
-function fmtDateAxis(d: Date): string {
-  return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
 }
 
 function closestChartIndex(
@@ -78,10 +69,6 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
   const [benchChartRaw, setBenchChartRaw] = useState<ChartData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [cw, setCw] = useState(700)
-  // Tooltip: index into ticker chart
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null)
 
   // Fetch actions + chart data
   useEffect(() => {
@@ -92,7 +79,6 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
     setActions([])
     setTickerChartRaw(null)
     setBenchChartRaw(null)
-    setHoverIdx(null)
 
     ;(async () => {
       try {
@@ -130,17 +116,6 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
   }, [ticker])
 
   // Measure container width
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const ro = new ResizeObserver((entries) => {
-      const { width } = entries[0].contentRect
-      if (width > 0) setCw(Math.round(width))
-    })
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
   // Build paired price data
   const tickerPairs = useMemo(() => {
     if (!tickerChartRaw) return []
@@ -181,78 +156,46 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
     }
   }, [tickerPairs, benchPairs])
 
-  // Decision markers
-  const markers = useMemo(() => {
-    if (!tickerPairs.length || !normalised) return []
-    const tStart = tickerPairs[0].price
-    return actions.map((a) => {
+  // Build the data shape TimelineChartVisx wants: each price point may carry
+  // the decisions whose action_date matches it. Multiple decisions on the
+  // same price-day land on the same point and the chart's marker layer
+  // clusters / splits them automatically.
+  const chartData: TimelineChartPoint[] = useMemo(() => {
+    if (!tickerPairs.length) return []
+    const decisionsByDate = new Map<string, ActionWithEntry[]>()
+    for (const a of actions) {
       const idx = closestChartIndex(tickerPairs, a.action_date)
-      const p = tickerPairs[idx]
+      const date = tickerPairs[idx]?.date
+      if (!date) continue
+      const arr = decisionsByDate.get(date) ?? []
+      arr.push(a)
+      decisionsByDate.set(date, arr)
+    }
+    return tickerPairs.map((p) => {
+      const decs = decisionsByDate.get(p.date)
       return {
-        action: a,
         date: p.date,
-        idx,
-        pct: (p.price / tStart - 1) * 100,
         price: p.price,
-        category: getChartCategory(a.type),
-        color: getDecisionTypeColor(a.type),
+        decisions: decs?.map((a) => ({ action: a, type: getChartCategory(a.type) })),
       }
     })
-  }, [tickerPairs, normalised, actions])
+  }, [tickerPairs, actions])
 
-  // SVG geometry
-  const svg = useMemo(() => {
-    if (!normalised) return null
-    const innerW = Math.max(0, cw - M.left - M.right)
-    const innerH = Math.max(0, CHART_H - M.top - M.bottom)
-
-    const allDates = normalised.ticker.map((p) => new Date(p.date))
-    if (!allDates.length) return null
-    const xScale = scaleTime({
-      domain: [allDates[0], allDates[allDates.length - 1]],
-      range: [0, innerW],
-    })
-    const yScale = scaleLinear({
-      domain: [normalised.yMin, normalised.yMax],
-      range: [innerH, 0],
-    })
-
-    const toPath = (pts: { date: string; pct: number }[]) =>
-      pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(new Date(p.date))},${yScale(p.pct)}`).join(' ')
-
-    // Grid lines
-    const yRange = normalised.yMax - normalised.yMin
-    const yStep = yRange > 100 ? 25 : yRange > 40 ? 10 : 5
-    const yTicks: number[] = []
-    const yStart = Math.ceil(normalised.yMin / yStep) * yStep
-    for (let v = yStart; v <= normalised.yMax; v += yStep) yTicks.push(v)
-
-    const xCount = innerW > 500 ? 6 : innerW > 300 ? 4 : 3
-    const step = Math.max(1, Math.floor(allDates.length / xCount))
-    const xTicks = allDates.filter((_, i) => i % step === 0)
-
-    return { innerW, innerH, xScale, yScale, tPath: toPath(normalised.ticker), bPath: toPath(normalised.bench), zeroY: yScale(0), yTicks, xTicks }
-  }, [normalised, cw])
+  // Y-axis domain — raw price range with 5% padding above and below. The
+  // chart will further expand it to accommodate the benchmark overlay
+  // mapped onto the ticker's price scale.
+  const yDomain: [number, number] | null = useMemo(() => {
+    if (!tickerPairs.length) return null
+    const prices = tickerPairs.map((p) => p.price)
+    const lo = Math.min(...prices)
+    const hi = Math.max(...prices)
+    const span = hi - lo || 1
+    return [lo - span * 0.05, hi + span * 0.05]
+  }, [tickerPairs])
 
   const alpha = normalised ? normalised.finalTickerPct - normalised.finalBenchPct : 0
   const company = actions[0]?.company_name ?? ''
   const lastPrice = tickerPairs.length ? tickerPairs[tickerPairs.length - 1].price : null
-
-  // Hover handler
-  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!svg || !tickerPairs.length) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX - rect.left - M.left
-    const date = svg.xScale.invert(x)
-    const ms = date.getTime()
-    let bestIdx = 0
-    let bestDist = Infinity
-    for (let i = 0; i < tickerPairs.length; i++) {
-      const d = Math.abs(new Date(tickerPairs[i].date).getTime() - ms)
-      if (d < bestDist) { bestDist = d; bestIdx = i }
-    }
-    setHoverIdx(bestIdx)
-  }
 
   return (
     <Dialog
@@ -355,158 +298,32 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
               </Box>
             </Box>
 
-            {/* Chart */}
-            <Box ref={containerRef} sx={{ width: '100%', mb: 0.5, position: 'relative' }}>
-              <svg
-                width={cw}
-                height={CHART_H}
-                style={{ display: 'block', overflow: 'visible', cursor: 'crosshair' }}
-                onMouseMove={handleMouseMove}
-                onMouseLeave={() => setHoverIdx(null)}
-              >
-                {/* Shared cone gradient defs from charts/decisionMarkers, plus
-                    a chart-local clipPath so cones can't bleed past the plot. */}
-                <defs>
-                  <DecisionMarkerGradients idPrefix="quick" />
-                  <clipPath id="quick-plot-clip">
-                    <rect x={0} y={0} width={svg.innerW} height={svg.innerH} />
-                  </clipPath>
-                </defs>
-                <g transform={`translate(${M.left},${M.top})`}>
-                  {/* Grid lines */}
-                  {svg.yTicks.map((v) => (
-                    <line key={v} x1={0} x2={svg.innerW} y1={svg.yScale(v)} y2={svg.yScale(v)}
-                      stroke="#f1f5f9" strokeWidth={1} />
-                  ))}
-
-                  {/* Zero line */}
-                  {svg.zeroY >= 0 && svg.zeroY <= svg.innerH && (
-                    <line x1={0} x2={svg.innerW} y1={svg.zeroY} y2={svg.zeroY}
-                      stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 2" />
-                  )}
-
-                  {/* Y axis labels */}
-                  {svg.yTicks.map((v) => (
-                    <text key={v} x={-8} y={svg.yScale(v) + 4} textAnchor="end" fontSize={10} fill="#94a3b8">
-                      {fmtPct(v)}
-                    </text>
-                  ))}
-
-                  {/* X axis labels */}
-                  {svg.xTicks.map((d, i) => (
-                    <text key={i} x={svg.xScale(d)} y={svg.innerH + 18}
-                      textAnchor="middle" fontSize={10} fill="#94a3b8">
-                      {fmtDateAxis(d)}
-                    </text>
-                  ))}
-
-                  {/* Benchmark line */}
-                  <path d={svg.bPath} stroke="#cbd5e1" strokeWidth={1.5}
-                    strokeDasharray="6 3" fill="none" />
-
-                  {/* Ticker line */}
-                  <path d={svg.tPath} stroke="#1e40af" strokeWidth={2.5} fill="none" />
-
-                  {/* Decision markers — dot on the line + cone glow radiating
-                      up (buy) or down (sell). Same shape language as the
-                      timeline chart. Cones go in a clipped, multiply-blended
-                      group so overlapping cones darken/saturate. Dots render
-                      separately on top. */}
-                  <g clipPath="url(#quick-plot-clip)" style={{ pointerEvents: 'none', mixBlendMode: 'multiply' }}>
-                    {markers.map((m, i) => {
-                      const cx = svg.xScale(new Date(m.date))
-                      const cy = svg.yScale(m.pct)
-                      const dir = m.category === 'buy' ? 'buy' : 'sell'
-                      return (
-                        <path
-                          key={`cone-${i}`}
-                          d={conePath(cx, cy, dir)}
-                          fill={`url(#quick-${dir}-glow)`}
-                          opacity={0.85}
-                        />
-                      )
-                    })}
-                  </g>
-                  {markers.map((m, i) => {
-                    const cx = svg.xScale(new Date(m.date))
-                    const cy = svg.yScale(m.pct)
-                    return (
-                      <circle
-                        key={`dot-${i}`}
-                        cx={cx} cy={cy} r={4}
-                        fill={m.color}
-                        stroke="#fff"
-                        strokeWidth={1}
-                      />
-                    )
-                  })}
-
-                  {/* Crosshair on hover */}
-                  {hoverIdx != null && normalised && (
-                    (() => {
-                      const pt = normalised.ticker[hoverIdx]
-                      if (!pt) return null
-                      const hx = svg.xScale(new Date(pt.date))
-                      const hy = svg.yScale(pt.pct)
-                      return (
-                        <g>
-                          <line x1={hx} x2={hx} y1={0} y2={svg.innerH}
-                            stroke="#94a3b8" strokeWidth={1} strokeDasharray="3 2" />
-                          <circle cx={hx} cy={hy} r={4} fill="#1e40af" stroke="#fff" strokeWidth={2} />
-                        </g>
-                      )
-                    })()
-                  )}
-                </g>
-              </svg>
-
-              {/* Hover tooltip */}
-              {hoverIdx != null && tickerPairs[hoverIdx] && normalised && (
-                <Box sx={{
-                  position: 'absolute',
-                  top: 4,
-                  right: 8,
-                  bgcolor: 'rgba(255,255,255,0.92)',
-                  backdropFilter: 'blur(4px)',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  px: 1.5,
-                  py: 0.5,
-                  pointerEvents: 'none',
-                }}>
-                  <Typography variant="caption" color="text.secondary">
-                    {fmtDateShort(new Date(tickerPairs[hoverIdx].date))}
-                  </Typography>
-                  <Typography variant="body2" fontWeight={700}>
-                    {fmtPrice(tickerPairs[hoverIdx].price)}{' '}
-                    <Typography component="span" variant="caption"
-                      sx={{ color: normalised.ticker[hoverIdx].pct >= 0 ? '#16a34a' : '#dc2626' }}>
-                      {fmtPct(normalised.ticker[hoverIdx].pct)}
-                    </Typography>
-                  </Typography>
-                </Box>
+            {/* Chart — same TimelineChartVisx as /timeline, just with the
+                brush hidden, the click-overlay disabled (we always show the
+                benchmark, no need to fetch others), and benchmark passed in
+                as data so it appears as a dashed grey overlay line. */}
+            <Box sx={{ width: '100%', height: CHART_H, mb: 0.5, position: 'relative' }}>
+              {yDomain && chartData.length > 0 && (
+                <ParentSize>
+                  {({ width: pw, height: ph }) => (pw > 10 && ph > 10) ? (
+                    <TimelineChartVisx
+                      data={chartData}
+                      symbol={ticker ?? ''}
+                      yDomain={yDomain}
+                      width={pw}
+                      height={ph}
+                      selectedActionId={null}
+                      selectedTicker={null}
+                      onSelectAction={() => { /* popup doesn't track selection */ }}
+                      onChartClick={() => { /* popup doesn't track background clicks */ }}
+                      onMouseLeave={() => { /* popup has no list to clear */ }}
+                      showBrush={false}
+                      benchmarkData={benchChartRaw ? { ticker: BENCHMARK, dates: benchChartRaw.dates, prices: benchChartRaw.prices } : null}
+                      disableMarkerClick
+                    />
+                  ) : null}
+                </ParentSize>
               )}
-            </Box>
-
-            {/* Legend */}
-            <Box sx={{ display: 'flex', gap: 2, mb: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Box sx={{ width: 18, height: 3, bgcolor: '#1e40af', borderRadius: 1 }} />
-                <Typography variant="caption" color="text.secondary">${ticker}</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <svg width={18} height={8}><line x1={0} y1={4} x2={18} y2={4} stroke="#cbd5e1" strokeWidth={1.5} strokeDasharray="4 2" /></svg>
-                <Typography variant="caption" color="text.secondary">S&P 500</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <svg width={12} height={12}><circle cx={6} cy={6} r={4} fill="#16a34a" stroke="#fff" strokeWidth={1} /></svg>
-                <Typography variant="caption" color="text.secondary">Buy</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <svg width={12} height={12}><circle cx={6} cy={6} r={4} fill="#dc2626" stroke="#fff" strokeWidth={1} /></svg>
-                <Typography variant="caption" color="text.secondary">Sell</Typography>
-              </Box>
             </Box>
 
             {/* Decision list */}
