@@ -43,5 +43,28 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(url),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(key),
     },
+    build: {
+      // Split heavy vendor libs into their own chunks so:
+      //  - the main bundle (was 1.4MB → ~1MB) gets smaller and parses faster
+      //  - pages that don't touch a chunk skip downloading it (Insights is
+      //    the only Recharts consumer; Tickers/Trades are the only DataGrid
+      //    consumers; the per-ticker page is the only @visx consumer chain)
+      //  - the chunks are cacheable across deploys when their deps don't move
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            recharts: ['recharts'],
+            'mui-data-grid': ['@mui/x-data-grid'],
+            visx: [
+              '@visx/axis', '@visx/brush', '@visx/curve', '@visx/event',
+              '@visx/gradient', '@visx/grid', '@visx/group', '@visx/responsive',
+              '@visx/scale', '@visx/shape', '@visx/tooltip',
+            ],
+            // Bucket the framework runtime so route changes don't re-download it.
+            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          },
+        },
+      },
+    },
   }
 })
