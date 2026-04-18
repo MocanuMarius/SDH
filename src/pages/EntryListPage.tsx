@@ -530,7 +530,8 @@ export default function EntryListPage() {
 
   // ─── react-query: shared cache, auto-refetches when entries change anywhere ──
   const entriesQ = useEntriesWithActions({ search: debouncedSearch || undefined, limit: pageSize, hideAutomated })
-  const entries: EntryWithActions[] = entriesQ.data ?? []
+  // Stable reference for downstream useMemos.
+  const entries: EntryWithActions[] = useMemo(() => entriesQ.data ?? [], [entriesQ.data])
   const loading = entriesQ.isLoading
   // Surface query errors via the existing alert
   useEffect(() => {

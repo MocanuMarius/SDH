@@ -66,7 +66,8 @@ export default function EntryDetailPage() {
   // ─── Server data via react-query (auto-refreshes after mutations elsewhere) ───
   const entryQ = useEntry(id)
   const actionsQ = useActionsByEntry(id)
-  const actions = actionsQ.data ?? []
+  // Stable reference for downstream useMemos.
+  const actions = useMemo(() => actionsQ.data ?? [], [actionsQ.data])
   const outcomesQ = useOutcomesByActionIds(actions.map((a) => a.id))
   const outcomesByActionId = useMemo(() => {
     const map: Record<string, Outcome> = {}

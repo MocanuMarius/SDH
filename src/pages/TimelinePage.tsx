@@ -124,7 +124,10 @@ export default function TimelinePage() {
   // Actions live in the shared react-query cache. Auto-refreshes when added/edited
   // anywhere else in the app (entry detail, /trades, etc.).
   const actionsQ = useActions({ limit: 500 })
-  const actions: ActionWithEntry[] = actionsQ.data ?? []
+  // Stable reference: `?? []` would mint a fresh array every render and bust
+  // every downstream useMemo that depends on `actions`. Wrapping makes the
+  // empty-state array reused.
+  const actions: ActionWithEntry[] = useMemo(() => actionsQ.data ?? [], [actionsQ.data])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)

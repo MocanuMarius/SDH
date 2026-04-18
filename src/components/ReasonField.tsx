@@ -67,6 +67,11 @@ export default function ReasonField({
     return () => { cancelled = true }
   }, [])
 
+  // `presetsVersion` is intentionally a dep even though it's not used in the
+  // body — `getReasonPresets()` reads from localStorage which is outside
+  // React's reactive scope. Bumping the version forces re-evaluation when a
+  // preset is added/removed elsewhere.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const presets = useMemo(() => getReasonPresets().map((p) => p.label), [presetsVersion])
 
   const options = useMemo(() => {
@@ -80,6 +85,8 @@ export default function ReasonField({
       return [...sorted, SAVE_PRESET_KEY]
     }
     return sorted
+    // presetsVersion intentional, see comment above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recentReasons, presetsVersion, value, presets])
 
   const handleChange = (_: unknown, v: string | null) => {

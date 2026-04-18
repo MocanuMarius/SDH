@@ -57,7 +57,8 @@ export default function IdeasPage() {
     // Standalone actions (entry_id null) can never be from an automated entry — keep them.
     return all.filter((act) => act.entry_id == null || !autoIds.has(act.entry_id))
   }, [actionsQ.data, entriesQ.data])
-  const passedList = passedQ.data ?? []
+  // Stable reference for downstream useMemos.
+  const passedList = useMemo(() => passedQ.data ?? [], [passedQ.data])
 
   const ideas = useMemo(() => {
     const byCompany: Record<string, {

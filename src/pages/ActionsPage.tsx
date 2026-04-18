@@ -71,7 +71,8 @@ export default function ActionsPage() {
 
   const normalizedTickerFilter = tickerFilter.trim() ? normalizeTicker(tickerFilter.trim()) : undefined
   const actionsQ = useActions({ type: typeFilter || undefined, ticker: normalizedTickerFilter, limit: 500 })
-  const actions: ActionWithEntry[] = actionsQ.data ?? []
+  // Stable reference for downstream useMemos.
+  const actions: ActionWithEntry[] = useMemo(() => actionsQ.data ?? [], [actionsQ.data])
   const outcomesQ = useOutcomesByActionIds(actions.map((a) => a.id))
   const outcomesByActionId = useMemo(() => {
     const map: Record<string, Outcome> = {}

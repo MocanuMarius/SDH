@@ -80,8 +80,10 @@ export default function InsightsPage() {
   const actionsQ = useActions({ limit: 10000 })
   const outcomesQ = useOutcomes()
   const passedQ = usePassed()
-  const entries = entriesQ.data ?? []
-  const rawActions = actionsQ.data ?? []
+  // Stable references for downstream useMemos / useEffects.
+  const entries = useMemo(() => entriesQ.data ?? [], [entriesQ.data])
+  const rawActions = useMemo(() => actionsQ.data ?? [], [actionsQ.data])
+  const passedList = useMemo(() => passedQ.data ?? [], [passedQ.data])
   // Stats exclude:
   //   - actions on automated/IBKR-imported entries (tags "Automated" / "IBKR"
   //     or author "IBKR") — kept for raw data preservation, not analysis
@@ -98,8 +100,7 @@ export default function InsightsPage() {
     ),
     [rawActions, autoEntryIdSet]
   )
-  const outcomes = outcomesQ.data ?? []
-  const passedList = passedQ.data ?? []
+  const outcomes = useMemo(() => outcomesQ.data ?? [], [outcomesQ.data])
   const passedTickers = useMemo(
     () => new Set(passedList.map((x) => normalizeTickerToCompany(x.ticker))),
     [passedList]
