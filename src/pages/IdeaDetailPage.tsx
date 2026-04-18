@@ -16,21 +16,23 @@ import {
   TableHead,
   TableRow,
   Button,
+  IconButton,
   Link,
   Breadcrumbs,
   Stack,
 } from '@mui/material'
 import TimelineIcon from '@mui/icons-material/Timeline'
-import AddIcon from '@mui/icons-material/Add'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import ValuationWidget from '../components/ValuationWidget'
 import { type ActionWithEntry } from '../services/actionsService'
 import { fetchChartData } from '../services/chartApiService'
 import { useActions, useInvalidate } from '../hooks/queries'
 import { useAuth } from '../contexts/AuthContext'
 import { useSnackbar } from '../contexts/SnackbarContext'
-import { createAction } from '../services/actionsService'
+import { createAction, updateAction } from '../services/actionsService'
 import { ensurePassedForUser } from '../services/passedService'
 import ActionFormDialog from '../components/ActionFormDialog'
+import InlineDecisionBar from '../components/InlineDecisionBar'
 import TickerLinks from '../components/TickerLinks'
 import TickerTimelineChart from '../components/TickerTimelineChart'
 import RelativeDate from '../components/RelativeDate'
@@ -90,6 +92,10 @@ export default function IdeaDetailPage() {
   const [chartError, setChartError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [logDecisionOpen, setLogDecisionOpen] = useState(false)
+  // ✏️ on a decision row → opens the same ActionFormDialog in edit mode.
+  // When non-null we route the dialog's onSubmit to updateAction(id, ...)
+  // instead of createAction(...).
+  const [editingAction, setEditingAction] = useState<ActionWithEntry | null>(null)
   const [counterfactual, setCounterfactual] = useState<{
     totalReturnPct: number | null
     hypotheticalEnd: number | null
@@ -234,16 +240,48 @@ export default function IdeaDetailPage() {
           const latest = [...actions].sort((a, b) => (b.action_date || '').localeCompare(a.action_date || ''))[0]
           return <StatusChip kind={statusFromLatestActionType(latest.type)} />
         })()}
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={() => setLogDecisionOpen(true)}
-          sx={{ ml: 'auto' }}
-        >
-          Log decision
-        </Button>
       </Box>
+
+      {/* Inline log-decision bar — newspaper-tape strip that lets the user
+          log a decision without opening a modal. Pre-fills the ticker, uses
+          the latest known price as the default. The "+ details" icon opens
+          the full ActionFormDialog for date/notes/kill-criteria editing. */}
+      <InlineDecisionBar
+        ticker={decodedTicker}
+        companyName={company}
+        currentPrice={chartData?.prices?.[chartData.prices.length - 1] ?? null}
+        onLog={async ({ type, reason, size, price, currency }) => {
+          if (!user?.id) return
+          await createAction({
+            user_id: user.id,
+            entry_id: null,
+            type,
+            ticker: decodedTicker.toUpperCase(),
+            company_name: company || null,
+            action_date: new Date().toISOString().slice(0, 10),
+            price,
+            currency: currency || null,
+            shares: null,
+            reason,
+            notes: '',
+            kill_criteria: null,
+            pre_mortem_text: null,
+            size,
+            raw_snippet: null,
+          })
+          if (type === 'pass') {
+            await ensurePassedForUser(user.id, decodedTicker, {
+              passed_date: new Date().toISOString().slice(0, 10),
+              reason,
+              notes: '',
+            })
+            invalidate.passed()
+          }
+          invalidate.actions()
+          showSuccess('Decision logged')
+        }}
+        onWantDetails={() => setLogDecisionOpen(true)}
+      />
       {actions.length > 0 && (() => {
         const sortedAsc = [...actions].sort((a, b) => (a.action_date || '').localeCompare(b.action_date || ''))
         const first = sortedAsc[0].action_date
@@ -407,6 +445,15 @@ export default function IdeaDetailPage() {
                       <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
                         <RelativeDate date={a.action_date} variant="caption" sx={{ color: 'inherit' }} />
                       </Typography>
+                      {/* Edit pencil — opens ActionFormDialog in edit mode. */}
+                      <IconButton
+                        size="small"
+                        onClick={() => setEditingAction(a)}
+                        aria-label="Edit decision"
+                        sx={{ p: 0.25, color: 'text.secondary' }}
+                      >
+                        <EditOutlinedIcon fontSize="small" />
+                      </IconButton>
                     </Box>
                     {a.reason && (
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
@@ -441,6 +488,7 @@ export default function IdeaDetailPage() {
                   <TableCell>Price</TableCell>
                   <TableCell>Reason</TableCell>
                   <TableCell>Entry</TableCell>
+                  <TableCell sx={{ width: 36 }} />
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -452,7 +500,7 @@ export default function IdeaDetailPage() {
                     <Fragment key={a.id}>
                       {topPill && (
                         <TableRow sx={{ '& td': { borderBottom: 'none', py: 0 } }}>
-                          <TableCell colSpan={6} sx={{ p: 0, pt: 0.5, pb: 0.5, px: 1 }}>
+                          <TableCell colSpan={7} sx={{ p: 0, pt: 0.5, pb: 0.5, px: 1 }}>
                             {topPill}
                           </TableCell>
                         </TableRow>
@@ -486,10 +534,20 @@ export default function IdeaDetailPage() {
                             '—'
                           )}
                         </TableCell>
+                        <TableCell sx={{ p: 0.5 }}>
+                          <IconButton
+                            size="small"
+                            onClick={() => setEditingAction(a)}
+                            aria-label="Edit decision"
+                            sx={{ color: 'text.secondary' }}
+                          >
+                            <EditOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
                       </TableRow>
                       {between && (
                         <TableRow sx={{ '& td': { borderBottom: 'none', py: 0 } }}>
-                          <TableCell colSpan={6} sx={{ p: 0, pt: 0.25, pb: 0.5, px: 1 }}>
+                          <TableCell colSpan={7} sx={{ p: 0, pt: 0.25, pb: 0.5, px: 1 }}>
                             {between}
                           </TableCell>
                         </TableRow>
@@ -503,14 +561,43 @@ export default function IdeaDetailPage() {
         )
       })()}
 
-      {/* Standalone log-decision for this ticker — creates an `actions` row
-          with no entry_id, pre-filled with the current ticker. */}
+      {/* ActionFormDialog — used for two distinct flows on this page:
+          1. Log a new decision with the full set of fields (date, notes,
+             kill criteria, pre-mortem). Triggered by the "+ details" icon
+             on the inline bar. Initial values are seeded from the ticker.
+          2. Edit an existing decision (the ✏️ on each row). When
+             `editingAction` is set we pre-fill ALL of its current values
+             and route onSubmit through `updateAction(id, ...)` instead of
+             `createAction(...)`. Same dialog, two intents — keeps the form
+             schema in one place. */}
       <ActionFormDialog
-        open={logDecisionOpen}
-        onClose={() => setLogDecisionOpen(false)}
-        initial={{ ticker: decodedTicker, company_name: company }}
+        open={logDecisionOpen || editingAction !== null}
+        onClose={() => { setLogDecisionOpen(false); setEditingAction(null) }}
+        initial={editingAction ?? { ticker: decodedTicker, company_name: company }}
         onSubmit={async (data) => {
           if (!user?.id || !data.ticker?.trim()) return
+          if (editingAction) {
+            // ── Edit path ──────────────────────────────────────────────
+            await updateAction(editingAction.id, {
+              type: data.type,
+              ticker: data.ticker.trim().toUpperCase(),
+              company_name: data.company_name || null,
+              action_date: data.action_date,
+              price: data.price,
+              currency: data.currency || null,
+              shares: data.shares,
+              reason: data.reason,
+              notes: data.notes,
+              kill_criteria: data.kill_criteria || null,
+              pre_mortem_text: data.pre_mortem_text || null,
+              size: data.size,
+            })
+            invalidate.actions()
+            setEditingAction(null)
+            showSuccess('Decision updated')
+            return
+          }
+          // ── Create path ────────────────────────────────────────────
           await createAction({
             user_id: user.id,
             entry_id: null,
@@ -537,6 +624,7 @@ export default function IdeaDetailPage() {
             invalidate.passed()
           }
           invalidate.actions()
+          setLogDecisionOpen(false)
           showSuccess('Decision logged')
         }}
       />
