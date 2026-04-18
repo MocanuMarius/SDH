@@ -242,11 +242,15 @@ export default function TimelinePage() {
 
   // Benchmark changes (e.g. SPY → QQQ) invalidate any saved zoom indices
   // because they refer to a different dataset — clear them when the
-  // symbol flips. `range` is deliberately NOT in this dep array: range-
-  // click handlers already clear zoom explicitly, and including `range`
-  // here would wipe the URL-deep-linked zoom on initial mount, right
-  // after the hook read it.
+  // symbol flips. Skip the first run so a URL-deep-linked zoom isn't
+  // clobbered on mount. `range` is deliberately NOT in this dep array:
+  // range-click handlers already clear zoom explicitly.
+  const hasMountedSymbolResetRef = useRef(false)
   useEffect(() => {
+    if (!hasMountedSymbolResetRef.current) {
+      hasMountedSymbolResetRef.current = true
+      return
+    }
     setZoomRange(null)
     setMeasureSelection(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
