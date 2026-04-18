@@ -31,44 +31,6 @@ that contradict an earlier choice.
 
 ## Upcoming — in the order we plan to tackle them
 
-### 1. Smarter cluster-threshold algorithm on the Timeline chart
-
-**Why.** The current threshold (`DOT_R * 4 + 8`) is a naive single-pass
-sweep that merges adjacent markers any time their x-distance is less
-than the threshold. Because it's greedy from left-to-right, a run of
-N dates each ~15 px apart folds into ONE cluster — even when the total
-span is 400 px wide and the points would comfortably fit individually.
-Result: far fewer visible decisions than the screen has room for.
-
-**Scope.**
-- Replace the greedy sweep with an algorithm that maximises "separate
-  visible points", subject to the constraint that no two shown dots are
-  closer than the threshold.
-- A natural way: start by keeping every candidate point, then
-  iteratively merge the *tightest* pair (closest in x) until all
-  remaining pairs exceed the threshold. That minimises the merging
-  locally rather than globally.
-- Alternative framing (simpler to implement): run the sweep, but after
-  each candidate merge, measure the resulting cluster's x-extent and
-  check whether ANOTHER solution (split one of its edges into its own
-  dot) would still satisfy the threshold. If yes, take the split.
-- Drop the multiplier back to something slightly above `DOT_R*2` (~14 px)
-  so the algorithm has room to be smarter without visually overlapping
-  dots.
-- Preserve cluster dot sizing (sqrt(count)) + count label.
-- Preserve cluster-click zoom behaviour.
-
-**Open questions.**
-- Does the algorithm need to respect "clusters must be contiguous in
-  time"? Yes — a cluster is always a run of adjacent dates, not a set
-  of scattered points.
-- What's the complexity budget? N ≤ ~96 points per chart, so O(N²) is
-  fine.
-
-**Status.** todo
-
----
-
 ### 2. React Compiler + framework audit
 
 **Why.** The app has grown — bundle is ~900 KB raw and the component

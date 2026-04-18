@@ -621,15 +621,12 @@ function TimelineChartVisx({
               interference" effect that reads as "more activity here".
               Per-cluster hit rectangles drive click/hover. */}
           {(() => {
-            // Cluster threshold — wider than a pure "dots-touching" check
-            // so nearby markers combine into meaningful clusters before they
-            // actually collide. 2× the old tight spacing (~12px → ~24px on
-            // desktop, ~11px → ~22px on mobile) — dates within a rough
-            // fortnight of each other now merge into one cluster dot. Tap
-            // reliability still comes from the merged dot growing with
-            // sqrt(count); the extra width just reduces visual overlap and
-            // surfaces the cluster-zoom affordance earlier.
-            const MIN_GAP = DOT_R * 4 + 8
+            // Cluster threshold — slightly above the "dots would touch"
+            // check. Small enough that the smart-merge algorithm below can
+            // actually keep most markers separate; big enough that when two
+            // dots land within each other's personal space, they still get
+            // merged into a tappable cluster.
+            const MIN_GAP = DOT_R * 2 + 6
 
             interface Marker {
               cx: number; priceY: number; point: TimelineChartPoint
@@ -688,18 +685,66 @@ function TimelineChartVisx({
               }]
             })
 
-            function clusterDir(dir: 'buy' | 'sell') {
+            /**
+             * Smart clustering — maximise the number of visible points
+             * subject to the constraint that no two adjacent cluster
+             * centroids are closer than MIN_GAP pixels.
+             *
+             * The old greedy left-to-right sweep would fold an entire
+             * chain of 12px-apart dots into ONE cluster, even when the
+             * total span was 400px wide. That under-used the available
+             * horizontal room dramatically.
+             *
+             * New algorithm: start with every marker as its own cluster,
+             * then repeatedly merge the TIGHTEST adjacent pair (smallest
+             * centroid gap) until every remaining gap ≥ MIN_GAP. This is
+             * equivalent to hierarchical clustering with a distance
+             * threshold — it leaves as many points separate as the
+             * threshold allows, and only merges the points that really
+             * need merging.
+             *
+             * Complexity: O(N²) worst case, N ≤ ~96 per chart → trivial.
+             */
+            function clusterDir(dir: 'buy' | 'sell'): Marker[][] {
               const relevant = markers.filter((m) => (dir === 'buy' ? m.buyCount : m.sellCount) > 0)
               if (!relevant.length) return []
+              // Sort by x so cluster indices align with time order — a
+              // cluster is always a contiguous run of adjacent dates.
               const sorted = [...relevant].sort((a, b) => a.cx - b.cx)
-              const groups: Marker[][] = []
-              let cur = [sorted[0]]
-              for (let i = 1; i < sorted.length; i++) {
-                if (sorted[i].cx - cur[cur.length - 1].cx < MIN_GAP) cur.push(sorted[i])
-                else { groups.push(cur); cur = [sorted[i]] }
+              // Each cluster tracks its members + their avg cx (centroid).
+              const clusters: { members: Marker[]; avgCx: number }[] = sorted.map((m) => ({
+                members: [m],
+                avgCx: m.cx,
+              }))
+
+              // Merge the tightest adjacent pair until all gaps clear.
+              // Bounded by `clusters.length` iterations since each merge
+              // reduces the count by one.
+              while (clusters.length > 1) {
+                let tightestIdx = -1
+                let tightestGap = MIN_GAP
+                for (let i = 0; i < clusters.length - 1; i++) {
+                  const gap = clusters[i + 1].avgCx - clusters[i].avgCx
+                  if (gap < tightestGap) {
+                    tightestGap = gap
+                    tightestIdx = i
+                  }
+                }
+                if (tightestIdx === -1) break
+                // Merge tightestIdx + (tightestIdx+1). New centroid =
+                // weighted average (by member count) of the two.
+                const a = clusters[tightestIdx]
+                const b = clusters[tightestIdx + 1]
+                const merged: { members: Marker[]; avgCx: number } = {
+                  members: [...a.members, ...b.members],
+                  avgCx:
+                    (a.avgCx * a.members.length + b.avgCx * b.members.length) /
+                    (a.members.length + b.members.length),
+                }
+                clusters.splice(tightestIdx, 2, merged)
               }
-              groups.push(cur)
-              return groups
+
+              return clusters.map((c) => c.members)
             }
 
             const buyGroups = clusterDir('buy')
