@@ -15,6 +15,7 @@
     "dev:api": "node scripts/serve-chart-api.js",
     "import:data": "node scripts/import-journalytic-ibkr.js",
     "backfill:titles": "node scripts/backfill-untitled-entry-titles.js",
+    "strip:legacy-markdown": "node scripts/strip-legacy-markdown.js",
     "parse:ibkr": "node scripts/parse-ibkr-activity-html.js",
     "seed:outcomes-from-ibkr": "node scripts/seed-outcomes-from-ibkr.js",
     "sync:ibkr": "node scripts/sync-ibkr.js",
@@ -43,7 +44,6 @@
     "motion": "^12.38.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.1",
     "recharts": "^3.7.0",
     "vite-plugin-node-polyfills": "^0.26.0"

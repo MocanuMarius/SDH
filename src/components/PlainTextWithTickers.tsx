@@ -93,7 +93,14 @@ export default function PlainTextWithTickers({
 }: PlainTextWithTickersProps) {
   if (!source || !source.trim()) return null
 
-  // Quietly clean legacy markdown markers so old content reads as clean prose.
+  // Defensive: quietly strip any legacy markdown markers (`**`, `#`, `>`,
+  // bullets) at render time so historical entries read as clean prose
+  // even if they predate the strip-on-save in EntryFormPage.
+  //
+  // This call is REMOVABLE once `npm run strip:legacy-markdown` has been
+  // run against the live database — at that point every row is clean and
+  // the strip-on-save keeps it that way. Drop this call and the
+  // `stripLegacyMarkdown` import in a follow-up commit when ready.
   const cleaned = stripLegacyMarkdown(source)
 
   if (inline) {
