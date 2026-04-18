@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Box,
+  Typography,
   DialogTitle,
   DialogContent,
   Button,
