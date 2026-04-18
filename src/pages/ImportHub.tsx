@@ -23,11 +23,7 @@ export default function ImportHub() {
 
   return (
     <Box>
-      <PageHeader
-        title="Import"
-        dek="Bring in decisions and transactions from outside sources — IBKR, CSV exports, etc."
-        dense
-      />
+      <PageHeader title="Import" dense />
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v)}

@@ -16,8 +16,6 @@ import {
   ListItemText,
   Checkbox,
   Link,
-  List,
-  ListItemButton,
   TextField,
 } from '@mui/material'
 import { ParentSize } from '@visx/responsive'
@@ -115,7 +113,9 @@ const BENCHMARK_OPTIONS: { symbol: string; label: string }[] = [
 export default function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const symbolParam = searchParams.get('symbol')?.trim()?.toUpperCase() || searchParams.get('symbol') || 'SPY'
-  const [range, setRange] = useState<ChartRange>('1y')
+  // Default to 6 months — short enough that decisions don't clump too tightly
+  // on mobile, long enough to see meaningful trend.
+  const [range, setRange] = useState<ChartRange>('6m')
   const [chartData, setChartData] = useState<{ date: string; price: number }[]>([])
   const [symbol, setSymbol] = useState(symbolParam)
   // Range selector date inputs — synced from zoomRange; user edits trigger applyDateRange
@@ -724,15 +724,14 @@ export default function TimelinePage() {
       <PageHeader
         title={
           <>
-            Timeline <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>· {symbol}</Box>
-          </>
-        }
-        dek={
-          <>
-            All your decisions plotted against a benchmark — zoom, overlay other tickers,
-            step through with arrow keys. For one ticker's own chart, counterfactuals and
-            decision deltas, open its{' '}
-            <Link component={RouterLink} to="/tickers" underline="hover">Ticker page</Link>.
+            Timeline
+            <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+              {' · '}
+              {/* Resolve the benchmark symbol → friendly label (e.g. "S&P 500"
+                  for SPY). When the user is viewing a non-benchmark ticker,
+                  fall back to the raw symbol. */}
+              {BENCHMARK_OPTIONS.find((b) => b.symbol === symbol.toUpperCase())?.label ?? symbol}
+            </Box>
           </>
         }
         dense
@@ -962,6 +961,19 @@ export default function TimelinePage() {
                       onChartClick={handleChartBackgroundClick}
                       onMouseLeave={handleChartMouseLeave}
                       onBrushChange={(start, end) => setMeasureSelection({ startIndex: start, endIndex: end })}
+                      onClusterZoom={(localStart, localEnd) => {
+                        // The chart's `data` prop is already the visible
+                        // slice (chartDisplayData). Translate the slice-
+                        // local indices back to mergedChartData indices
+                        // before applying as the new zoom window.
+                        const offset = zoomRange?.startIndex ?? 0
+                        const globalStart = offset + localStart
+                        const globalEnd = offset + localEnd
+                        if (globalEnd > globalStart) {
+                          setZoomRange({ startIndex: globalStart, endIndex: globalEnd })
+                          setMeasureSelection(null)
+                        }
+                      }}
                     />
                   ) : null
                 }
@@ -1028,43 +1040,15 @@ export default function TimelinePage() {
               )
             })()}
           </Box>
-          {/* spacing after chart */}
+          {/* Decisions in range — newspaper-style date sections so the user
+              can scan "what happened on each day" instead of an undifferentiated
+              flat list. Click a row to highlight that decision on the chart. */}
           {chartFilteredActions.length > 0 && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="subtitle2" fontWeight={600} color="text.secondary" sx={{ mb: 1 }}>
-                Entries in range ({chartFilteredActions.length})
-              </Typography>
-              <List dense disablePadding sx={{ maxHeight: 220, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                {[...chartFilteredActions]
-                  .sort((a, b) => (b.action_date || '').localeCompare(a.action_date || ''))
-                  .map((a) => (
-                    <ListItemButton
-                      key={a.id}
-                      selected={selectedActionId === a.id}
-                      onClick={() => setSelectedActionId(a.id)}
-                      sx={{ py: 0.5 }}
-                    >
-                      <ListItemText
-                        primary={
-                          <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-                            <DecisionChip type={a.type} size="small" />
-                            <Typography variant="body2" component="span">{getTickerDisplayLabel(a.ticker) || (a.ticker ? `$${a.ticker}` : '')}</Typography>
-                            <OptionTypeChip ticker={a.ticker} />
-                            {a.price && (
-                              <Typography variant="caption" color="text.secondary" component="span">
-                                ${a.price}
-                              </Typography>
-                            )}
-                          </Box>
-                        }
-                        secondary={
-                          <RelativeDate date={a.action_date} variant="caption" sx={{ color: 'text.secondary' }} />
-                        }
-                      />
-                    </ListItemButton>
-                  ))}
-              </List>
-            </Box>
+            <DecisionsInRange
+              actions={chartFilteredActions}
+              selectedActionId={selectedActionId}
+              onSelect={setSelectedActionId}
+            />
           )}
           {/* Decision legend chips — compact, no text */}
           {(chartFilteredActions.length > 0 || actionsInRange.length > 0) && (
@@ -1107,6 +1091,172 @@ export default function TimelinePage() {
         </Paper>
       )}
 
+    </Box>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DecisionsInRange — a newspaper-style "what happened on each day" list under
+// the chart. Replaces a flat dense list with date-section grouping so the
+// user can scan by day. Each row is a decision: type chip, ticker, optional
+// price, and a 1-line reason snippet. Clicking a row selects it on the chart.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function formatDayHeader(dateStr: string): string {
+  if (!dateStr) return '—'
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return dateStr
+  // e.g. "Mon, Apr 14 · '26"
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: '2-digit' })
+}
+
+function DecisionsInRange({
+  actions,
+  selectedActionId,
+  onSelect,
+}: {
+  actions: ActionWithEntry[]
+  selectedActionId: string | null
+  onSelect: (id: string | null) => void
+}) {
+  // Group by action_date, newest first. Each group keeps the original
+  // sorted-by-id order (decision order within a day is rarely meaningful;
+  // alphabetical-by-ticker would be misleading).
+  const groups = useMemo(() => {
+    const byDate = new Map<string, ActionWithEntry[]>()
+    for (const a of actions) {
+      const key = (a.action_date || '').slice(0, 10) || 'unknown'
+      const arr = byDate.get(key) ?? []
+      arr.push(a)
+      byDate.set(key, arr)
+    }
+    return [...byDate.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([date, items]) => ({ date, items }))
+  }, [actions])
+
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Typography
+        variant="overline"
+        sx={{ display: 'block', mb: 0.5, color: 'text.secondary', letterSpacing: '0.15em', fontWeight: 700 }}
+      >
+        Decisions in range · {actions.length}
+      </Typography>
+      <Box
+        sx={{
+          maxHeight: 320,
+          overflow: 'auto',
+          borderTop: 1,
+          borderColor: 'divider',
+        }}
+      >
+        {groups.map(({ date, items }) => (
+          <Box key={date}>
+            {/* Date subhead — newspaper section opener: serif, light bg, sticky
+                while the user scrolls the list so they always see what day
+                they're looking at. */}
+            <Box
+              sx={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                bgcolor: 'background.default',
+                borderBottom: 1,
+                borderColor: 'divider',
+                px: 1,
+                py: 0.5,
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 1,
+              }}
+            >
+              <Typography
+                component="span"
+                sx={{
+                  fontFamily: '"Source Serif 4", Georgia, serif',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                }}
+              >
+                {formatDayHeader(date)}
+              </Typography>
+              <Typography component="span" variant="caption" color="text.secondary">
+                {items.length} {items.length === 1 ? 'decision' : 'decisions'}
+              </Typography>
+            </Box>
+            {items.map((a) => (
+              <Box
+                key={a.id}
+                onClick={() => onSelect(a.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onSelect(a.id)
+                  }
+                }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  px: 1,
+                  py: 0.75,
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                  cursor: 'pointer',
+                  bgcolor: selectedActionId === a.id ? 'action.selected' : 'transparent',
+                  '&:hover': { bgcolor: 'action.hover' },
+                  // Tighten on mobile so more rows fit before scrolling.
+                  flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                }}
+              >
+                <DecisionChip type={a.type} size="small" />
+                <Typography
+                  component="span"
+                  sx={{
+                    fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+                    fontWeight: 600,
+                    fontSize: '0.85rem',
+                    minWidth: 0,
+                  }}
+                  noWrap
+                >
+                  {getTickerDisplayLabel(a.ticker) || (a.ticker ? `$${a.ticker}` : '—')}
+                </Typography>
+                <OptionTypeChip ticker={a.ticker} />
+                {a.price && (
+                  <Typography
+                    component="span"
+                    variant="caption"
+                    sx={{ color: 'text.secondary', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}
+                  >
+                    ${a.price}
+                  </Typography>
+                )}
+                {/* Reason snippet — single line, fades out at the right edge. */}
+                {a.reason && (
+                  <Typography
+                    component="span"
+                    variant="body2"
+                    sx={{
+                      color: 'text.secondary',
+                      flex: 1,
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {a.reason}
+                  </Typography>
+                )}
+              </Box>
+            ))}
+          </Box>
+        ))}
+      </Box>
     </Box>
   )
 }

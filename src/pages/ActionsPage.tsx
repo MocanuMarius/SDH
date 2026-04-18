@@ -290,10 +290,7 @@ export default function ActionsPage() {
 
   return (
     <Box>
-      <PageHeader
-        title="Trades"
-        dek="Every structured decision you've logged, across every entry and ticker."
-      />
+      <PageHeader title="Trades" />
 
       <Box display="flex" gap={1} flexWrap="wrap" sx={{ mb: 1.5 }}>
         <FormControl size="small" sx={{ minWidth: 120 }} variant="outlined">

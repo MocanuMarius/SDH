@@ -105,10 +105,7 @@ export default function LongTermDecisionsPage() {
 
   return (
     <Box>
-      <PageHeader
-        title="Long-term horizons"
-        dek="Entries you've explicitly committed to revisit by a target date. Set a horizon when creating an entry to track the decision here."
-      />
+      <PageHeader title="Long-term horizons" />
 
       {decisions.length > 0 && (
         <Box display="flex" gap={1.5} sx={{ mb: 3 }} flexWrap="wrap">

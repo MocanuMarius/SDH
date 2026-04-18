@@ -32,11 +32,7 @@ export default function AnalyticsPage() {
 
   return (
     <Box>
-      <PageHeader
-        title="Analytics"
-        dek="Performance, calibration, and overall journaling stats — all live from your structured decisions."
-        dense
-      />
+      <PageHeader title="Analytics" dense />
       <Tabs
         value={activeTab}
         sx={{

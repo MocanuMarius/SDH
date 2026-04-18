@@ -144,11 +144,7 @@ export default function SettingsPage() {
 
   return (
     <Box>
-      <PageHeader
-        title="Settings"
-        dek="Custom decision types, reason presets, entry tag presets, and anything else that shapes what your forms look like."
-        dense
-      />
+      <PageHeader title="Settings" dense />
 
       <Stack spacing={1.5}>
         {/* Custom Decision Types */}

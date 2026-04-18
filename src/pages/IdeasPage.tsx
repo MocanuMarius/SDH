@@ -174,11 +174,7 @@ export default function IdeasPage() {
 
   return (
     <Box>
-      <PageHeader
-        title="Tickers"
-        dek="Every ticker you've journaled about. Click one for its full decision history, chart, and entries."
-        dense
-      />
+      <PageHeader title="Tickers" dense />
 
       <TextField
         size="small"

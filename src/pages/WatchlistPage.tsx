@@ -385,11 +385,7 @@ export default function WatchlistPage() {
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
-      <PageHeader
-        title="Watchlist"
-        dek="Price alerts on tickers you're tracking. Set a trigger; get a Telegram ping when it fires."
-        dense
-      />
+      <PageHeader title="Watchlist" dense />
 
       {error && (
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>

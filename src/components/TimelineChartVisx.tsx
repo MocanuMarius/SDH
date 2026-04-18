@@ -142,6 +142,12 @@ export interface TimelineChartVisxProps {
    *  Used by the popup chart where the benchmark is already always-on so a
    *  click overlay would be redundant. */
   disableMarkerClick?: boolean
+  /** Fired when the user clicks a multi-marker cluster. The chart computes
+   *  a new index range (within `data`) that, when used as the visible
+   *  window, will spread the cluster's markers far enough apart to read
+   *  individually. The embedder can apply this to its own zoom state to
+   *  drill into the cluster (timeline page does this; popup ignores). */
+  onClusterZoom?: (startIndex: number, endIndex: number) => void
 }
 
 const BRUSH_HEIGHT = 40
@@ -163,6 +169,7 @@ function TimelineChartVisx({
   showBrush = true,
   benchmarkData = null,
   disableMarkerClick = false,
+  onClusterZoom,
 }: TimelineChartVisxProps) {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)   // hover highlight only
   const [activeArrow, setActiveArrow] = useState<ArrowInfo | null>(null)  // click → overlay
@@ -178,7 +185,10 @@ function TimelineChartVisx({
   const leftAxisLabelFontSize = isMobile ? 12 : 14
   const numBottomTicks = width > 400 ? 8 : 5
   const markerGeom = useMemo(() => getMarkerGeom(width), [width])
-  const { DOT_R, DOT_STROKE, CONE_HEIGHT_MAX, CONE_HALFWIDTH_MAX, CONE_SIZE } = markerGeom
+  // CONE_HEIGHT_MAX is still used for cluster bbox sizing; CONE_HALFWIDTH_MAX
+  // used to bound MIN_GAP but the new tighter clustering uses DOT_R-based
+  // spacing instead, so the half-width constant is no longer needed here.
+  const { DOT_R, DOT_STROKE, CONE_HEIGHT_MAX, CONE_SIZE } = markerGeom
   // Stable id suffix for SVG <defs> — prevents collisions when multiple
   // TimelineChartVisx instances are on screen at the same time.
   const chartId = useId()
@@ -594,7 +604,13 @@ function TimelineChartVisx({
               interference" effect that reads as "more activity here".
               Per-cluster hit rectangles drive click/hover. */}
           {(() => {
-            const MIN_GAP = CONE_HALFWIDTH_MAX * 2 + 8  // cluster cones whose glows overlap
+            // Cluster threshold: merge markers whose dots would visually
+            // overlap or touch. Small gap = clusters only form when dots
+            // genuinely collide, so the user sees individual dates as long
+            // as they're spaced more than ~12px apart on screen. Tap reliability
+            // comes from the merged cluster dot growing with sqrt(count),
+            // not from huge invisible hit zones.
+            const MIN_GAP = DOT_R * 2 + 4
 
             interface Marker {
               cx: number; priceY: number; point: TimelineChartPoint
@@ -723,77 +739,161 @@ function TimelineChartVisx({
               </g>
             )
 
-            // 2. Dots on the line. Four cases (× primary/secondary style):
-            //    - buy only        → green dot
-            //    - sell only       → red dot
-            //    - both on same marker → single split dot (green top, red
-            //      bottom) so they don't stack and fight for clicks.
+            // 2. Dots on the line — ONE dot per cluster. A singleton cluster
+            //    looks like the original dot. A multi-marker cluster grows
+            //    with sqrt(count) (so area scales linearly with count, not
+            //    edge length) and shows the count in the centre. This makes
+            //    busy ranges easy to tap on mobile without inflating
+            //    invisible hit zones.
+            //
+            //    Three visual cases per cluster (buy-only / sell-only / mixed):
+            //    - buy-only        → green dot
+            //    - sell-only       → red dot
+            //    - mixed (cluster has at least one buy AND at least one sell
+            //      across its members) → split dot, green top + red bottom
+            //
             //    Primary actions (buy / sell / short / speculate) get a solid
-            //    filled dot. Secondary adjustments (add_more / trim / cover)
-            //    get a hollow-ringed dot (outer colour, inner white) so you
-            //    can tell at a glance which marker represents opening/closing
-            //    a position vs merely scaling one.
+            //    fill. Secondary adjustments (add_more / trim / cover) get a
+            //    hollow-ringed dot. With clusters, the cluster is "primary"
+            //    if any contributing decision is primary.
             const anyHoverOrActiveDotInGroup = (group: Marker[], dir: 'buy' | 'sell') => {
               const key = dir === 'buy' ? `buy-${buyGroups.indexOf(group)}` : `sell-${sellGroups.indexOf(group)}`
               return hoveredKey === key || activeArrow?.key === key
             }
-            const hoveredBuyMarkers = new Set<Marker>()
-            const hoveredSellMarkers = new Set<Marker>()
-            buyGroups.forEach((g) => { if (anyHoverOrActiveDotInGroup(g, 'buy')) g.forEach((m) => hoveredBuyMarkers.add(m)) })
-            sellGroups.forEach((g) => { if (anyHoverOrActiveDotInGroup(g, 'sell')) g.forEach((m) => hoveredSellMarkers.add(m)) })
 
-            const mixedMarkers = markers.filter((m) => m.buyCount > 0 && m.sellCount > 0)
-            const mixedSet = new Set(mixedMarkers)
+            // Cluster radius scales with sqrt(count) so total area grows
+            // linearly with count. Capped at 4× the base so even huge
+            // clusters stay tappable but don't dominate the chart.
+            const clusterDotRadius = (count: number, hovered: boolean): number => {
+              const base = DOT_R * Math.sqrt(Math.max(1, count))
+              const capped = Math.min(DOT_R * 4, base)
+              return hovered ? capped + 1.5 : capped
+            }
 
-            // Helper: render a dot that is either filled (primary) or ringed
-            // (secondary). `r` is the outer radius; the inner white disc for
-            // secondary markers shrinks by 1.5px so the coloured ring is
-            // clearly visible.
-            const renderDot = (key: string, cx: number, cy: number, r: number, fill: string, primary: boolean) => (
-              <g key={key} style={{ pointerEvents: 'none' }}>
-                <circle cx={cx} cy={cy} r={r} fill={fill} stroke="#fff" strokeWidth={DOT_STROKE} />
-                {!primary && <circle cx={cx} cy={cy} r={Math.max(1, r - 1.75)} fill="#fff" />}
-              </g>
-            )
+            // Cluster centroid: average of member cx; price-y is the price
+            // at the centre-most member (so the dot still sits on the line,
+            // not floating in space).
+            const clusterCentroid = (group: Marker[]) => {
+              const avgCx = group.reduce((s, m) => s + m.cx, 0) / group.length
+              const repMarker = group.reduce((best, m) => Math.abs(m.cx - avgCx) < Math.abs(best.cx - avgCx) ? m : best, group[0])
+              return { cx: avgCx, cy: repMarker.priceY, repMarker }
+            }
 
-            // Buy-only markers
-            buyMarkers.filter((m) => !mixedSet.has(m)).forEach((m) => {
-              const greyed = isBuyMarkerGreyed(m)
-              const fill = greyed ? ARROW_GREYED : ARROW_BUY_COLOR
-              const hovered = hoveredBuyMarkers.has(m)
-              const r = hovered ? DOT_R + 1.5 : DOT_R
-              els.push(renderDot(`dot-buy-${m.cx}-${m.priceY}`, m.cx, m.priceY, r, fill, m.buyIsPrimary))
-            })
-            // Sell-only markers
-            sellMarkers.filter((m) => !mixedSet.has(m)).forEach((m) => {
-              const greyed = isSellMarkerGreyed(m)
-              const fill = greyed ? ARROW_GREYED : ARROW_SELL_COLOR
-              const hovered = hoveredSellMarkers.has(m)
-              const r = hovered ? DOT_R + 1.5 : DOT_R
-              els.push(renderDot(`dot-sell-${m.cx}-${m.priceY}`, m.cx, m.priceY, r, fill, m.sellIsPrimary))
-            })
-            // Mixed: split dot (top green, bottom red). Secondary treatment on
-            // either half is approximated by whitening the matching half's inner.
-            mixedMarkers.forEach((m) => {
-              const greyedBuy = isBuyMarkerGreyed(m)
-              const greyedSell = isSellMarkerGreyed(m)
-              const topFill = greyedBuy ? ARROW_GREYED : ARROW_BUY_COLOR
-              const botFill = greyedSell ? ARROW_GREYED : ARROW_SELL_COLOR
-              const hovered = hoveredBuyMarkers.has(m) || hoveredSellMarkers.has(m)
-              const r = hovered ? DOT_R + 1.5 : DOT_R
+            // Pre-compute a map from each marker → its (buy / sell) cluster
+            // group, so we can quickly answer "is this a mixed cluster?"
+            const clusterByMarker = (g: Marker[][]) => {
+              const map = new Map<Marker, Marker[]>()
+              g.forEach((group) => group.forEach((m) => map.set(m, group)))
+              return map
+            }
+            // Only the sell-cluster lookup is consumed (when iterating buy
+            // clusters we ask "does this buy cluster's shared marker also
+            // belong to a sell cluster?"). A symmetric buy-cluster lookup
+            // would be needed if we iterated sell clusters first.
+            const sellClusterOf = clusterByMarker(sellGroups)
+
+            // A cluster is "mixed" when its buy group and sell group share at
+            // least one marker (i.e. that marker has both buy and sell
+            // decisions). Track which clusters we've already rendered as
+            // mixed so we don't render their buy half + sell half separately.
+            const renderedMixedKeys = new Set<string>()
+
+            buyGroups.forEach((bGroup, bi) => {
+              const buyKey = `buy-${bi}`
+              const buyCount = bGroup.reduce((s, m) => s + m.buyCount, 0)
+              const greyed = bGroup.every((m) => isBuyMarkerGreyed(m))
+              const primary = bGroup.some((m) => m.buyIsPrimary)
+              const hovered = anyHoverOrActiveDotInGroup(bGroup, 'buy')
+              const r = clusterDotRadius(buyCount, hovered)
               const innerR = Math.max(1, r - 1.75)
+              const fill = greyed ? ARROW_GREYED : ARROW_BUY_COLOR
+              const { cx, cy } = clusterCentroid(bGroup)
+
+              // Detect a mixed cluster: any member of this buy group also
+              // belongs to a sell group whose centroid is essentially at the
+              // same x. We only mark mixed when the SAME marker has both
+              // buy AND sell decisions (true overlap), to keep the visual
+              // unambiguous.
+              const sharedMarker = bGroup.find((m) => m.buyCount > 0 && m.sellCount > 0)
+              const sellGroupForShared = sharedMarker ? sellClusterOf.get(sharedMarker) : undefined
+              const isMixedCluster = !!sellGroupForShared
+              if (isMixedCluster && sellGroupForShared) {
+                const sellKey = `sell-${sellGroups.indexOf(sellGroupForShared)}`
+                if (renderedMixedKeys.has(sellKey)) return
+                renderedMixedKeys.add(buyKey)
+                renderedMixedKeys.add(sellKey)
+                const sellCount = sellGroupForShared.reduce((s, m) => s + m.sellCount, 0)
+                const totalCount = buyCount + sellCount
+                const greyedSell = sellGroupForShared.every((m) => isSellMarkerGreyed(m))
+                const sellPrimary = sellGroupForShared.some((m) => m.sellIsPrimary)
+                const hoveredEither = hovered || anyHoverOrActiveDotInGroup(sellGroupForShared, 'sell')
+                const rMix = clusterDotRadius(totalCount, hoveredEither)
+                const innerRMix = Math.max(1, rMix - 1.75)
+                const topFill = greyed ? ARROW_GREYED : ARROW_BUY_COLOR
+                const botFill = greyedSell ? ARROW_GREYED : ARROW_SELL_COLOR
+                els.push(
+                  <g key={`dot-mix-${buyKey}`} style={{ pointerEvents: 'none' }}>
+                    <path d={`M ${cx - rMix} ${cy} A ${rMix} ${rMix} 0 0 1 ${cx + rMix} ${cy} Z`} fill={topFill} />
+                    <path d={`M ${cx - rMix} ${cy} A ${rMix} ${rMix} 0 0 0 ${cx + rMix} ${cy} Z`} fill={botFill} />
+                    {!primary && (
+                      <path d={`M ${cx - innerRMix} ${cy} A ${innerRMix} ${innerRMix} 0 0 1 ${cx + innerRMix} ${cy} Z`} fill="#fff" />
+                    )}
+                    {!sellPrimary && (
+                      <path d={`M ${cx - innerRMix} ${cy} A ${innerRMix} ${innerRMix} 0 0 0 ${cx + innerRMix} ${cy} Z`} fill="#fff" />
+                    )}
+                    <circle cx={cx} cy={cy} r={rMix} fill="none" stroke="#fff" strokeWidth={DOT_STROKE} />
+                    {totalCount > 1 && (
+                      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
+                        fontSize={Math.max(9, Math.round(rMix * 0.9))} fontWeight={800} fill="#fff"
+                        style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                        {totalCount}
+                      </text>
+                    )}
+                  </g>
+                )
+                return
+              }
+
+              renderedMixedKeys.add(buyKey)
               els.push(
-                <g key={`dot-mixed-${m.cx}-${m.priceY}`} style={{ pointerEvents: 'none' }}>
-                  <path d={`M ${m.cx - r} ${m.priceY} A ${r} ${r} 0 0 1 ${m.cx + r} ${m.priceY} Z`} fill={topFill} />
-                  <path d={`M ${m.cx - r} ${m.priceY} A ${r} ${r} 0 0 0 ${m.cx + r} ${m.priceY} Z`} fill={botFill} />
-                  {/* Per-half ring for secondary action style. */}
-                  {!m.buyIsPrimary && (
-                    <path d={`M ${m.cx - innerR} ${m.priceY} A ${innerR} ${innerR} 0 0 1 ${m.cx + innerR} ${m.priceY} Z`} fill="#fff" />
+                <g key={`dot-buy-${buyKey}`} style={{ pointerEvents: 'none' }}>
+                  <circle cx={cx} cy={cy} r={r} fill={fill} stroke="#fff" strokeWidth={DOT_STROKE} />
+                  {!primary && <circle cx={cx} cy={cy} r={innerR} fill="#fff" />}
+                  {buyCount > 1 && (
+                    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
+                      fontSize={Math.max(9, Math.round(r * 0.9))} fontWeight={800}
+                      fill={primary ? '#fff' : ARROW_BUY_COLOR}
+                      style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                      {buyCount}
+                    </text>
                   )}
-                  {!m.sellIsPrimary && (
-                    <path d={`M ${m.cx - innerR} ${m.priceY} A ${innerR} ${innerR} 0 0 0 ${m.cx + innerR} ${m.priceY} Z`} fill="#fff" />
+                </g>
+              )
+            })
+
+            sellGroups.forEach((sGroup, si) => {
+              const sellKey = `sell-${si}`
+              if (renderedMixedKeys.has(sellKey)) return
+              const sellCount = sGroup.reduce((s, m) => s + m.sellCount, 0)
+              const greyed = sGroup.every((m) => isSellMarkerGreyed(m))
+              const primary = sGroup.some((m) => m.sellIsPrimary)
+              const hovered = anyHoverOrActiveDotInGroup(sGroup, 'sell')
+              const r = clusterDotRadius(sellCount, hovered)
+              const innerR = Math.max(1, r - 1.75)
+              const fill = greyed ? ARROW_GREYED : ARROW_SELL_COLOR
+              const { cx, cy } = clusterCentroid(sGroup)
+              els.push(
+                <g key={`dot-sell-${sellKey}`} style={{ pointerEvents: 'none' }}>
+                  <circle cx={cx} cy={cy} r={r} fill={fill} stroke="#fff" strokeWidth={DOT_STROKE} />
+                  {!primary && <circle cx={cx} cy={cy} r={innerR} fill="#fff" />}
+                  {sellCount > 1 && (
+                    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
+                      fontSize={Math.max(9, Math.round(r * 0.9))} fontWeight={800}
+                      fill={primary ? '#fff' : ARROW_SELL_COLOR}
+                      style={{ pointerEvents: 'none', userSelect: 'none' }}>
+                      {sellCount}
+                    </text>
                   )}
-                  <circle cx={m.cx} cy={m.priceY} r={r} fill="none" stroke="#fff" strokeWidth={DOT_STROKE} />
                 </g>
               )
             })
@@ -861,6 +961,29 @@ function TimelineChartVisx({
                       // (popup uses an always-on benchmark instead), we
                       // still propagate the selection but don't fetch.
                       if (disableMarkerClick) return
+                      // Cluster (count > 1) AND embedder wired up zoom →
+                      // zoom in to spread the cluster's markers apart, so
+                      // the user can tap them individually after one more
+                      // click. Singleton clusters keep the existing
+                      // overlay-fetch behaviour (no zoom needed).
+                      if (group.length > 1 && onClusterZoom) {
+                        // Translate cluster-member markers back to indexes
+                        // in the data array. Pad by max(2, 30%) on each
+                        // side so the cluster doesn't sit at the very edge
+                        // after the zoom.
+                        const idxs = group.map((m) => data.indexOf(m.point)).filter((i) => i >= 0)
+                        if (idxs.length > 0) {
+                          const minI = Math.min(...idxs)
+                          const maxI = Math.max(...idxs)
+                          const span = maxI - minI
+                          const pad = Math.max(2, Math.round(span * 0.3))
+                          onClusterZoom(
+                            Math.max(0, minI - pad),
+                            Math.min(data.length - 1, maxI + pad),
+                          )
+                        }
+                        return
+                      }
                       if (isActive) { setActiveArrow(null); setTickerLines([]) }
                       else setActiveArrow({ point: repMarker.point, direction: dir, ticker: tickers.join(', '), tickers, count: totalCount, cx: avgCx, cy: anchorY, key: clusterKey })
                     }}
@@ -896,18 +1019,22 @@ function TimelineChartVisx({
             sellGroups.forEach((group, gi) => addHitRect(group, 'sell', gi))
 
             // ── Other-type decisions (pass / research / hold / watchlist / speculate)
-            // Render a colored diamond on the price line with a thin connector to the
-            // axis, so they're discoverable but don't steal focus from buys/sells.
+            // Lifted OFF the price line into a thin band at the top of the
+            // plot area so they don't fight buy/sell cones for attention or
+            // tap targets. A dotted vertical line drops from each diamond
+            // down to a tiny dot on the price line at the actual date —
+            // this is the "decoration, not data" channel.
+            const OTHER_BAND_Y = 6   // diamond centres sit just below the top edge
+            const OTHER_R = 6
             data.forEach((pt, pi) => {
               const others = (pt.decisions ?? []).filter((d) => d.type === 'other')
               if (others.length === 0) return
               const cx = dateScale(new Date(pt.date))
-              const cy = priceScale(pt.price)
+              const cyOnLine = priceScale(pt.price)
               const first = others[0].action
               const color = getDecisionTypeColor(first.type)
               const isGreyed = selectedTicker != null && !others.some((d) => (d.action.ticker ?? '').toUpperCase() === selectedTicker)
               const fill = isGreyed ? ARROW_GREYED : color
-              const r = 7
               els.push(
                 <g key={`other-${pi}`}
                   onClick={(e) => { e.stopPropagation(); onSelectAction(first.id) }}
@@ -916,13 +1043,23 @@ function TimelineChartVisx({
                   <title>
                     {others.map((o) => `${getDecisionTypeConfig(o.action.type).label} · ${o.action.ticker}`).join('\n')}
                   </title>
-                  <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2}
-                    transform={`rotate(45 ${cx} ${cy})`}
+                  {/* Dotted connector — band → price line */}
+                  <line x1={cx} y1={OTHER_BAND_Y + OTHER_R} x2={cx} y2={cyOnLine}
+                    stroke={fill} strokeWidth={1} strokeDasharray="2 3"
+                    opacity={isGreyed ? 0.3 : 0.55} />
+                  {/* Tiny intersection dot on the price line */}
+                  <circle cx={cx} cy={cyOnLine} r={2}
+                    fill={fill} opacity={isGreyed ? 0.35 : 0.85}
+                    stroke="#fff" strokeWidth={0.75} />
+                  {/* Diamond marker in the top band */}
+                  <rect x={cx - OTHER_R} y={OTHER_BAND_Y - OTHER_R}
+                    width={OTHER_R * 2} height={OTHER_R * 2}
+                    transform={`rotate(45 ${cx} ${OTHER_BAND_Y})`}
                     fill={fill} fillOpacity={isGreyed ? 0.35 : 0.95}
-                    stroke="rgba(255,255,255,0.85)" strokeWidth={1.25} />
+                    stroke="rgba(255,255,255,0.9)" strokeWidth={1.25} />
                   {others.length > 1 && (
-                    <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle"
-                      fontSize={10} fontWeight={800} fill="#fff"
+                    <text x={cx} y={OTHER_BAND_Y + 0.5} textAnchor="middle" dominantBaseline="middle"
+                      fontSize={9} fontWeight={800} fill="#fff"
                       style={{ pointerEvents: 'none', userSelect: 'none' }}>
                       {others.length}
                     </text>

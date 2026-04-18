@@ -68,11 +68,7 @@ export default function SkillEngineeringDashboard() {
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2 } }}>
-      <PageHeader
-        title="Practice"
-        dek="Deliberate-practice tools — pick a sub-skill, drill it, get feedback. The repetitions you don't do in markets, you do here."
-        dense
-      />
+      <PageHeader title="Practice" dense />
 
       {/* Session training focus — moved here from Journal page */}
       <SessionFocusCard />
