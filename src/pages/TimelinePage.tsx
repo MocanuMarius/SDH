@@ -28,6 +28,8 @@ import DialogActions from '@mui/material/DialogActions'
 import { tokens } from '../theme'
 import { ParentSize } from '@visx/responsive'
 import TimelineChartVisx, { getTimelineChartResponsiveMargin, type DecisionOverlayInfo } from '../components/TimelineChartVisx'
+import RangeSelectorButtons from '../components/charts/RangeSelectorButtons'
+import MeasureStatsPill from '../components/charts/MeasureStatsPill'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
 import { useEncodedUrlState } from '../hooks/useEncodedUrlState'
 import type { ActionWithEntry } from '../services/actionsService'
@@ -59,17 +61,8 @@ function getClosestChartPointByDate(
   return best
 }
 
-const RANGES: { value: ChartRange; label: string }[] = [
-  { value: '1m', label: '1M' },
-  { value: '3m', label: '3M' },
-  { value: '6m', label: '6M' },
-  { value: 'ytd', label: 'YTD' },
-  { value: '1y', label: '1Y' },
-  { value: '2y', label: '2Y' },
-  { value: '3y', label: '3Y' },
-  { value: '5y', label: '5Y' },
-  { value: 'max', label: 'MAX' },
-]
+// Range presets + matching button row now live in `charts/RangeSelectorButtons`
+// so the per-ticker page renders the same set without us re-defining it.
 
 /** Chart point with optional decisions at this (date, price) — used so dots render on the line */
 interface ChartPointWithDecisions {
@@ -856,35 +849,16 @@ export default function TimelinePage() {
             flexWrap: 'wrap',
             gap: 1,
           }}>
-            {/* Preset range buttons */}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.25 }}>
-              {RANGES.map((r) => (
-                <Button
-                  key={r.value}
-                  size="small"
-                  disableElevation
-                  variant={range === r.value && zoomRange == null ? 'contained' : 'text'}
-                  color="primary"
-                  onClick={() => {
-                    setRange(r.value)
-                    setZoomRange(null)
-                    setMeasureSelection(null)
-                  }}
-                  sx={{
-                    minWidth: 28,
-                    minHeight: 28,
-                    px: 0.5,
-                    py: 0.15,
-                    fontSize: '0.7rem',
-                    fontWeight: range === r.value && zoomRange == null ? 700 : 500,
-                    borderRadius: 1,
-                    color: range === r.value && zoomRange == null ? undefined : 'text.secondary',
-                  }}
-                >
-                  {r.label}
-                </Button>
-              ))}
-            </Box>
+            {/* Preset range buttons (shared with TickerTimelineChart). */}
+            <RangeSelectorButtons
+              value={range}
+              noActive={zoomRange != null}
+              onChange={(v) => {
+                setRange(v)
+                setZoomRange(null)
+                setMeasureSelection(null)
+              }}
+            />
 
             {/* Right side of the range selector — Reset-zoom button (only
                 when a zoom is active) + settings gear (always). The gear
@@ -1130,52 +1104,11 @@ export default function TimelinePage() {
             />
             {(() => {
               if (!measureSelection || !rangeStats || !chartSize) return null
-              const stats = rangeStats
               const margins = getPlotMargins()
               const tooltipLeft = margins.left + ((measureSelection.startIndex + measureSelection.endIndex) / 2 / Math.max(1, chartDisplayData.length)) * (chartSize.w - margins.left - margins.right)
-              const tooltipHalfWidth = 84
-              const adjustedLeft = Math.max(tooltipHalfWidth, Math.min(chartSize.w - tooltipHalfWidth, tooltipLeft))
-              return (
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    top: 10,
-                    left: adjustedLeft,
-                    transform: 'translateX(-50%)',
-                    zIndex: 11,
-                    pointerEvents: 'none',
-                  }}
-                >
-                  <Paper
-                    elevation={3}
-                    sx={{
-                      p: 1.25,
-                      minWidth: 168,
-                      borderRadius: 1.5,
-                      boxShadow: 3,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      {new Date(stats.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })} – {new Date(stats.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
-                    </Typography>
-                    <Typography variant="body2" fontWeight={700} sx={{ color: stats.pctChange >= 0 ? 'success.main' : 'error.main', fontSize: '1rem' }}>
-                      {stats.pctChange >= 0 ? '+' : ''}{stats.pctChange.toFixed(2)}%
-                      {stats.cagr != null && (
-                        <Box component="span" sx={{ color: 'text.secondary', fontWeight: 500, fontSize: '0.85rem', ml: 0.5 }}>
-                          ({stats.cagr >= 0 ? '+' : ''}{stats.cagr.toFixed(1)}%/yr)
-                        </Box>
-                      )}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Price: {stats.endPrice >= stats.startPrice ? '+' : ''}{(stats.endPrice - stats.startPrice).toFixed(2)}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Drawdown: -{stats.drawdownPct.toFixed(1)}%
-                    </Typography>
-                  </Paper>
-                </Box>
-              )
+              const half = 84
+              const adjustedLeft = Math.max(half, Math.min(chartSize.w - half, tooltipLeft))
+              return <MeasureStatsPill stats={rangeStats} left={adjustedLeft} />
             })()}
           </Box>
           {/* Decisions in range — newspaper-style date sections so the user

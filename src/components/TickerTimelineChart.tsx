@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { Box, Typography, Paper, CircularProgress, Alert, FormControl, Select, MenuItem, Tabs, Tab, Chip } from '@mui/material'
+import { Box, Typography, Paper, CircularProgress, Alert, FormControl, Select, MenuItem, Chip } from '@mui/material'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { ParentSize } from '@visx/responsive'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
@@ -20,6 +20,8 @@ import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/ticker
 import { getChartCategory } from '../theme/decisionTypes'
 import { computeRangeStats, type RangeStats } from '../utils/chartRangeStats'
 import TimelineChartVisx, { type TimelineChartPoint, getTimelineChartResponsiveMargin } from './TimelineChartVisx'
+import RangeSelectorButtons from './charts/RangeSelectorButtons'
+import MeasureStatsPill from './charts/MeasureStatsPill'
 
 // Cap the number of points sent to the chart. SVG renders thousands fine,
 // but downsampling speeds up clustering & marker layout for long ranges.
@@ -31,17 +33,8 @@ const BENCHMARK_OPTIONS: { symbol: string; label: string }[] = [
   { symbol: 'VWCE.DE', label: 'All-World (VWCE)' },
 ]
 
-const RANGES: { value: ChartRange; label: string }[] = [
-  { value: '1m', label: '1M' },
-  { value: '3m', label: '3M' },
-  { value: '6m', label: '6M' },
-  { value: 'ytd', label: 'YTD' },
-  { value: '1y', label: '1Y' },
-  { value: '2y', label: '2Y' },
-  { value: '3y', label: '3Y' },
-  { value: '5y', label: '5Y' },
-  { value: 'max', label: 'MAX' },
-]
+// Range presets + the toggle-button row for them now live in
+// `charts/RangeSelectorButtons` (used by both this and TimelinePage).
 
 const MAX_COMPARE_SYMBOLS = 3
 
@@ -462,39 +455,14 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
         </Box>
       </Box>
 
-      {/* Range selector — its own row so all buttons fit without scroll arrows on narrow viewports. */}
+      {/* Range presets — uses the shared component (tabs variant matches
+          the per-ticker page's outlined-chip styling). */}
       <Box sx={{ mb: 1, mx: -0.25 }}>
-        <Tabs
+        <RangeSelectorButtons
           value={range}
-          onChange={(_e, v) => { setRange(v as ChartRange); setUserChangedRange(true) }}
-          variant="scrollable"
-          scrollButtons={false}
-          sx={{
-            minHeight: 32,
-            '& .MuiTabs-flexContainer': { gap: 0.25, justifyContent: 'flex-start', flexWrap: 'wrap' },
-            '& .MuiTabs-indicator': { display: 'none' },
-            '& .MuiTab-root': {
-              minHeight: 28,
-              minWidth: 36,
-              py: 0.25,
-              px: 1,
-              fontSize: '0.78rem',
-              fontWeight: 600,
-              textTransform: 'none',
-              borderRadius: 1,
-              border: 1,
-              borderColor: 'divider',
-              color: 'text.secondary',
-              '&.Mui-selected': { bgcolor: 'primary.main', color: 'primary.contrastText', borderColor: 'primary.main' },
-              '&:hover': { bgcolor: 'action.hover' },
-              '&.Mui-selected:hover': { bgcolor: 'primary.dark' },
-            },
-          }}
-        >
-          {RANGES.map((r) => (
-            <Tab key={r.value} value={r.value} label={r.label} />
-          ))}
-        </Tabs>
+          onChange={(v) => { setRange(v); setUserChangedRange(true) }}
+          variant="tabs"
+        />
       </Box>
 
       {/* Range summary line — current price, %change, CAGR, date range. */}
@@ -631,8 +599,8 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           </Box>
         )}
 
-        {/* Range stats pill — floats over the chart while dragging or
-            after a committed selection. */}
+        {/* Range stats pill — shared component, floats over the chart
+            during drag and after a committed selection. */}
         {(() => {
           const stats = selecting ? liveSelectionStats : rangeStats
           const showTooltip = (selecting && liveSelectionStats) || (measureSelection && rangeStats && wrapperWidth > 0)
@@ -640,46 +608,11 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
           let tooltipLeft = selecting
             ? (selecting.startX + selecting.endX) / 2
             : plotLeft + ((measureSelection!.startIndex + measureSelection!.endIndex) / 2 / Math.max(1, chartPoints.length)) * (wrapperWidth - plotLeft - plotRight)
-          const tooltipHalfWidth = 84
+          const half = 84
           if (wrapperWidth > 0) {
-            tooltipLeft = Math.max(tooltipHalfWidth, Math.min(wrapperWidth - tooltipHalfWidth, tooltipLeft))
+            tooltipLeft = Math.max(half, Math.min(wrapperWidth - half, tooltipLeft))
           }
-          return (
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 10,
-                left: tooltipLeft,
-                transform: 'translateX(-50%)',
-                zIndex: 11,
-                pointerEvents: 'none',
-              }}
-            >
-              <Paper
-                elevation={3}
-                sx={{
-                  p: 1.25,
-                  minWidth: 168,
-                  borderRadius: 1.5,
-                  boxShadow: 3,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <Typography variant="caption" color="text.secondary" display="block">
-                  {new Date(stats.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })} – {new Date(stats.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
-                </Typography>
-                <Typography variant="body2" fontWeight={700} sx={{ color: stats.pctChange >= 0 ? 'success.main' : 'error.main', fontSize: '1rem' }}>
-                  {stats.pctChange >= 0 ? '+' : ''}{stats.pctChange.toFixed(2)}%
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Price: {stats.endPrice >= stats.startPrice ? '+' : ''}{(stats.endPrice - stats.startPrice).toFixed(2)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Drawdown: -{stats.drawdownPct.toFixed(1)}%
-                </Typography>
-              </Paper>
-            </Box>
-          )
+          return <MeasureStatsPill stats={stats} left={tooltipLeft} />
         })()}
       </Box>
     </Paper>

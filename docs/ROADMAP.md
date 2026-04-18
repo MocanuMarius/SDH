@@ -31,37 +31,22 @@ that contradict an earlier choice.
 
 ## Upcoming — in the order we plan to tackle them
 
-### 7. Centralise the per-page chart wrapper
+### 7. Centralise the per-page chart wrapper — still open for a deeper pass
 
-**Why.** We've already consolidated the *rendering* into
-`TimelineChartVisx` (popup, per-ticker, timeline all use it). But the
-*wrapping chrome* (range-selector, date inputs, decision banner, drag
-overlay, range-stats popup) is re-implemented in both
-`TimelinePage.tsx` and `TickerTimelineChart.tsx` with slight drift.
+**Shipped (partial):** two shared presentational components live at
+`src/components/charts/`:
+  - `RangeSelectorButtons` (with "buttons" + "tabs" variants) used by
+    both TimelinePage (flat blue text-buttons) and TickerTimelineChart
+    (outlined chip tabs).
+  - `MeasureStatsPill` used by both pages for the drag-stats popup.
 
-**Scope.**
-- Extract a `TimelineChartCard` wrapper component that owns:
-  - range-preset buttons
-  - From/To date inputs (if shown)
-  - decision-click banner (lifted up from the chart)
-  - drag-to-measure overlay + live stats pill
-  - committed measure-selection stats pill
-- `TimelinePage` becomes: URL state + actions filter + `<TimelineChartCard
-  {...props}>` + `<DecisionsInRange>`.
-- `TickerTimelineChart` becomes a thin adapter around
-  `TimelineChartCard` with the per-ticker prop defaults
-  (`showBrush={false}`, multi-benchmark array, etc).
-- Popup already uses the raw chart; probably doesn't need the full
-  wrapper — document that asymmetry.
-
-**Open questions.**
-- The measure-selection logic is entangled with the parent's wrapper
-  layout (pixel-level drag maths reference `plotLeft/plotRight` which
-  come from `getTimelineChartResponsiveMargin`). Moving this cleanly
-  may require the wrapper to own those margins too.
-- Naming: `TimelineChartCard` vs `ChartContainer` vs `TradingChart`?
-
-**Status.** todo
+**Still to do if we want a full wrapper.** A single
+`TimelineChartCard` component that owns the Paper frame + drag overlay
++ crosshair + decision banner wouldn't be a mechanical move — the
+measure-drag pixel maths reference each page's layout margins, and the
+URL-state handshake on TimelinePage wouldn't survive a naive lift.
+Worth doing eventually but wasn't in scope for this batch; left open
+for a later roadmap item.
 
 ---
 
@@ -105,7 +90,18 @@ idea.
 
 ## Done (rolling log)
 
-- **#6 Desktop chart interactions.** Commit `<next>`.
+- **#7 Extract shared chart components (partial).** Commit `<next>`.
+  `src/components/charts/RangeSelectorButtons.tsx` (two variants:
+  flat buttons for TimelinePage, outlined chip-tabs for
+  TickerTimelineChart — same `value` / `onChange` API) +
+  `src/components/charts/MeasureStatsPill.tsx` (drag-stats popup).
+  Both consumed by TimelinePage + TickerTimelineChart; ~150 LOC of
+  duplicated JSX + styling collapsed to single sources of truth. A
+  full `TimelineChartCard` wrapper (owning Paper frame + drag overlay
+  + decision banner) was deferred — layout margins + URL-state
+  handshake make the lift non-mechanical.
+
+- **#6 Desktop chart interactions.** Commit `42e98a8`.
   Three desktop fixes:
     - Wrapper cursor changed from `grab` (lying — there's no pan
       gesture) to `crosshair`. Decision markers carry their own
