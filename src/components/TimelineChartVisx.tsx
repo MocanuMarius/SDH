@@ -250,26 +250,36 @@ function TimelineChartVisx({
     return benchmarkLines.length ? [...benchmarkLines, ...tickerLines] : tickerLines
   }, [benchmarkLines, tickerLines])
 
-  // Expand yDomain to fit overlay lines when active.
+  // Expand yDomain to fit overlay lines when active. 12% padding (was
+  // 8%) gives noticeable breathing room between the lowest/highest
+  // overlay point and the plot edges, so a click-fetched ticker that's
+  // -8% from the anchor doesn't visually crash into the bottom axis.
   const activeDomain = useMemo((): [number, number] => {
     if (allOverlayLines.length === 0) return yDomain
     const allMapped = allOverlayLines.flatMap((tl) => tl.points.map((p) => p.mappedPrice))
     if (!allMapped.length) return yDomain
     const minMapped = Math.min(...allMapped)
     const maxMapped = Math.max(...allMapped)
-    const pad = (yDomain[1] - yDomain[0]) * 0.08
+    const pad = (yDomain[1] - yDomain[0]) * 0.12
     return [
       Math.min(yDomain[0], minMapped - pad),
       Math.max(yDomain[1], maxMapped + pad),
     ]
   }, [yDomain, allOverlayLines])
 
+  // .nice() rounds the scale's domain to round tick values so the
+  // y-axis labels cover the full visual range. Without this, d3 picks
+  // ticks INSIDE the domain (e.g. [640, 650, 660, 670, 680, 690] when
+  // the domain is [615, 700]) — the chart line then runs below the
+  // lowest tick label into 30+ px of unlabeled empty space, which the
+  // user sees as "the chart going below the y-axis".
   const priceScale = useMemo(
     () =>
       scaleLinear({
         domain: activeDomain,
         range: [innerHeight, 0],
         clamp: false,
+        nice: true,
       }),
     [activeDomain, innerHeight]
   )

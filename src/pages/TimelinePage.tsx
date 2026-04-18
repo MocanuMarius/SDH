@@ -412,7 +412,12 @@ export default function TimelinePage() {
     const min = Math.min(...prices)
     const max = Math.max(...prices)
     const span = max - min || 1
-    const padding = span * 0.15
+    // 18% padding (was 15%) — enough breathing room that even the
+    // peak / trough of the visible window sit comfortably inside the
+    // plot, and any benchmark/overlay line drawn on the same scale
+    // (further expanded by the chart's activeDomain logic) doesn't
+    // crash into the y-axis labels.
+    const padding = span * 0.18
     return [min - padding, max + padding] as [number, number]
   }, [chartDisplayData])
 
