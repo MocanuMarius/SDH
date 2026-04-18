@@ -38,7 +38,7 @@ import { completeReminder, createReminder } from '../services/remindersService'
 import { useReminders, useActions, usePassedDueForReview, useInvalidate } from '../hooks/queries'
 import { getEntry } from '../services/entriesService'
 import { getOutcomesForActionIds, createOutcome } from '../services/outcomesService'
-import OutcomeFormDialog from './OutcomeFormDialog'
+import ResolveStaleIdeaDialog from './ResolveStaleIdeaDialog'
 import {
   recordPassReview,
   snoozePassReview,
@@ -750,29 +750,33 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: RemindersDr
         </DialogActions>
       </Dialog>
 
-      {/* Outcome resolution dialog — opened from "Resolve" on a stale-idea
-          row so the user can close the loop on an old decision in one flow. */}
+      {/* Stale-idea resolve — stripped-down 3-button verdict dialog that
+          replaces the old full-OutcomeFormDialog here. The full form is
+          still used on ActionsPage + EntryDetailPage where the user has
+          the context to fill realised P&L, scores, error types, memo.
+          For stale ideas the honest answer is almost always yes / no /
+          inconclusive + maybe one line of hindsight. */}
       {resolveTarget && (
-        <OutcomeFormDialog
+        <ResolveStaleIdeaDialog
           open
           onClose={() => setResolveTarget(null)}
-          initial={null}
+          actionId={resolveTarget.actionId}
           actionLabel={getTickerDisplayLabel(resolveTarget.ticker)}
           onSubmit={async (data) => {
             await createOutcome({
-              action_id: resolveTarget.actionId,
-              realized_pnl: data.realized_pnl,
+              action_id: data.action_id,
+              realized_pnl: null,
               outcome_date: data.outcome_date,
-              notes: data.notes,
-              driver: data.driver,
-              post_mortem_notes: data.post_mortem_notes || null,
-              process_quality: data.process_quality ?? null,
+              notes: data.notes ?? '',
+              driver: data.driver ?? null,
+              post_mortem_notes: null,
+              process_quality: null,
               outcome_quality: data.outcome_quality ?? null,
-              process_score: data.process_score,
-              outcome_score: data.outcome_score,
-              closing_memo: data.closing_memo?.trim() || null,
-              error_type: data.error_type ?? null,
-              what_i_remember_now: data.what_i_remember_now?.trim() || null,
+              process_score: null,
+              outcome_score: data.outcome_score ?? null,
+              closing_memo: null,
+              error_type: null,
+              what_i_remember_now: null,
             })
             setIdeaAlerts((prev) => prev.filter((x) => x.ticker !== resolveTarget.ticker))
             setResolveTarget(null)

@@ -50,47 +50,36 @@ for a later roadmap item.
 
 ---
 
-### 8. Stale-idea resolve flow: audit + redesign
-
-**Why.** The "Resolve" action on a stale-ticker card opens the full
-`OutcomeFormDialog` with every field (realized P&L, outcome_date,
-driver, pre-mortem notes, process_quality, outcome_quality,
-process_score, outcome_score, closing_memo, error_type,
-what_i_remember_now, notes …). For an old idea the user barely
-remembers, that's an intimidating form. Suspect: half the fields are
-unused in practice, half the copy is jargon, and the flow itself may
-not match what the user actually does when closing the loop on a stale
-idea.
-
-**Scope.**
-- **Phase 1 — explore** (no code changes). Walk the current
-  `OutcomeFormDialog` end-to-end:
-  - Every field it shows. Which ones does the user fill in practice?
-    (Check the DB.)
-  - Where does each field surface elsewhere in the app (charts,
-    analytics, calibration)?
-  - Does "outcome" mean the same thing for a pass vs a buy vs a sell
-    vs a stale idea, or do we need different shapes?
-- **Phase 2 — propose.** Write up findings + recommended flow redesign
-  here (append to this file), then discuss before touching code.
-- **Phase 3 — build.** Likely a simpler, task-specific dialog for the
-  stale-idea case — maybe just "was it right / wrong / inconclusive"
-  + optional notes, mirroring the pass-review swipe-action model.
-
-**Open questions.**
-- Is the full `OutcomeFormDialog` load-bearing elsewhere (EntryDetail,
-  Insights), or can we diverge the flows without breaking parity?
-- Should "resolving a stale idea" auto-generate an `actions` row (a
-  decision to stop following the ticker) or just an `outcomes` row on
-  the existing last action?
-
-**Status.** todo
+*All upcoming items in this batch shipped — see Done log below.*
 
 ---
 
 ## Done (rolling log)
 
-- **#7 Extract shared chart components (partial).** Commit `<next>`.
+- **#8 Stale-idea resolve: dedicated lightweight dialog.** Commit `<next>`.
+  **Audit findings**: the "Resolve" action on a stale-ticker card was
+  opening the full OutcomeFormDialog — a 400+-line form with realised
+  P&L, process score, outcome score, error-type checkboxes, post-mortem
+  textareas, 500-word closing memo. For a ticker the user barely
+  remembers that's noise — almost none of it is fillable, and the
+  cognitive load of the form means the user closes it without saving.
+  The existing pass-review swipe-action model (Correct / Missed / ???
+  / +30d) is the right shape for this case.
+
+  **Shipped**: new `ResolveStaleIdeaDialog` — 3 big verdict chips
+  (Right / Wrong / Inconclusive) + optional 1-line hindsight note.
+  Maps to the existing `outcomes` schema (outcome_score 5/1/3 +
+  outcome_quality good/bad/null) so Insights + calibration reports
+  keep updating. P&L, process score, post-mortem, memo all left null
+  deliberately — anyone who needs that depth goes to the decision on
+  ActionsPage + opens the full OutcomeFormDialog there.
+
+  **Divergence**: ActionsPage and EntryDetailPage still use
+  OutcomeFormDialog (closed trades with P&L; users there HAVE the
+  context). ActivityDrawer's stale-idea "Resolve" swipe is the only
+  consumer that dropped down to the simpler dialog.
+
+- **#7 Extract shared chart components (partial).** Commit `1c06a27`.
   `src/components/charts/RangeSelectorButtons.tsx` (two variants:
   flat buttons for TimelinePage, outlined chip-tabs for
   TickerTimelineChart — same `value` / `onChange` API) +
