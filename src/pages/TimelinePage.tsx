@@ -910,65 +910,89 @@ export default function TimelinePage() {
                 borderRadius: 1.5,
                 display: 'flex',
                 alignItems: 'center',
-                flexWrap: { xs: 'wrap', sm: 'nowrap' },
-                columnGap: 1.25,
-                rowGap: 0.25,
-                px: { xs: 1, sm: 1.25 },
-                py: { xs: 0.5, sm: 0.75 },
+                flexWrap: 'nowrap',  // everything fits on one line
+                columnGap: { xs: 0.75, sm: 1.25 },
+                px: { xs: 0.75, sm: 1.25 },
+                py: { xs: 0.25, sm: 0.75 },
+                minHeight: 0,
                 zIndex: 8,
                 bgcolor: 'background.paper',
               }}
             >
-              {/* Direction + count — primary label, never shrinks */}
+              {/* Direction + count — primary label, never shrinks.
+                  Mobile drops the word "decision(s)" since the count +
+                  coloured arrow is enough context ("▼ Sell · 1"). */}
               <Typography
                 variant="body2"
                 fontWeight={800}
                 sx={{
                   color: decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell,
                   flexShrink: 0,
-                  fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {decisionOverlay.direction === 'buy' ? '▲ Buy' : '▼ Sell'} · {decisionOverlay.count} decision{decisionOverlay.count !== 1 ? 's' : ''}
+                {decisionOverlay.direction === 'buy' ? '▲ Buy' : '▼ Sell'} · {decisionOverlay.count}
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                  {' '}decision{decisionOverlay.count !== 1 ? 's' : ''}
+                </Box>
               </Typography>
 
-              {/* Date + symbol — one continuous chip of metadata */}
+              {/* Date + symbol — desktop only. On mobile we drop both
+                  since the chart itself already answers "what symbol",
+                  "when" and at "what price" (they're on the axes / tick
+                  marks right below). Keeps the banner to one line. */}
               <Typography
                 variant="caption"
                 color="text.secondary"
-                sx={{ flexShrink: 0, fontSize: '0.72rem', whiteSpace: 'nowrap' }}
+                sx={{
+                  display: { xs: 'none', sm: 'inline' },
+                  flexShrink: 0,
+                  fontSize: '0.72rem',
+                  whiteSpace: 'nowrap',
+                }}
               >
                 {decisionOverlay.date} · {decisionOverlay.symbol}
                 {Number.isFinite(decisionOverlay.price) ? ` $${decisionOverlay.price.toFixed(2)}` : ''}
               </Typography>
 
-              {/* Ticker legend — flex-grows to take remaining room; wraps
-                  onto its own line on narrow screens. */}
+              {/* Ticker legend — flex-grows to fill middle. Single-line;
+                  overflow hidden so a chain of 4+ tickers on a tight
+                  mobile width truncates gracefully instead of wrapping. */}
               <Box
                 sx={{
                   display: 'flex',
-                  flexWrap: 'wrap',
+                  flexWrap: 'nowrap',
                   alignItems: 'center',
-                  gap: 0.75,
+                  gap: { xs: 0.5, sm: 0.75 },
                   minWidth: 0,
                   flex: 1,
-                  rowGap: 0.25,
+                  overflow: 'hidden',
                 }}
               >
                 {decisionOverlay.fetching ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                    <CircularProgress size={12} />
-                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
-                      Loading charts…
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <CircularProgress size={10} />
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ fontSize: '0.68rem', whiteSpace: 'nowrap' }}
+                    >
+                      Loading…
                     </Typography>
                   </Box>
                 ) : decisionOverlay.lines.length > 0 ? (
                   decisionOverlay.lines.map((tl) => {
                     const sign = tl.pctChange >= 0 ? '+' : ''
                     return (
-                      <Box key={tl.ticker} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, whiteSpace: 'nowrap' }}>
-                        <Box sx={{ width: 14, height: 2.5, bgcolor: tl.color, borderRadius: 1 }} />
-                        <Typography variant="caption" fontWeight={700} sx={{ color: tl.color, fontSize: '0.72rem' }}>
+                      <Box key={tl.ticker} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.35, whiteSpace: 'nowrap', minWidth: 0 }}>
+                        {/* Color swatch — hidden on xs where every pixel counts */}
+                        <Box sx={{ display: { xs: 'none', sm: 'block' }, width: 12, height: 2.5, bgcolor: tl.color, borderRadius: 1 }} />
+                        <Typography
+                          variant="caption"
+                          fontWeight={700}
+                          sx={{ color: tl.color, fontSize: { xs: '0.68rem', sm: '0.72rem' } }}
+                        >
                           ${tl.ticker}
                         </Typography>
                         <Typography
@@ -976,7 +1000,7 @@ export default function TimelinePage() {
                           fontWeight={800}
                           sx={{
                             color: tl.pctChange >= 0 ? tokens.markerBuy : tokens.markerSell,
-                            fontSize: '0.72rem',
+                            fontSize: { xs: '0.68rem', sm: '0.72rem' },
                           }}
                         >
                           {sign}{tl.pctChange.toFixed(1)}%
@@ -985,29 +1009,37 @@ export default function TimelinePage() {
                     )
                   })
                 ) : decisionOverlay.tickers.length > 0 ? (
-                  decisionOverlay.tickers.slice(0, 6).map((t) => (
-                    <Chip key={t} size="small" label={`$${t}`} sx={{ height: 20, fontSize: '0.65rem' }} />
+                  decisionOverlay.tickers.slice(0, 3).map((t) => (
+                    <Chip key={t} size="small" label={`$${t}`} sx={{ height: 18, fontSize: '0.62rem' }} />
                   ))
                 ) : null}
+                {/* "since this date" is implied on mobile (the banner
+                    represents a point-in-time click). Desktop keeps it
+                    for an extra second of clarity. */}
                 {!decisionOverlay.fetching && decisionOverlay.lines.length > 0 && (
                   <Typography
                     variant="caption"
                     color="text.secondary"
-                    sx={{ fontSize: '0.65rem', ml: 0.25, whiteSpace: 'nowrap' }}
+                    sx={{
+                      display: { xs: 'none', sm: 'inline' },
+                      fontSize: '0.65rem',
+                      ml: 0.25,
+                      whiteSpace: 'nowrap',
+                    }}
                   >
                     since this date
                   </Typography>
                 )}
               </Box>
 
-              {/* Dismiss — always visible in the corner, never wraps. */}
+              {/* Dismiss — compact on mobile so it doesn't steal the row. */}
               <IconButton
                 size="small"
                 onClick={() => { setSelectedActionId(null); setDecisionOverlay(null) }}
                 aria-label="Close decision overlay"
-                sx={{ ml: 'auto', flexShrink: 0, p: 0.5 }}
+                sx={{ flexShrink: 0, p: { xs: 0.25, sm: 0.5 }, ml: { xs: 0, sm: 'auto' } }}
               >
-                <CloseIcon fontSize="small" />
+                <CloseIcon sx={{ fontSize: { xs: 16, sm: 20 } }} />
               </IconButton>
             </Paper>
           )}
