@@ -240,13 +240,17 @@ export default function TimelinePage() {
     }
   }, [loading, chartData.length])
 
+  // Benchmark changes (e.g. SPY → QQQ) invalidate any saved zoom indices
+  // because they refer to a different dataset — clear them when the
+  // symbol flips. `range` is deliberately NOT in this dep array: range-
+  // click handlers already clear zoom explicitly, and including `range`
+  // here would wipe the URL-deep-linked zoom on initial mount, right
+  // after the hook read it.
   useEffect(() => {
     setZoomRange(null)
     setMeasureSelection(null)
-    // setZoomRange / setMeasureSelection are memo'd but we only care to
-    // re-run when the user picks a new range or symbol.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range, symbolParam])
+  }, [symbolParam])
 
   // Fetch sentiment bands and news
   useEffect(() => {
