@@ -232,8 +232,8 @@ function AppBarNav({
                 <AddCircleOutlineIcon />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Activity">
-              <IconButton color="inherit" onClick={() => setActivityOpen(true)} aria-label="Activity">
+            <Tooltip title="Reminders">
+              <IconButton color="inherit" onClick={() => setActivityOpen(true)} aria-label="Reminders">
                 <Badge badgeContent={activityCount} color="secondary">
                   <NotificationsIcon />
                 </Badge>

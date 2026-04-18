@@ -1,3 +1,12 @@
+/**
+ * Reminders drawer — was "Activity". Scope deliberately narrowed per user
+ * direction: surface PAST-DUE reminders and upcoming reminders, drop the
+ * auto-generated "ticker N weeks ago" stale-idea list that lived here
+ * before. Pass reviews ("score your rejection") stay because they are
+ * explicit, actionable prompts keyed to specific decisions — not stale
+ * activity noise.
+ */
+
 import { useEffect, useState } from 'react'
 import {
   Drawer,
@@ -12,7 +21,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Divider,
   Skeleton,
   Stack,
   Tooltip,
@@ -25,15 +33,13 @@ import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined'
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import { completeReminder, createReminder } from '../services/remindersService'
-import { useReminders, useActions, usePassedDueForReview, useInvalidate } from '../hooks/queries'
+import { useReminders, usePassedDueForReview, useInvalidate } from '../hooks/queries'
 import { getEntry } from '../services/entriesService'
-import { getOutcomesForActionIds, createOutcome } from '../services/outcomesService'
-import OutcomeFormDialog from './OutcomeFormDialog'
 import {
   recordPassReview,
   snoozePassReview,
 } from '../services/passedService'
-import { fetchChartData, type ChartData, type ChartRange } from '../services/chartApiService'
+import { fetchChartData, type ChartData } from '../services/chartApiService'
 import SwipeableCard from './SwipeableCard'
 import CheckIcon from '@mui/icons-material/Check'
 import ThumbDownIcon from '@mui/icons-material/ThumbDown'
@@ -42,10 +48,8 @@ import SnoozeIcon from '@mui/icons-material/Snooze'
 import type { Passed, PassReviewStatus } from '../types/database'
 import { useAuth } from '../contexts/AuthContext'
 import { getTickerDisplayLabel, normalizeTickerToCompany } from '../utils/tickerCompany'
-import { parseOptionSymbol } from '../utils/optionSymbol'
-import { getDismissedStaleIdeas, dismissStaleIdea } from '../utils/dismissedStaleIdeas'
 import RelativeDate from './RelativeDate'
-import type { Reminder, ActionType } from '../types/database'
+import type { Reminder } from '../types/database'
 import { SectionTitle, EmptyState } from './system'
 
 function addDaysToToday(days: number): string {
@@ -54,16 +58,7 @@ function addDaysToToday(days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-const IDEA_REFRESH_DAYS = 90
 const TODAY = new Date().toISOString().slice(0, 10)
-
-function daysAgo(dateStr: string): number {
-  const d = new Date(dateStr)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  d.setHours(0, 0, 0, 0)
-  return Math.floor((today.getTime() - d.getTime()) / (24 * 60 * 60 * 1000))
-}
 
 function isOverdue(reminderDate: string): boolean {
   return reminderDate < TODAY
@@ -85,7 +80,7 @@ function typeLabel(type: Reminder['type']) {
   return 'Prediction ended'
 }
 
-interface ActivityDrawerProps {
+interface RemindersDrawerProps {
   open: boolean
   onClose: () => void
   onRefresh?: () => void
@@ -111,40 +106,9 @@ type PassedWithPrice = Passed & {
   returnSincePass: number | null
 }
 
-type IdeaAlert = {
-  ticker: string
-  days: number
-  company?: string
-  lastDate: string
-  lastType: ActionType
-  lastActionId: string
-  entryPrice: number | null
-  currentPrice: number | null
-  signedAlpha: number | null
-  freshnessPct: number
-}
-
-function parseActionPrice(price: string | null | undefined): number | null {
-  if (price == null || typeof price !== 'string') return null
-  const cleaned = price.replace(/,/g, '').trim()
-  const n = Number(cleaned)
-  return Number.isFinite(n) && n > 0 ? n : null
-}
-
-/** Pick the smallest chart range that covers the given lookback window. */
-function rangeForDays(days: number): ChartRange {
-  if (days <= 30) return '3m'
-  if (days <= 90) return '6m'
-  if (days <= 330) return '1y'
-  if (days <= 700) return '2y'
-  if (days <= 1800) return '5y'
-  return 'max'
-}
-
 /** Find the chart close on (or just before) the given date. */
 function findPriceAtDate(data: ChartData | null | undefined, targetDate: string): number | null {
   if (!data?.dates?.length || !data?.prices?.length) return null
-  // Find the last index where dates[i] <= targetDate
   let matchIdx = -1
   for (let i = 0; i < data.dates.length; i++) {
     if (data.dates[i] <= targetDate) matchIdx = i
@@ -155,27 +119,6 @@ function findPriceAtDate(data: ChartData | null | undefined, targetDate: string)
   return Number.isFinite(p) ? p : null
 }
 
-function computeFreshness(days: number): number {
-  return Math.max(0, Math.min(100, 100 - (days / 365) * 100))
-}
-
-/** Raw price change since last action — always shows what the stock actually did. */
-function computeSignedAlpha(entry: number | null, current: number | null, _type: ActionType): number | null {
-  if (entry == null || current == null || entry <= 0) return null
-  const raw = ((current - entry) / entry) * 100
-  return Math.max(-100, Math.min(999, raw))
-}
-
-/** Annualized CAGR from a total return % and holding period in days. */
-function computeCagr(totalReturnPct: number, days: number): number | null {
-  if (days <= 0) return null
-  const years = days / 365.25
-  const multiple = 1 + totalReturnPct / 100
-  if (multiple <= 0) return -100
-  // For < 1 year, annualize on run-rate: (multiple ^ (1/years) - 1) * 100
-  return (Math.pow(multiple, 1 / years) - 1) * 100
-}
-
 /** Card border color based on urgency */
 function urgencyBorderColor(date: string): string {
   if (isOverdue(date)) return '#dc2626'   // red
@@ -184,32 +127,109 @@ function urgencyBorderColor(date: string): string {
 }
 
 function SectionHeader({ title, count }: { title: string; count: number }) {
-  // Thin wrapper around the design-system SectionTitle so the activity drawer
-  // stays consistent with the rest of the app's section labels.
+  // Thin wrapper around the design-system SectionTitle so the reminders
+  // drawer stays consistent with the rest of the app's section labels.
   return <SectionTitle count={count} mb={0.75}>{title}</SectionTitle>
 }
 
-export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDrawerProps) {
+/**
+ * One reminder row. Extracted from the main component so Past-due and
+ * Upcoming sections share rendering without duplicating 60+ lines of JSX.
+ * Swipe-left reveals Open (if we know where to go) / +7d / Dismiss.
+ */
+function renderReminderCard(
+  r: Reminder,
+  handlers: {
+    onOpenNav: () => void
+    onSnoozeWeek: () => void
+    onDismiss: () => void
+    entryTitles: Record<string, string>
+  },
+) {
+  const overdue = isOverdue(r.reminder_date)
+  const dueToday = isDueToday(r.reminder_date)
+  const borderColor = urgencyBorderColor(r.reminder_date)
+  const navTo = r.entry_id
+    ? `/entries/${r.entry_id}`
+    : r.ticker
+      ? `/tickers/${encodeURIComponent(normalizeTickerToCompany(r.ticker) || r.ticker)}`
+      : null
+  return (
+    <SwipeableCard
+      key={r.id}
+      actions={[
+        ...(navTo
+          ? [{
+              icon: <ArticleOutlinedIcon sx={{ fontSize: 18 }} />,
+              label: 'Open',
+              onClick: () => { handlers.onOpenNav(); window.location.href = navTo },
+              color: '#2563eb',
+            }]
+          : []),
+        { icon: <ScheduleIcon sx={{ fontSize: 18 }} />, label: '+7d', onClick: handlers.onSnoozeWeek, color: '#475569' },
+        { icon: <CloseIcon sx={{ fontSize: 18 }} />, label: 'Dismiss', onClick: handlers.onDismiss, color: '#dc2626' },
+      ]}
+      sx={{
+        borderLeft: borderColor ? `3px solid ${borderColor}` : '3px solid transparent',
+        bgcolor: overdue ? 'rgba(220,38,38,0.04)' : dueToday ? 'rgba(217,119,6,0.04)' : 'background.paper',
+      }}
+    >
+      <Box sx={{ px: 1.25, py: 1, display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
+        <Box sx={{ color: overdue ? 'error.main' : dueToday ? 'warning.main' : 'text.secondary', mt: '2px', flexShrink: 0 }}>
+          {typeIcon(r.type)}
+        </Box>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          {r.entry_id ? (
+            <Typography variant="body2" fontWeight={600} noWrap>
+              {handlers.entryTitles[r.entry_id] ?? 'Entry'}
+            </Typography>
+          ) : r.ticker ? (
+            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+              <Chip size="small" label={getTickerDisplayLabel(r.ticker)} sx={{ fontWeight: 700, height: 20 }} />
+            </Box>
+          ) : (
+            <Typography variant="body2" fontWeight={600}>Reminder</Typography>
+          )}
+          <Typography
+            variant="caption"
+            color={overdue ? 'error.main' : dueToday ? 'warning.main' : 'text.secondary'}
+            fontWeight={overdue || dueToday ? 600 : 400}
+            display="block"
+          >
+            <RelativeDate date={r.reminder_date} /> · {typeLabel(r.type)}
+          </Typography>
+          {r.note?.trim() && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              display="block"
+              sx={{ fontSize: '0.7rem', fontStyle: 'italic', mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              "{r.note.trim()}"
+            </Typography>
+          )}
+        </Box>
+      </Box>
+    </SwipeableCard>
+  )
+}
+
+export default function ActivityDrawer({ open, onClose, onRefresh }: RemindersDrawerProps) {
   const { user } = useAuth()
   const invalidate = useInvalidate()
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [entryTitles, setEntryTitles] = useState<Record<string, string>>({})
-  const [ideaAlerts, setIdeaAlerts] = useState<IdeaAlert[]>([])
   const [passReviews, setPassReviews] = useState<PassedWithPrice[]>([])
   const [_passReviewBusyId, setPassReviewBusyId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [dismissingId, setDismissingId] = useState<string | null>(null)
   const [laterAnchor, setLaterAnchor] = useState<{ el: HTMLElement; reminder: Reminder } | null>(null)
-  const [ideaLaterAnchor, setIdeaLaterAnchor] = useState<{ el: HTMLElement; alert: IdeaAlert } | null>(null)
-  const [snoozedIdeaTickers, setSnoozedIdeaTickers] = useState<Set<string>>(new Set())
   const [dismissConfirmId, setDismissConfirmId] = useState<string | null>(null)
-  const [resolveTarget, setResolveTarget] = useState<{ actionId: string; ticker: string } | null>(null)
 
   // ─── Source data via react-query — auto-refreshes after any mutation that ──
-  // ─── invalidates reminders / passed / actions anywhere in the app.        ──
+  // ─── invalidates reminders / passed anywhere in the app.                  ──
   const remindersQ = useReminders(true)
   const passedDueQ = usePassedDueForReview()
-  const actionsQ = useActions({ limit: 2000 })
 
   const load = () => {
     if (!open) return
@@ -239,11 +259,11 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
         .catch(() => setPassReviews([]))
     }
 
-    Promise.resolve([remindersQ.data ?? [], actionsQ.data ?? []] as const)
-      .then(async ([remList, actions]) => {
-        // Dedupe: same entry/ticker + same due date + same type appearing twice
-        // is almost always a double-tap during creation. Keep the earliest by id
-        // so "snooze" / "dismiss" land on a stable target.
+    Promise.resolve(remindersQ.data ?? [])
+      .then((remList) => {
+        // Dedupe: same entry/ticker + same due date + same type appearing
+        // twice is almost always a double-tap during creation. Keep the
+        // earliest by id so "snooze" / "dismiss" land on a stable target.
         const seen = new Set<string>()
         const deduped = remList.filter((r) => {
           const key = `${r.entry_id ?? ''}|${(r.ticker ?? '').toUpperCase()}|${r.reminder_date}|${r.type}`
@@ -251,7 +271,9 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
           seen.add(key)
           return true
         })
-        // Sort reminders: overdue first, then by due date ascending
+        // Past-due first (ascending by date so oldest-overdue rises to the
+        // top); then today / upcoming by date. The rendering groups split
+        // these for visual emphasis.
         const sorted = [...deduped].sort((a, b) => a.reminder_date.localeCompare(b.reminder_date))
         setReminders(sorted)
 
@@ -261,7 +283,6 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
             const map: Record<string, string> = {}
             entries.forEach((e, i) => {
               if (e && entryIds[i]) {
-                // Strip leading markdown heading markers for clean display
                 const raw = (e.title_markdown || e.date || 'Entry').replace(/^#+\s*/, '').trim()
                 map[entryIds[i]] = raw.slice(0, 80)
               }
@@ -269,91 +290,6 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
             setEntryTitles(map)
           })
           .catch(() => {})
-
-        const byTicker: Record<string, { lastDate: string; company?: string; lastType: ActionType; entryPrice: number | null; actionId: string }> = {}
-        actions.forEach((a) => {
-          if (!a.ticker) return
-          const existing = byTicker[a.ticker]
-          if (!existing || a.action_date > existing.lastDate) {
-            byTicker[a.ticker] = {
-              lastDate: a.action_date,
-              company: a.company_name ?? undefined,
-              lastType: a.type as ActionType,
-              entryPrice: parseActionPrice(a.price),
-              actionId: a.id,
-            }
-          }
-        })
-
-        // Filter out tickers whose last action already has an outcome (resolved)
-        const dismissedTickers = getDismissedStaleIdeas()
-        const staleActionIds = Object.values(byTicker)
-          .filter(({ lastDate }) => daysAgo(lastDate) >= IDEA_REFRESH_DAYS)
-          .map(({ actionId }) => actionId)
-        const existingOutcomes = staleActionIds.length > 0
-          ? await getOutcomesForActionIds(staleActionIds)
-          : []
-        const resolvedActionIds = new Set(existingOutcomes.map((o) => o.action_id))
-
-        const baseAlerts: IdeaAlert[] = Object.entries(byTicker)
-          .map(([ticker, { lastDate, company, lastType, entryPrice, actionId }]) => ({
-            ticker,
-            days: daysAgo(lastDate),
-            company,
-            lastDate,
-            lastType,
-            lastActionId: actionId,
-            entryPrice,
-            currentPrice: null,
-            signedAlpha: null,
-            freshnessPct: computeFreshness(daysAgo(lastDate)),
-          }))
-          .filter((a) => a.days >= IDEA_REFRESH_DAYS && parseOptionSymbol(a.ticker) == null && !dismissedTickers.has(a.ticker) && !resolvedActionIds.has(a.lastActionId))
-          .sort((a, b) => b.days - a.days)
-          .slice(0, 20)
-        setIdeaAlerts(baseAlerts)
-
-        // Fire parallel chart fetches to compute current price + derive entry
-        // price at action date. For pass decisions (which rarely have a
-        // recorded price), we look up the close nearest to lastDate from the
-        // chart data itself.
-        if (baseAlerts.length > 0) {
-          Promise.all(
-            baseAlerts.map((alert) => {
-              const range = rangeForDays(alert.days)
-              return fetchChartData(alert.ticker, range)
-                .then((data) => {
-                  const lastPrice = data?.prices?.[data.prices.length - 1] ?? null
-                  const entryFromChart = findPriceAtDate(data, alert.lastDate)
-                  return {
-                    ticker: alert.ticker,
-                    currentPrice: lastPrice,
-                    entryFromChart,
-                  }
-                })
-                .catch(() => ({ ticker: alert.ticker, currentPrice: null as number | null, entryFromChart: null as number | null }))
-            })
-          ).then((results) => {
-            const priceMap: Record<string, { currentPrice: number | null; entryFromChart: number | null }> = {}
-            results.forEach(({ ticker, currentPrice, entryFromChart }) => {
-              priceMap[ticker] = {
-                currentPrice: currentPrice != null && Number.isFinite(currentPrice) ? currentPrice : null,
-                entryFromChart: entryFromChart != null && Number.isFinite(entryFromChart) ? entryFromChart : null,
-              }
-            })
-            setIdeaAlerts((prev) => {
-              const enriched = prev.map((a) => {
-                const { currentPrice, entryFromChart } = priceMap[a.ticker] ?? { currentPrice: null, entryFromChart: null }
-                // Always prefer chart prices for alpha — action price may be in a different currency
-                const effectiveEntry = entryFromChart ?? a.entryPrice
-                const signedAlpha = computeSignedAlpha(effectiveEntry, currentPrice, a.lastType)
-                return { ...a, entryPrice: effectiveEntry, currentPrice, signedAlpha }
-              })
-              // Sort oldest first so the longest-neglected ideas surface at the top
-              return [...enriched].sort((x, y) => y.days - x.days)
-            })
-          })
-        }
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -364,7 +300,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
     // Re-derive whenever the drawer opens OR the underlying react-query
     // datasets change (e.g. add a Pass elsewhere → passed-due refetches → drawer re-renders).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, remindersQ.dataUpdatedAt, passedDueQ.dataUpdatedAt, actionsQ.dataUpdatedAt])
+  }, [open, remindersQ.dataUpdatedAt, passedDueQ.dataUpdatedAt])
 
   const handleDismissForever = async (id: string) => {
     setDismissingId(id)
@@ -403,30 +339,15 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
     }
   }
 
-  const handleIdeaLaterSelect = async (ticker: string, days: number) => {
-    if (!user?.id) return
-    setIdeaLaterAnchor(null)
-    try {
-      await createReminder(user.id, {
-        entry_id: null,
-        type: 'idea_refresh',
-        reminder_date: addDaysToToday(days),
-        note: '',
-        ticker,
-      })
-      setSnoozedIdeaTickers((prev) => new Set(prev).add(ticker))
-      invalidate.reminders()
-      onRefresh?.()
-    } catch (err) {
-      console.error('snooze idea failed', err)
-    }
-  }
+  // Partition reminders by urgency for the rendering below. Past-due is the
+  // headline section (the user explicitly asked us to surface these rather
+  // than the "N weeks ago" stale-ticker noise that used to share this drawer).
+  const pastDue = reminders.filter((r) => isOverdue(r.reminder_date))
+  const upcoming = reminders.filter((r) => !isOverdue(r.reminder_date))
 
-  const visibleIdeaAlerts = ideaAlerts.filter((a) => !snoozedIdeaTickers.has(a.ticker))
   const isEmpty =
     !loading &&
     reminders.length === 0 &&
-    visibleIdeaAlerts.length === 0 &&
     passReviews.length === 0
 
   const handlePassReview = async (id: string, status: PassReviewStatus) => {
@@ -461,7 +382,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
       {/* Header — serif title, hairline rule underneath. */}
       <Box sx={{ px: 2, py: 1.75, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider' }}>
         <Typography variant="h4" sx={{ fontSize: '1.25rem', lineHeight: 1, m: 0 }}>
-          Activity
+          Reminders
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Tooltip title="Refresh">
@@ -543,134 +464,32 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
               </Box>
             )}
 
-            {/* ── Reminders ── */}
-            {reminders.length > 0 && (
+            {/* ── Past due — headline group, red left rule, pink tint ── */}
+            {pastDue.length > 0 && (
               <Box sx={{ mb: 2 }}>
-                <SectionHeader title="Reminders" count={reminders.length} />
+                <SectionHeader title="Past due" count={pastDue.length} />
                 <Stack spacing={0.75}>
-                  {reminders.map((r) => {
-                    const overdue = isOverdue(r.reminder_date)
-                    const dueToday = isDueToday(r.reminder_date)
-                    const borderColor = urgencyBorderColor(r.reminder_date)
-                    const navTo = r.entry_id ? `/entries/${r.entry_id}` : r.ticker ? `/tickers/${encodeURIComponent(normalizeTickerToCompany(r.ticker) || r.ticker)}` : null
-                    return (
-                      <SwipeableCard
-                        key={r.id}
-                        actions={[
-                          ...(navTo ? [{ icon: <ArticleOutlinedIcon sx={{ fontSize: 18 }} />, label: 'Open', onClick: () => { onClose(); window.location.href = navTo }, color: '#2563eb' }] : []),
-                          { icon: <ScheduleIcon sx={{ fontSize: 18 }} />, label: '+7d', onClick: () => handleLaterSelect(r, 7), color: '#475569' },
-                          { icon: <CloseIcon sx={{ fontSize: 18 }} />, label: 'Dismiss', onClick: () => setDismissConfirmId(r.id), color: '#dc2626' },
-                        ]}
-                        sx={{
-                          borderLeft: borderColor ? `3px solid ${borderColor}` : '3px solid transparent',
-                          bgcolor: overdue ? 'rgba(220,38,38,0.04)' : dueToday ? 'rgba(217,119,6,0.04)' : 'background.paper',
-                        }}
-                      >
-                        <Box sx={{ px: 1.25, py: 1, display: 'flex', alignItems: 'flex-start', gap: 0.75 }}>
-                          <Box sx={{ color: overdue ? 'error.main' : dueToday ? 'warning.main' : 'text.secondary', mt: '2px', flexShrink: 0 }}>
-                            {typeIcon(r.type)}
-                          </Box>
-                          <Box sx={{ flex: 1, minWidth: 0 }}>
-                            {r.entry_id ? (
-                              <Typography variant="body2" fontWeight={600} noWrap>
-                                {entryTitles[r.entry_id] ?? 'Entry'}
-                              </Typography>
-                            ) : r.ticker ? (
-                              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                                <Chip size="small" label={getTickerDisplayLabel(r.ticker)} sx={{ fontWeight: 700, height: 20 }} />
-                              </Box>
-                            ) : (
-                              <Typography variant="body2" fontWeight={600}>Reminder</Typography>
-                            )}
-                            <Typography
-                              variant="caption"
-                              color={overdue ? 'error.main' : dueToday ? 'warning.main' : 'text.secondary'}
-                              fontWeight={overdue || dueToday ? 600 : 400}
-                              display="block"
-                            >
-                              <RelativeDate date={r.reminder_date} /> · {typeLabel(r.type)}
-                            </Typography>
-                            {r.note?.trim() && (
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                display="block"
-                                sx={{ fontSize: '0.7rem', fontStyle: 'italic', mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                              >
-                                "{r.note.trim()}"
-                              </Typography>
-                            )}
-                          </Box>
-                        </Box>
-                      </SwipeableCard>
-                    )
-                  })}
+                  {pastDue.map((r) => renderReminderCard(r, {
+                    onOpenNav: onClose,
+                    onSnoozeWeek: () => handleLaterSelect(r, 7),
+                    onDismiss: () => setDismissConfirmId(r.id),
+                    entryTitles,
+                  }))}
                 </Stack>
               </Box>
             )}
 
-            {reminders.length > 0 && visibleIdeaAlerts.length > 0 && (
-              <Divider sx={{ my: 1.5 }} />
-            )}
-
-            {/* ── Ideas to refresh ── */}
-            {visibleIdeaAlerts.length > 0 && (
-              <Box>
-                <SectionHeader title={`Stale tickers · ${IDEA_REFRESH_DAYS}+ days`} count={visibleIdeaAlerts.length} />
+            {/* ── Upcoming (today + future) — secondary group ── */}
+            {upcoming.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <SectionHeader title="Upcoming" count={upcoming.length} />
                 <Stack spacing={0.75}>
-                  {visibleIdeaAlerts.map((a) => {
-                    const realReturn = a.signedAlpha
-                    const cagr = realReturn != null ? computeCagr(realReturn, a.days) : null
-                    const realColor = realReturn == null ? '#64748b' : realReturn >= 0 ? '#16a34a' : '#dc2626'
-                    const cagrColor = cagr == null ? '#64748b' : cagr >= 0 ? '#16a34a' : '#dc2626'
-                    const ideaUrl = `/tickers/${encodeURIComponent(normalizeTickerToCompany(a.ticker) || a.ticker)}`
-                    return (
-                      <SwipeableCard
-                        key={a.ticker}
-                        actions={[
-                          { icon: <CheckIcon sx={{ fontSize: 18 }} />, label: 'Resolve', onClick: () => setResolveTarget({ actionId: a.lastActionId, ticker: a.ticker }), color: '#16a34a' },
-                          { icon: <LightbulbOutlinedIcon sx={{ fontSize: 18 }} />, label: 'View', onClick: () => { onClose(); window.location.href = ideaUrl }, color: '#2563eb' },
-                          { icon: <SnoozeIcon sx={{ fontSize: 18 }} />, label: '+30d', onClick: () => handleIdeaLaterSelect(a.ticker, 30), color: '#475569' },
-                          { icon: <CloseIcon sx={{ fontSize: 18 }} />, label: 'Drop', onClick: () => { dismissStaleIdea(a.ticker); setIdeaAlerts((prev) => prev.filter((x) => x.ticker !== a.ticker)) }, color: '#dc2626' },
-                        ]}
-                      >
-                        <Box sx={{ px: 1.25, py: 0.75, display: 'flex', gap: 0.75 }}>
-                          <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <Chip size="small" label={getTickerDisplayLabel(a.ticker)} clickable onClick={() => { onClose(); window.location.href = `/tickers/${encodeURIComponent(a.ticker)}` }} sx={{ fontWeight: 700, height: 22 }} />
-                              {a.company && (
-                                <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 160, flex: 1 }}>
-                                  {a.company}
-                                </Typography>
-                              )}
-                            </Box>
-                            <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.7rem' }}>
-                              Last entry <RelativeDate date={a.lastDate} />
-                            </Typography>
-                          </Box>
-                          {/* Right-aligned return columns */}
-                          {realReturn != null && (
-                            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0, minWidth: 80 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-                                <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.55rem' }}>(Real)</Typography>
-                                <Typography variant="caption" fontWeight={700} sx={{ color: realColor, fontSize: '0.75rem', fontFamily: 'monospace' }}>
-                                  {realReturn >= 0 ? '+' : ''}{realReturn.toFixed(1)}%
-                                </Typography>
-                              </Box>
-                              {cagr != null && (
-                                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
-                                  <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.55rem' }}>(CAGR)</Typography>
-                                  <Typography variant="caption" fontWeight={600} sx={{ color: cagrColor, fontSize: '0.7rem', fontFamily: 'monospace' }}>
-                                    {cagr >= 0 ? '+' : ''}{cagr.toFixed(1)}%
-                                  </Typography>
-                                </Box>
-                              )}
-                            </Box>
-                          )}
-                        </Box>
-                      </SwipeableCard>
-                    )
-                  })}
+                  {upcoming.map((r) => renderReminderCard(r, {
+                    onOpenNav: onClose,
+                    onSnoozeWeek: () => handleLaterSelect(r, 7),
+                    onDismiss: () => setDismissConfirmId(r.id),
+                    entryTitles,
+                  }))}
                 </Stack>
               </Box>
             )}
@@ -682,14 +501,6 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
       <Menu anchorEl={laterAnchor?.el} open={Boolean(laterAnchor)} onClose={() => setLaterAnchor(null)}>
         {LATER_INTERVALS.map(({ label, days }) => (
           <MenuItem key={days} dense onClick={() => laterAnchor && handleLaterSelect(laterAnchor.reminder, days)}>
-            Remind in {label}
-          </MenuItem>
-        ))}
-      </Menu>
-
-      <Menu anchorEl={ideaLaterAnchor?.el} open={Boolean(ideaLaterAnchor)} onClose={() => setIdeaLaterAnchor(null)}>
-        {LATER_INTERVALS.map(({ label, days }) => (
-          <MenuItem key={days} dense onClick={() => ideaLaterAnchor && handleIdeaLaterSelect(ideaLaterAnchor.alert.ticker, days)}>
             Remind in {label}
           </MenuItem>
         ))}
@@ -716,34 +527,6 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: ActivityDra
         </DialogActions>
       </Dialog>
 
-      {/* Outcome resolution dialog for stale ideas */}
-      {resolveTarget && (
-        <OutcomeFormDialog
-          open
-          onClose={() => setResolveTarget(null)}
-          initial={null}
-          actionLabel={getTickerDisplayLabel(resolveTarget.ticker)}
-          onSubmit={async (data) => {
-            await createOutcome({
-              action_id: resolveTarget.actionId,
-              realized_pnl: data.realized_pnl,
-              outcome_date: data.outcome_date,
-              notes: data.notes,
-              driver: data.driver,
-              post_mortem_notes: data.post_mortem_notes || null,
-              process_quality: data.process_quality ?? null,
-              outcome_quality: data.outcome_quality ?? null,
-              process_score: data.process_score,
-              outcome_score: data.outcome_score,
-              closing_memo: data.closing_memo?.trim() || null,
-              error_type: data.error_type ?? null,
-              what_i_remember_now: data.what_i_remember_now?.trim() || null,
-            })
-            setIdeaAlerts((prev) => prev.filter((x) => x.ticker !== resolveTarget.ticker))
-            setResolveTarget(null)
-          }}
-        />
-      )}
     </Drawer>
   )
 }

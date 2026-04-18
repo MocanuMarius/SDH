@@ -76,7 +76,7 @@ export default function NavDrawer({
                   <NotificationsIcon />
                 </Badge>
               </ListItemIcon>
-              <ListItemText primary="Activity" />
+              <ListItemText primary="Reminders" />
             </ListItemButton>
             <Divider sx={{ my: 1 }} />
           </>
