@@ -31,36 +31,6 @@ that contradict an earlier choice.
 
 ## Upcoming — in the order we plan to tackle them
 
-### 6. Desktop chart interactions are borderline unusable
-
-**Why.** The cursor is stuck on `crosshair` (from the range-drag),
-clicks don't land reliably, and dragging over parts of the plot produces
-surprising behaviour (sometimes selects, sometimes starts a drag that
-doesn't go anywhere). The page is optimised for mobile gestures; desktop
-needs a dedicated pass.
-
-**Scope.**
-- Audit desktop input flow on every interactive region of the chart:
-  - background (should click to dismiss overlay, drag to measure)
-  - price line / axis area (should hover → crosshair, click → nothing)
-  - decision markers (should hover → pointer, click → open overlay)
-  - cones (same as markers)
-  - brush area (if still present after #3)
-- Look at visx docs + examples for the "correct" desktop gesture model
-  — nothing we're doing is novel.
-- Fix cursor + hit-area behaviour per region.
-- Verify range presets / date inputs / overlay all work with a mouse.
-
-**Open questions.**
-- Shift-drag for measure vs drag alone — which one does the user
-  actually want for "measure % change between these two dates"?
-- Do we want a hover tooltip showing (date, price) along the line?
-  Many charting libs do this by default; we don't currently.
-
-**Status.** todo
-
----
-
 ### 7. Centralise the per-page chart wrapper
 
 **Why.** We've already consolidated the *rendering* into
@@ -135,7 +105,22 @@ idea.
 
 ## Done (rolling log)
 
-- **#5 Chart settings modal.** Commit `<next>`.
+- **#6 Desktop chart interactions.** Commit `<next>`.
+  Three desktop fixes:
+    - Wrapper cursor changed from `grab` (lying — there's no pan
+      gesture) to `crosshair`. Decision markers carry their own
+      `cursor: pointer` inside the chart SVG so they read as clickable.
+    - `touchAction: 'none'` was breaking native mouse-wheel scroll over
+      the chart area on desktop. Now applied only at xs/sm breakpoints
+      where pinch-zoom needs it; md+ uses `auto` so wheel scrolling
+      passes through to the page.
+    - Measure-drag activation threshold raised 10 → 20 px so a normal
+      click (small tremor) doesn't accidentally fire a measurement.
+      Deliberate drags still trigger normally.
+  The deeper hover-tooltip-along-the-line affordance many charting libs
+  ship by default is left as a follow-up — not blocking basic usability.
+
+- **#5 Chart settings modal.** Commit `7b563ac`.
   Retired the outer filter bar entirely (Benchmark dropdown, Show-decisions
   Select, Hide-broker-imports chip). Range presets stay visible at rest
   inside the chart's top control row. Added a `<TuneIcon>` gear button in

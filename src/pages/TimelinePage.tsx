@@ -507,7 +507,10 @@ export default function TimelinePage() {
     const startX = selectStartXRef.current
     const endX = selectEndXRef.current
     const span = Math.abs(endX - startX)
-    if (span < 10) return
+    // Threshold raised 10 → 20 to disambiguate "click" from "measure-drag"
+    // on desktop. A genuine click (small tremor) won't accidentally fire
+    // a measurement; deliberate drags (≥20 px) still trigger one.
+    if (span < 20) return
     const rect = wrap.getBoundingClientRect()
     const margins = getPlotMargins()
     const plotWidth = rect.width - margins.left - margins.right
@@ -1041,12 +1044,22 @@ export default function TimelinePage() {
             sx={{
               height: { xs: 300, sm: 400, md: 460 },
               position: 'relative',
-              cursor: dragActive ? 'crosshair' : 'grab',
+              // Desktop default is 'crosshair' so mouseover the plot tells
+              // the user "this surface is interactive" without lying about
+              // grab/pan (which we don't actually do — there is no pan
+              // gesture). Decision markers carry their own cursor: pointer
+              // override inside the chart SVG so they read as clickable.
+              // While a measure-drag is in flight the cursor stays
+              // crosshair (no change) and selection is locked off.
+              cursor: 'crosshair',
               userSelect: dragActive ? 'none' : 'auto',
               minWidth: 0,
               outline: 'none',
               '&:focus': { outline: 'none' },
-              touchAction: 'none',
+              // touchAction: none was needed for pinch-zoom on touch
+              // devices but breaks the native scroll-over-the-chart
+              // affordance on desktop. Apply only on touch (xs/sm).
+              touchAction: { xs: 'none', md: 'auto' },
             }}
             onMouseDown={handleChartMouseDown}
             onMouseMove={handleChartMouseMove}
