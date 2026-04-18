@@ -10,6 +10,7 @@ import {
   Button,
   Chip,
   FormControl,
+  IconButton,
   InputLabel,
   Select,
   MenuItem,
@@ -18,8 +19,10 @@ import {
   Link,
   TextField,
 } from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
+import { tokens } from '../theme'
 import { ParentSize } from '@visx/responsive'
-import TimelineChartVisx, { getTimelineChartResponsiveMargin } from '../components/TimelineChartVisx'
+import TimelineChartVisx, { getTimelineChartResponsiveMargin, type DecisionOverlayInfo } from '../components/TimelineChartVisx'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
 import type { ActionWithEntry } from '../services/actionsService'
 import { useActions } from '../hooks/queries'
@@ -131,6 +134,11 @@ export default function TimelinePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
+  // Decision-click overlay (used to live inside the chart plot, covering
+  // it with a floating Paper). Lifted up here so we can render it as a
+  // banner over the range-selector bar — same precise footprint, never
+  // covers the timeline plot. Null when no marker is active.
+  const [decisionOverlay, setDecisionOverlay] = useState<DecisionOverlayInfo | null>(null)
   const [zoomRange, setZoomRange] = useState<{ startIndex: number; endIndex: number } | null>(null)
   const [measureSelection, setMeasureSelection] = useState<{ startIndex: number; endIndex: number } | null>(null)
   /** True while range-drag is active — only toggled on start/end (no per-frame updates). */
@@ -832,12 +840,18 @@ export default function TimelinePage() {
         <Paper variant="outlined" sx={{ p: { xs: 1, sm: 2 }, minWidth: 0, overflow: 'hidden' }}>
           <Box ref={chartContainerRef} sx={{ bgcolor: 'background.paper', minWidth: 0 }}>
 
-          {/* ── Range Selector Bar ── */}
+          {/* ── Range-selector bar + decision-click banner ──
+              The banner (only visible while a decision cluster is active)
+              overlays the range-selector EXACTLY — same rounded-top seam
+              with the parent Paper, same bottom divider continuing into
+              the chart. It sits in the controls row so it never covers
+              the timeline plot below. Dismiss with the ✕ or by clicking
+              the chart background. */}
+          <Box sx={{ position: 'relative', mb: 1 }}>
           <Box sx={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            mb: 1,
             pb: 1,
             borderBottom: '1px solid',
             borderColor: 'divider',
@@ -915,6 +929,91 @@ export default function TimelinePage() {
             </Box>
           </Box>
 
+          {/* Decision banner — absolute, covers the range-selector exactly.
+              Same bottom hairline as the selector so the seam continues
+              seamlessly into the chart below. Coloured left-rule by
+              direction (buy/sell) keeps the tooltip's existing semantics. */}
+          {decisionOverlay && (
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                bgcolor: 'background.paper',
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                borderLeft: `3px solid ${decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.25,
+                px: 1.25,
+                py: 0.75,
+                zIndex: 8,
+              }}
+            >
+              {/* Direction + count — primary label */}
+              <Typography
+                variant="body2"
+                fontWeight={800}
+                sx={{ color: decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell, flexShrink: 0 }}
+              >
+                {decisionOverlay.direction === 'buy' ? '▲ Buy' : '▼ Sell'} · {decisionOverlay.count} decision{decisionOverlay.count !== 1 ? 's' : ''}
+              </Typography>
+
+              {/* Date + symbol */}
+              <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+                {decisionOverlay.date} · {decisionOverlay.symbol}
+                {Number.isFinite(decisionOverlay.price) ? ` $${decisionOverlay.price.toFixed(2)}` : ''}
+              </Typography>
+
+              {/* Ticker legend — inline, space-permitting */}
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75, minWidth: 0, flex: 1 }}>
+                {decisionOverlay.fetching ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <CircularProgress size={12} />
+                    <Typography variant="caption" color="text.secondary">Loading charts…</Typography>
+                  </Box>
+                ) : decisionOverlay.lines.length > 0 ? (
+                  decisionOverlay.lines.map((tl) => {
+                    const sign = tl.pctChange >= 0 ? '+' : ''
+                    return (
+                      <Box key={tl.ticker} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                        <Box sx={{ width: 14, height: 2.5, bgcolor: tl.color, borderRadius: 1 }} />
+                        <Typography variant="caption" fontWeight={700} sx={{ color: tl.color }}>${tl.ticker}</Typography>
+                        <Typography
+                          variant="caption"
+                          fontWeight={800}
+                          sx={{ color: tl.pctChange >= 0 ? tokens.markerBuy : tokens.markerSell }}
+                        >
+                          {sign}{tl.pctChange.toFixed(1)}%
+                        </Typography>
+                      </Box>
+                    )
+                  })
+                ) : decisionOverlay.tickers.length > 0 ? (
+                  decisionOverlay.tickers.slice(0, 6).map((t) => (
+                    <Chip key={t} size="small" label={`$${t}`} sx={{ height: 20, fontSize: '0.68rem' }} />
+                  ))
+                ) : null}
+                {!decisionOverlay.fetching && decisionOverlay.lines.length > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem', ml: 0.5 }}>
+                    since this date
+                  </Typography>
+                )}
+              </Box>
+
+              {/* Dismiss */}
+              <IconButton
+                size="small"
+                onClick={() => { setSelectedActionId(null); setDecisionOverlay(null) }}
+                aria-label="Close decision overlay"
+                sx={{ ml: 'auto', flexShrink: 0 }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          )}
+          </Box>
+
           <Box
             ref={chartWrapperRef}
             sx={{
@@ -977,6 +1076,7 @@ export default function TimelinePage() {
                           setMeasureSelection(null)
                         }
                       }}
+                      onDecisionOverlayChange={setDecisionOverlay}
                     />
                   ) : null
                 }

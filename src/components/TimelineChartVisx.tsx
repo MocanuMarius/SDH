@@ -113,6 +113,36 @@ export interface TimelineChartVisxProps {
    *  individually. The embedder can apply this to its own zoom state to
    *  drill into the cluster (timeline page does this; popup ignores). */
   onClusterZoom?: (startIndex: number, endIndex: number) => void
+  /** Fired whenever the click-to-inspect decision overlay's content
+   *  changes. The embedder can render the overlay OUTSIDE the chart's
+   *  plot area (e.g. as a banner over the range-selector bar) so it
+   *  doesn't cover the timeline. Pass null when the user dismisses.
+   *
+   *  When set, the chart suppresses its own in-plot Paper tooltip and
+   *  relies on the embedder's rendering. */
+  onDecisionOverlayChange?: (overlay: DecisionOverlayInfo | null) => void
+}
+
+/** Payload for the embedder-rendered decision overlay. Mirrors what the
+ *  in-chart Paper tooltip used to show — direction + counts + tickers +
+ *  fetched ticker-line returns — so the embedder can reproduce it in its
+ *  own chrome without depending on chart-internal types. */
+export interface DecisionOverlayInfo {
+  direction: 'buy' | 'sell'
+  /** Total decisions represented by the clicked cluster. */
+  count: number
+  /** The chart point under the clicked marker. */
+  date: string
+  price: number
+  /** The parent chart's primary symbol ("SPY", "UBER", …). */
+  symbol: string
+  /** Tickers whose overlays we're fetching / have fetched. */
+  tickers: string[]
+  /** Per-ticker return since `date`; populated after the chart fetches
+   *  their overlay lines. Empty while `fetching === true`. */
+  lines: Array<{ ticker: string; color: string; pctChange: number }>
+  /** True while chart data for the overlay tickers is in flight. */
+  fetching: boolean
 }
 
 const BRUSH_HEIGHT = 40
@@ -135,6 +165,7 @@ function TimelineChartVisx({
   benchmarkData = null,
   disableMarkerClick = false,
   onClusterZoom,
+  onDecisionOverlayChange,
 }: TimelineChartVisxProps) {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)   // hover highlight only
   const [activeArrow, setActiveArrow] = useState<ArrowInfo | null>(null)  // click → overlay
@@ -331,6 +362,27 @@ function TimelineChartVisx({
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeArrow?.point.date, activeArrow?.ticker])
+
+  // Notify the embedder when the overlay state changes, so it can render
+  // the decision banner outside the chart (e.g. over the range-selector).
+  useEffect(() => {
+    if (!onDecisionOverlayChange) return
+    if (!activeArrow) {
+      onDecisionOverlayChange(null)
+      return
+    }
+    onDecisionOverlayChange({
+      direction: activeArrow.direction,
+      count: activeArrow.count,
+      date: activeArrow.point.date,
+      price: activeArrow.point.price,
+      symbol,
+      tickers: activeArrow.tickers,
+      lines: tickerLines.map((tl) => ({ ticker: tl.ticker, color: tl.color, pctChange: tl.pctChange })),
+      fetching: fetchingOverlay,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeArrow, tickerLines, fetchingOverlay, symbol])
 
   const handleBackgroundClick = useCallback(() => {
     setActiveArrow(null)
@@ -569,13 +621,15 @@ function TimelineChartVisx({
               interference" effect that reads as "more activity here".
               Per-cluster hit rectangles drive click/hover. */}
           {(() => {
-            // Cluster threshold: merge markers whose dots would visually
-            // overlap or touch. Small gap = clusters only form when dots
-            // genuinely collide, so the user sees individual dates as long
-            // as they're spaced more than ~12px apart on screen. Tap reliability
-            // comes from the merged cluster dot growing with sqrt(count),
-            // not from huge invisible hit zones.
-            const MIN_GAP = DOT_R * 2 + 4
+            // Cluster threshold — wider than a pure "dots-touching" check
+            // so nearby markers combine into meaningful clusters before they
+            // actually collide. 2× the old tight spacing (~12px → ~24px on
+            // desktop, ~11px → ~22px on mobile) — dates within a rough
+            // fortnight of each other now merge into one cluster dot. Tap
+            // reliability still comes from the merged dot growing with
+            // sqrt(count); the extra width just reduces visual overlap and
+            // surfaces the cluster-zoom affordance earlier.
+            const MIN_GAP = DOT_R * 4 + 8
 
             interface Marker {
               cx: number; priceY: number; point: TimelineChartPoint
@@ -1127,8 +1181,12 @@ function TimelineChartVisx({
         </Box>
       )}
 
-      {/* Tooltip — shown when arrow is clicked */}
-      {activeArrow && (
+      {/* Tooltip — shown when an arrow is clicked. Rendered inside the
+          chart wrapper by default, positioned near the click. The embedder
+          can opt into rendering its own banner outside the chart by passing
+          `onDecisionOverlayChange`; in that case this in-plot Paper is
+          suppressed so we don't double-render. */}
+      {activeArrow && !onDecisionOverlayChange && (
         <Box
           sx={{
             position: 'absolute',
