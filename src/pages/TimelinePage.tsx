@@ -33,6 +33,7 @@ import MeasureStatsPill from '../components/charts/MeasureStatsPill'
 import HoverPricePill from '../components/charts/HoverPricePill'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
 import { useEncodedUrlState } from '../hooks/useEncodedUrlState'
+import { encodeUrlState, decodeUrlState } from '../utils/urlState'
 import type { ActionWithEntry } from '../services/actionsService'
 import { useActions } from '../hooks/queries'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
@@ -116,28 +117,38 @@ const BENCHMARK_OPTIONS: { symbol: string; label: string }[] = [
 
 export default function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const symbolParam = searchParams.get('symbol')?.trim()?.toUpperCase() || searchParams.get('symbol') || 'SPY'
-  // Deep-link state — range, zoom window, and selected decision ride in
-  // a single `?s=<base64>` param so a shared URL restores the view byte-
-  // for-byte (including "drilled into a cluster from 2024" or "viewing
-  // decision #abc123"). Ephemeral things (measureSelection drag, hover)
-  // stay local state since they're not useful across sessions.
-  //
-  // Existing `?symbol=` / `?types=` / `?hideAutomated=` params are still
-  // parsed separately below — keeping them keeps manually-typed URLs and
-  // older bookmarks working without a migration step.
+  // Deep-link state — one single `?s=<base64>` param carries every
+  // user-visible knob on the page so a shared URL restores the view
+  // byte-for-byte. The old `?symbol=`, `?types=`, `?hideAutomated=`
+  // query params have been folded into this blob; a one-shot
+  // migration useEffect further down strips them from the URL when
+  // the page mounts with any of them present, so bookmarks from the
+  // old scheme keep working but self-upgrade on first load.
+  // Ephemeral things (measureSelection drag, hover) stay local state
+  // since they're not useful across sessions.
   type TimelineUrlState = {
     range: ChartRange
     zoom: [number, number] | null
     sel: string | null
+    /** Benchmark / ticker on display. */
+    sym: string
+    /** Enabled decision types; array form so the default (all three)
+     *  round-trips cleanly and the URL collapses when nothing's filtered. */
+    types: ('buy' | 'sell' | 'other')[]
+    /** True = broker-import rows hidden from the chart + list. */
+    noauto: boolean
   }
   const [urlState, setUrlState] = useEncodedUrlState<TimelineUrlState>('s', {
     range: '6m',
     zoom: null,
     sel: null,
+    sym: 'SPY',
+    types: ['buy', 'sell', 'other'],
+    noauto: true,
   })
   const range = urlState.range
   const setRange = useCallback((v: ChartRange) => setUrlState({ range: v }), [setUrlState])
+  const symbolParam = urlState.sym
 
   const [chartData, setChartData] = useState<{ date: string; price: number }[]>([])
   const [symbol, setSymbol] = useState(symbolParam)
@@ -204,27 +215,61 @@ export default function TimelinePage() {
   const pinchStartZoomRef = useRef<{ startIndex: number; endIndex: number } | null>(null)
   // Wheel handler ref — always holds current closure, avoids stale values in the non-passive listener
   const wheelHandlerRef = useRef<(e: WheelEvent) => void>(() => {})
-  const typesParam = searchParams.get('types')
-  const [typeFilter, setTypeFilterState] = useState<{ buy: boolean; sell: boolean; other: boolean }>(() => {
-    if (!typesParam) return { buy: true, sell: true, other: true }
-    const enabled = typesParam.split(',')
-    return { buy: enabled.includes('buy'), sell: enabled.includes('sell'), other: enabled.includes('other') }
-  })
-  const setTypeFilter = (v: { buy: boolean; sell: boolean; other: boolean }) => {
-    setTypeFilterState(v)
-    const next = new URLSearchParams(searchParams)
-    const enabled = (['buy', 'sell', 'other'] as const).filter((t) => v[t])
-    if (enabled.length === 3) next.delete('types'); else next.set('types', enabled.join(','))
-    setSearchParams(next, { replace: true })
-  }
-  const hideAutomatedParam = searchParams.get('hideAutomated')
-  const [hideAutomated, setHideAutomatedState] = useState(hideAutomatedParam !== '0')
-  const setHideAutomated = (v: boolean) => {
-    setHideAutomatedState(v)
-    const next = new URLSearchParams(searchParams)
-    if (v) next.delete('hideAutomated'); else next.set('hideAutomated', '0')
-    setSearchParams(next, { replace: true })
-  }
+  // Type filter + broker-import toggle now live entirely in the `?s=`
+  // blob. Derived from urlState.types with a memoised lookup object so
+  // downstream useMemos that key off `typeFilter` keep their identity
+  // stable across renders where the filter hasn't changed.
+  const typeFilter = useMemo(() => ({
+    buy: urlState.types.includes('buy'),
+    sell: urlState.types.includes('sell'),
+    other: urlState.types.includes('other'),
+  }), [urlState.types])
+  const setTypeFilter = useCallback((v: { buy: boolean; sell: boolean; other: boolean }) => {
+    const types = (['buy', 'sell', 'other'] as const).filter((t) => v[t])
+    setUrlState({ types })
+  }, [setUrlState])
+  const hideAutomated = urlState.noauto
+  const setHideAutomated = useCallback((v: boolean) => setUrlState({ noauto: v }), [setUrlState])
+
+  // ── Legacy URL-param migration ──────────────────────────────────────
+  // Old shape used separate `?symbol=`, `?types=`, `?hideAutomated=`
+  // query params. New shape folds all of them into the `?s=` blob. On
+  // mount: detect any legacy param, fold its value into the `?s=` blob,
+  // and strip the legacy keys in a SINGLE setSearchParams call. Doing
+  // it in two calls (setUrlState + setSearchParams) was racy — react-
+  // router doesn't compose successive `.set(prev => ...)` updater calls
+  // within the same tick, so the second call's `prev` still saw the
+  // pre-migration URL and clobbered the `?s=` write from the first.
+  useEffect(() => {
+    const hasLegacy = searchParams.has('symbol') || searchParams.has('types') || searchParams.has('hideAutomated')
+    if (!hasLegacy) return
+    const patch: Partial<TimelineUrlState> = {}
+    const legacySym = searchParams.get('symbol')?.trim()?.toUpperCase()
+    if (legacySym) patch.sym = legacySym
+    const legacyTypes = searchParams.get('types')
+    if (legacyTypes) {
+      const valid = (['buy', 'sell', 'other'] as const).filter((t) => legacyTypes.split(',').includes(t))
+      patch.types = valid
+    }
+    const legacyHideAuto = searchParams.get('hideAutomated')
+    if (legacyHideAuto != null) patch.noauto = legacyHideAuto !== '0'
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('symbol')
+      next.delete('types')
+      next.delete('hideAutomated')
+      // Merge current `?s=` blob (if any) with the legacy values and
+      // re-encode. Keeps unrelated keys the user already set.
+      const currentDecoded = decodeUrlState<Partial<TimelineUrlState>>(next.get('s')) ?? {}
+      const merged = { ...currentDecoded, ...patch }
+      const encoded = encodeUrlState(merged)
+      if (encoded) next.set('s', encoded)
+      else next.delete('s')
+      return next
+    }, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [chartSize, setChartSize] = useState<{ w: number; h: number } | null>(null)
   const resizeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1219,7 +1264,7 @@ export default function TimelinePage() {
             <Select
               value={benchmarkSymbols.includes(symbolParam?.toUpperCase() ?? '') ? symbolParam : ''}
               label="Benchmark"
-              onChange={(e) => setSearchParams({ symbol: e.target.value })}
+              onChange={(e) => setUrlState({ sym: e.target.value })}
               displayEmpty
               renderValue={(v) => {
                 if (!v && symbolParam && !benchmarkSymbols.includes(symbolParam.toUpperCase())) return symbolParam
