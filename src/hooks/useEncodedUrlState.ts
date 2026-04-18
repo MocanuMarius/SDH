@@ -29,7 +29,7 @@
  * or namespace their own (rare — default to `'s'`).
  */
 
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { decodeUrlState, encodeUrlState } from '../utils/urlState'
 
@@ -51,12 +51,18 @@ export function useEncodedUrlState<T extends object>(
     return { ...defaultRef.current, ...(decoded ?? {}) }
   }, [encoded])
 
+  // Mirror `state` into a ref so the setter can read the LATEST value even
+  // when called multiple times within a single event handler. Without this,
+  // sequential setters each read the stale render-time `searchParams` and
+  // the later one overwrites the earlier one's URL update.
+  const latestStateRef = useRef(state)
+  useEffect(() => {
+    latestStateRef.current = state
+  }, [state])
+
   const setState = useCallback(
     (update: Partial<T> | ((prev: T) => Partial<T>)) => {
-      // Recompute the current decoded state inside the setter so we don't
-      // capture stale closure state from a previous render.
-      const current = decodeUrlState<Partial<T>>(searchParams.get(paramKey))
-      const base: T = { ...defaultRef.current, ...(current ?? {}) }
+      const base = latestStateRef.current
       const partial = typeof update === 'function' ? update(base) : update
       const next: T = { ...base, ...partial }
 
@@ -65,12 +71,21 @@ export function useEncodedUrlState<T extends object>(
       const defaultsOnly = JSON.stringify(next) === JSON.stringify(defaultRef.current)
       const nextEncoded = defaultsOnly ? '' : encodeUrlState(next)
 
-      const nextParams = new URLSearchParams(searchParams)
-      if (nextEncoded) nextParams.set(paramKey, nextEncoded)
-      else nextParams.delete(paramKey)
-      setSearchParams(nextParams, { replace: true })
+      // Update the ref synchronously so the next setter in the same tick
+      // sees this change. setSearchParams is async (triggers re-render).
+      latestStateRef.current = next
+
+      setSearchParams(
+        (prev) => {
+          const nextParams = new URLSearchParams(prev)
+          if (nextEncoded) nextParams.set(paramKey, nextEncoded)
+          else nextParams.delete(paramKey)
+          return nextParams
+        },
+        { replace: true },
+      )
     },
-    [paramKey, searchParams, setSearchParams],
+    [paramKey, setSearchParams],
   )
 
   return [state, setState]
