@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom'
-import { Box, Button, Chip, Typography, Alert, Stack, Skeleton, Paper, Breadcrumbs, Link, useMediaQuery, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Tabs, Tab, InputAdornment } from '@mui/material'
+import { Box, Button, Chip, Typography, Alert, Stack, Skeleton, Paper, Link, useMediaQuery, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Tabs, Tab, InputAdornment } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import { useTheme } from '@mui/material/styles'
 import EditIcon from '@mui/icons-material/Edit'
@@ -35,7 +35,7 @@ import {
   useReminders,
   useInvalidate,
 } from '../hooks/queries'
-import { ListCard, ItemRow, EmptyState, AddPlusButton } from '../components/system'
+import { ListCard, ItemRow, EmptyState, AddPlusButton, PageHeader } from '../components/system'
 import TickerDollarField from '../components/TickerDollarField'
 import TimelineIcon from '@mui/icons-material/Timeline'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
@@ -186,16 +186,111 @@ export default function EntryDetailPage() {
 
   const hasOutcomes = actions.some((a) => outcomesByActionId[a.id])
 
+  // Mobile collapses Edit / Remind / Delete into a MoreVert overflow so
+  // the sticky title strip stays visually tight. Desktop still shows the
+  // primary actions inline. Same actions, two presentations.
+  const mobileActions = (
+    <>
+      <IconButton
+        size="small"
+        aria-label="Entry actions"
+        onClick={(e) => setOverflowAnchor(e.currentTarget)}
+      >
+        <MoreVertIcon />
+      </IconButton>
+      <Menu
+        anchorEl={overflowAnchor}
+        open={Boolean(overflowAnchor)}
+        onClose={() => setOverflowAnchor(null)}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+      >
+        <MenuItem
+          onClick={() => {
+            setOverflowAnchor(null)
+            setReminderDialogOpen(true)
+          }}
+        >
+          <ListItemIcon>
+            <NotificationsActiveIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Add reminder</ListItemText>
+        </MenuItem>
+        <MenuItem
+          component={RouterLink}
+          to={`/entries/${entry.id}/edit`}
+          onClick={() => setOverflowAnchor(null)}
+        >
+          <ListItemIcon>
+            <EditIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Edit</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setOverflowAnchor(null)
+            setConfirmDelete({ type: 'entry' })
+          }}
+          sx={{ color: 'error.main' }}
+        >
+          <ListItemIcon>
+            <DeleteOutlineIcon fontSize="small" color="error" />
+          </ListItemIcon>
+          <ListItemText>Delete entry</ListItemText>
+        </MenuItem>
+      </Menu>
+    </>
+  )
+
   return (
     <Box>
-      <Breadcrumbs sx={{ mb: 1.5, fontSize: '0.85rem' }}>
-        <Link component={RouterLink} to="/" underline="hover" color="inherit">
-          Journal
-        </Link>
-        <Typography fontSize="inherit" color="text.primary" noWrap sx={{ maxWidth: 260 }}>
-          {getEntryDisplayTitle(entry, actions).replace(/\*\*([^*]*)\*\*|__([^_]*)__|[*_]/g, '$1$2')}
-        </Typography>
-      </Breadcrumbs>
+      {/* Sticky PageHeader brings Entry detail in line with Timeline /
+          Per-ticker: on mobile the title strip sticks under the AppBar
+          so the user always knows which entry they're reading. The
+          eyebrow carries the "Journal /" breadcrumb bit the ad-hoc
+          Breadcrumbs block used to. */}
+      <PageHeader
+        eyebrow={
+          <Link component={RouterLink} to="/" underline="hover" color="inherit">
+            Journal
+          </Link>
+        }
+        title={<PlainTextWithTickers source={getEntryDisplayTitle(entry, actions)} inline dense />}
+        actions={
+          isMobile ? (
+            mobileActions
+          ) : (
+            <>
+              <Button
+                component={RouterLink}
+                to={`/entries/${entry.id}/edit`}
+                variant="contained"
+                size="small"
+                startIcon={<EditIcon />}
+              >
+                Edit
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<NotificationsActiveIcon />}
+                onClick={() => setReminderDialogOpen(true)}
+              >
+                Remind me
+              </Button>
+              <IconButton
+                aria-label="Delete entry"
+                onClick={() => setConfirmDelete({ type: 'entry' })}
+                sx={{ color: 'text.secondary', '&:hover': { color: 'error.main', bgcolor: 'rgba(185,28,28,0.06)' } }}
+                size="small"
+              >
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            </>
+          )
+        }
+        dense
+      />
       {hasOutcomes && (
         <Alert severity="info" sx={{ mb: 2 }} icon={false}>
           <Typography variant="body2">
@@ -203,92 +298,6 @@ export default function EntryDetailPage() {
           </Typography>
         </Alert>
       )}
-      <Box display="flex" alignItems="flex-start" justifyContent="space-between" gap={1} sx={{ mb: 2 }}>
-        <Box sx={{ flex: 1, minWidth: 0, fontSize: { xs: '1.25rem', sm: '1.5rem' }, fontWeight: 600, overflowWrap: 'break-word' }}>
-          <PlainTextWithTickers source={getEntryDisplayTitle(entry, actions)} inline dense />
-        </Box>
-        {isMobile ? (
-          <>
-            <IconButton
-              size="small"
-              aria-label="Entry actions"
-              onClick={(e) => setOverflowAnchor(e.currentTarget)}
-              sx={{ flexShrink: 0, mt: 0.5 }}
-            >
-              <MoreVertIcon />
-            </IconButton>
-            <Menu
-              anchorEl={overflowAnchor}
-              open={Boolean(overflowAnchor)}
-              onClose={() => setOverflowAnchor(null)}
-              anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-              transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-            >
-              <MenuItem
-                onClick={() => {
-                  setOverflowAnchor(null)
-                  setReminderDialogOpen(true)
-                }}
-              >
-                <ListItemIcon>
-                  <NotificationsActiveIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Add reminder</ListItemText>
-              </MenuItem>
-              <MenuItem
-                component={RouterLink}
-                to={`/entries/${entry.id}/edit`}
-                onClick={() => setOverflowAnchor(null)}
-              >
-                <ListItemIcon>
-                  <EditIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Edit</ListItemText>
-              </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  setOverflowAnchor(null)
-                  setConfirmDelete({ type: 'entry' })
-                }}
-                sx={{ color: 'error.main' }}
-              >
-                <ListItemIcon>
-                  <DeleteOutlineIcon fontSize="small" color="error" />
-                </ListItemIcon>
-                <ListItemText>Delete entry</ListItemText>
-              </MenuItem>
-            </Menu>
-          </>
-        ) : (
-          <Box display="flex" gap={0.75} flexShrink={0} alignItems="center">
-            <Button
-              component={RouterLink}
-              to={`/entries/${entry.id}/edit`}
-              variant="contained"
-              size="small"
-              startIcon={<EditIcon />}
-            >
-              Edit
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<NotificationsActiveIcon />}
-              onClick={() => setReminderDialogOpen(true)}
-            >
-              Remind me
-            </Button>
-            <IconButton
-              aria-label="Delete entry"
-              onClick={() => setConfirmDelete({ type: 'entry' })}
-              sx={{ color: 'text.secondary', '&:hover': { color: 'error.main', bgcolor: 'rgba(185,28,28,0.06)' } }}
-              size="small"
-            >
-              <DeleteOutlineIcon fontSize="small" />
-            </IconButton>
-          </Box>
-        )}
-      </Box>
       {entry.tags.length > 0 && (
         <Box display="flex" flexWrap="wrap" gap={0.5} sx={{ mb: 2 }}>
           {entry.tags.map((t) => (
