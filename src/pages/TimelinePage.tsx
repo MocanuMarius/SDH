@@ -886,163 +886,11 @@ export default function TimelinePage() {
             </Box>
           </Box>
 
-          {/* Decision banner — absolute, covers the range-selector exactly
-              while preserving the old tooltip's rounded Paper look: full
-              coloured outline, 8px radius, 1.5px border.
-              Layout resilience:
-                - flexWrap: 'wrap' + column-stack when items would overflow
-                  keeps the banner from crashing awkward labels into each
-                  other on phones.
-                - matches the range-selector's resting height (pb: 1 + 1px
-                  border = 33px-ish) so nothing reflows when it opens /
-                  closes — the underlying selector row is untouched.
-                - the banner has its own bottom border hairline which
-                  visually continues the selector's underline, so the seam
-                  with the chart below is pixel-identical. */}
-          {decisionOverlay && (
-            <Paper
-              variant="outlined"
-              sx={{
-                position: 'absolute',
-                inset: 0,
-                borderColor: decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell,
-                borderWidth: 1.5,
-                borderRadius: 1.5,
-                display: 'flex',
-                alignItems: 'center',
-                flexWrap: 'nowrap',  // everything fits on one line
-                columnGap: { xs: 0.75, sm: 1.25 },
-                px: { xs: 0.75, sm: 1.25 },
-                py: { xs: 0.25, sm: 0.75 },
-                minHeight: 0,
-                zIndex: 8,
-                bgcolor: 'background.paper',
-              }}
-            >
-              {/* Direction + count — primary label, never shrinks.
-                  Mobile drops the word "decision(s)" since the count +
-                  coloured arrow is enough context ("▼ Sell · 1"). */}
-              <Typography
-                variant="body2"
-                fontWeight={800}
-                sx={{
-                  color: decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell,
-                  flexShrink: 0,
-                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {decisionOverlay.direction === 'buy' ? '▲ Buy' : '▼ Sell'} · {decisionOverlay.count}
-                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                  {' '}decision{decisionOverlay.count !== 1 ? 's' : ''}
-                </Box>
-              </Typography>
-
-              {/* Date + symbol — desktop only. On mobile we drop both
-                  since the chart itself already answers "what symbol",
-                  "when" and at "what price" (they're on the axes / tick
-                  marks right below). Keeps the banner to one line. */}
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{
-                  display: { xs: 'none', sm: 'inline' },
-                  flexShrink: 0,
-                  fontSize: '0.72rem',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {decisionOverlay.date} · {decisionOverlay.symbol}
-                {Number.isFinite(decisionOverlay.price) ? ` $${decisionOverlay.price.toFixed(2)}` : ''}
-              </Typography>
-
-              {/* Ticker legend — flex-grows to fill middle. Single-line;
-                  overflow hidden so a chain of 4+ tickers on a tight
-                  mobile width truncates gracefully instead of wrapping. */}
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexWrap: 'nowrap',
-                  alignItems: 'center',
-                  gap: { xs: 0.5, sm: 0.75 },
-                  minWidth: 0,
-                  flex: 1,
-                  overflow: 'hidden',
-                }}
-              >
-                {decisionOverlay.fetching ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <CircularProgress size={10} />
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ fontSize: '0.68rem', whiteSpace: 'nowrap' }}
-                    >
-                      Loading…
-                    </Typography>
-                  </Box>
-                ) : decisionOverlay.lines.length > 0 ? (
-                  decisionOverlay.lines.map((tl) => {
-                    const sign = tl.pctChange >= 0 ? '+' : ''
-                    return (
-                      <Box key={tl.ticker} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.35, whiteSpace: 'nowrap', minWidth: 0 }}>
-                        {/* Color swatch — hidden on xs where every pixel counts */}
-                        <Box sx={{ display: { xs: 'none', sm: 'block' }, width: 12, height: 2.5, bgcolor: tl.color, borderRadius: 1 }} />
-                        <Typography
-                          variant="caption"
-                          fontWeight={700}
-                          sx={{ color: tl.color, fontSize: { xs: '0.68rem', sm: '0.72rem' } }}
-                        >
-                          ${tl.ticker}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          fontWeight={800}
-                          sx={{
-                            color: tl.pctChange >= 0 ? tokens.markerBuy : tokens.markerSell,
-                            fontSize: { xs: '0.68rem', sm: '0.72rem' },
-                          }}
-                        >
-                          {sign}{tl.pctChange.toFixed(1)}%
-                        </Typography>
-                      </Box>
-                    )
-                  })
-                ) : decisionOverlay.tickers.length > 0 ? (
-                  decisionOverlay.tickers.slice(0, 3).map((t) => (
-                    <Chip key={t} size="small" label={`$${t}`} sx={{ height: 18, fontSize: '0.62rem' }} />
-                  ))
-                ) : null}
-                {/* "since this date" is implied on mobile (the banner
-                    represents a point-in-time click). Desktop keeps it
-                    for an extra second of clarity. */}
-                {!decisionOverlay.fetching && decisionOverlay.lines.length > 0 && (
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{
-                      display: { xs: 'none', sm: 'inline' },
-                      fontSize: '0.65rem',
-                      ml: 0.25,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    since this date
-                  </Typography>
-                )}
-              </Box>
-
-              {/* Dismiss — compact on mobile so it doesn't steal the row. */}
-              <IconButton
-                size="small"
-                onClick={() => { setSelectedActionId(null); setDecisionOverlay(null) }}
-                aria-label="Close decision overlay"
-                sx={{ flexShrink: 0, p: { xs: 0.25, sm: 0.5 }, ml: { xs: 0, sm: 'auto' } }}
-              >
-                <CloseIcon sx={{ fontSize: { xs: 16, sm: 20 } }} />
-              </IconButton>
-            </Paper>
-          )}
+          {/* Decision banner was lifted out of this position (was
+              absolute over the range-selector, too cramped on mobile) —
+              see the block rendered below the chart wrapper. This Box
+              stays as the relative wrapper for the range-selector so
+              the layout structure is unchanged. */}
           </Box>
 
           <Box
@@ -1143,6 +991,109 @@ export default function TimelinePage() {
               return <MeasureStatsPill stats={rangeStats} left={adjustedLeft} />
             })()}
           </Box>
+
+          {/* Decision overlay — moved here below the chart so it gets a
+              full-width row to breathe. No mobile concessions: every
+              field (direction, count, date, symbol, price, per-ticker
+              returns, "since this date") shows at a legible size. The
+              rounded Paper + colored border preserve the tooltip
+              semantics; a × button dismisses. */}
+          {decisionOverlay && (
+            <Paper
+              variant="outlined"
+              sx={{
+                mt: 1.25,
+                p: { xs: 1, sm: 1.5 },
+                borderColor: decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell,
+                borderWidth: 1.5,
+                borderRadius: 1.5,
+                position: 'relative',
+              }}
+            >
+              {/* Dismiss — anchored top-right so the content below isn't
+                  fighting for horizontal room with the × button. */}
+              <IconButton
+                size="small"
+                onClick={() => { setSelectedActionId(null); setDecisionOverlay(null) }}
+                aria-label="Close decision overlay"
+                sx={{ position: 'absolute', top: 4, right: 4, p: 0.5 }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+
+              {/* Row 1 — headline: direction + count (colored), date,
+                  symbol, benchmark price at click. */}
+              <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 1, pr: 4 }}>
+                <Typography
+                  variant="body1"
+                  fontWeight={800}
+                  sx={{
+                    color: decisionOverlay.direction === 'buy' ? tokens.markerBuy : tokens.markerSell,
+                    fontSize: { xs: '0.95rem', sm: '1rem' },
+                  }}
+                >
+                  {decisionOverlay.direction === 'buy' ? '▲ Buy' : '▼ Sell'}
+                  {' · '}
+                  {decisionOverlay.count} decision{decisionOverlay.count !== 1 ? 's' : ''}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                  {decisionOverlay.date} · {decisionOverlay.symbol}
+                  {Number.isFinite(decisionOverlay.price) ? ` $${decisionOverlay.price.toFixed(2)}` : ''}
+                </Typography>
+              </Box>
+
+              {/* Row 2 — per-ticker returns. Grid so on a wide viewport
+                  we get multiple per row, on narrow each takes its own
+                  line. */}
+              {decisionOverlay.fetching ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.75 }}>
+                  <CircularProgress size={14} />
+                  <Typography variant="body2" color="text.secondary">
+                    Loading ticker charts…
+                  </Typography>
+                </Box>
+              ) : decisionOverlay.lines.length > 0 ? (
+                <Box sx={{ mt: 0.75 }}>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: 'repeat(auto-fill, minmax(120px, 1fr))', sm: 'repeat(auto-fill, minmax(140px, 1fr))' },
+                      gap: { xs: 0.5, sm: 0.75 },
+                    }}
+                  >
+                    {decisionOverlay.lines.map((tl) => {
+                      const sign = tl.pctChange >= 0 ? '+' : ''
+                      return (
+                        <Box key={tl.ticker} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, whiteSpace: 'nowrap' }}>
+                          <Box sx={{ width: 14, height: 2.5, bgcolor: tl.color, borderRadius: 1, flexShrink: 0 }} />
+                          <Typography variant="body2" fontWeight={700} sx={{ color: tl.color }}>
+                            ${tl.ticker}
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            fontWeight={800}
+                            sx={{ color: tl.pctChange >= 0 ? tokens.markerBuy : tokens.markerSell, ml: 'auto' }}
+                          >
+                            {sign}{tl.pctChange.toFixed(1)}%
+                          </Typography>
+                        </Box>
+                      )
+                    })}
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontSize: '0.72rem' }}>
+                    % change from {decisionOverlay.date} to today
+                  </Typography>
+                </Box>
+              ) : decisionOverlay.tickers.length > 0 ? (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.75 }}>
+                  {decisionOverlay.tickers.map((t) => (
+                    <Chip key={t} size="small" label={`$${t}`} />
+                  ))}
+                </Box>
+              ) : null}
+            </Paper>
+          )}
+
           {/* Decisions in range — newspaper-style date sections so the user
               can scan "what happened on each day" instead of an undifferentiated
               flat list. Click a row to highlight that decision on the chart. */}
