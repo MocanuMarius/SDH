@@ -25,9 +25,15 @@ import {
   updateCustomDecisionType,
 } from '../utils/customDecisionTypes'
 import type { CustomDecisionType } from '../utils/customDecisionTypes'
+import LogoutIcon from '@mui/icons-material/Logout'
+import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import TagChip from '../components/TagChip'
 import DecisionChip from '../components/DecisionChip'
 import { PageHeader, ListCard, ItemRow, AddPlusButton } from '../components/system'
+import { useAuth } from '../contexts/AuthContext'
+import { listEntries } from '../services/entriesService'
+import { listActions } from '../services/actionsService'
+import { listOutcomes } from '../services/outcomesService'
 
 const DEFAULT_COLOR = '#6366f1'
 
@@ -63,9 +69,54 @@ function ColorSwatch({ color, onChange, label }: { color?: string; onChange: (c:
 }
 
 export default function SettingsPage() {
+  const { user, signOut } = useAuth()
   const [reasonPresets, setLocalReasonPresets] = useState<ReasonPreset[]>([])
   const [tagPresets, setLocalTagPresets] = useState<TagPreset[]>([])
   const [customTypes, setLocalCustomTypes] = useState<CustomDecisionType[]>([])
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  /**
+   * One-click full data export — pulls every entry, action, and
+   * outcome the user has and ships them as a single JSON file.
+   * Useful for backup, for moving to another instance, or just for
+   * the peace of mind of "I can take my data with me." Names the
+   * file `deecide-export-YYYY-MM-DD.json` so multiple exports stay
+   * sortable on disk.
+   */
+  const handleExport = async () => {
+    setExporting(true)
+    setExportError(null)
+    try {
+      const [entries, actions, outcomes] = await Promise.all([
+        listEntries({ limit: 100000 }),
+        listActions({ limit: 100000 }),
+        listOutcomes(),
+      ])
+      const payload = {
+        exported_at: new Date().toISOString(),
+        version: 1,
+        counts: { entries: entries.length, actions: actions.length, outcomes: outcomes.length },
+        entries,
+        actions,
+        outcomes,
+      }
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const ymd = new Date().toISOString().slice(0, 10)
+      a.href = url
+      a.download = `deecide-export-${ymd}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const [newReasonDialogOpen, setNewReasonDialogOpen] = useState(false)
   const [newTagDialogOpen, setNewTagDialogOpen] = useState(false)
@@ -147,6 +198,65 @@ export default function SettingsPage() {
       <PageHeader title="Settings" dense />
 
       <Stack spacing={1.5}>
+        {/* Account — surfaces email + sign-out. Sign-out used to be
+            only in the hamburger nav; surfacing it here too means
+            users who think of it as a setting can find it where they
+            expect. */}
+        <ListCard title="Account">
+          <Stack spacing={1}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  Signed in as
+                </Typography>
+                <Typography variant="body2" fontWeight={600} sx={{ wordBreak: 'break-word' }}>
+                  {user?.email ?? 'unknown'}
+                </Typography>
+              </Box>
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                startIcon={<LogoutIcon />}
+                onClick={() => signOut()}
+                sx={{ textTransform: 'none', flexShrink: 0 }}
+              >
+                Sign out
+              </Button>
+            </Box>
+          </Stack>
+        </ListCard>
+
+        {/* Data — full backup as JSON. Lets the user lift their data
+            out at any time without going through Supabase directly. */}
+        <ListCard title="Data">
+          <Stack spacing={1}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography variant="body2" fontWeight={600}>Export everything</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  All entries, decisions, and outcomes as a single JSON file.
+                </Typography>
+              </Box>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<FileDownloadIcon />}
+                onClick={handleExport}
+                disabled={exporting}
+                sx={{ textTransform: 'none', flexShrink: 0 }}
+              >
+                {exporting ? 'Exporting…' : 'Export JSON'}
+              </Button>
+            </Box>
+            {exportError && (
+              <Typography variant="caption" color="error.main">
+                {exportError}
+              </Typography>
+            )}
+          </Stack>
+        </ListCard>
+
         {/* Custom Decision Types */}
         <ListCard
           title="Custom Decision Types"
