@@ -5,10 +5,6 @@ import {
   Button,
   Stack,
   TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Tooltip,
 } from '@mui/material'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
@@ -29,7 +25,7 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import TagChip from '../components/TagChip'
 import DecisionChip from '../components/DecisionChip'
-import { PageHeader, ListCard, ItemRow, AddPlusButton } from '../components/system'
+import { PageHeader, ListCard, ItemRow } from '../components/system'
 import { useAuth } from '../contexts/AuthContext'
 import { listEntries } from '../services/entriesService'
 import { listActions } from '../services/actionsService'
@@ -118,10 +114,9 @@ export default function SettingsPage() {
     }
   }
 
-  const [newReasonDialogOpen, setNewReasonDialogOpen] = useState(false)
-  const [newTagDialogOpen, setNewTagDialogOpen] = useState(false)
-  const [newTypeDialogOpen, setNewTypeDialogOpen] = useState(false)
-
+  // Inline-add inputs — used to be three separate Dialogs, now they
+  // live as always-visible rows at the bottom of each list card. No
+  // modal step for "type a string + click Add."
   const [newReason, setNewReason] = useState('')
   const [newTag, setNewTag] = useState('')
   const [newTypeLabel, setNewTypeLabel] = useState('')
@@ -140,7 +135,6 @@ export default function SettingsPage() {
     setReasonPresets(updated)
     setLocalReasonPresets(updated)
     setNewReason('')
-    setNewReasonDialogOpen(false)
   }
 
   const handleRemoveReason = (index: number) => {
@@ -160,7 +154,6 @@ export default function SettingsPage() {
     setTagPresets(updated)
     setLocalTagPresets(updated)
     setNewTag('')
-    setNewTagDialogOpen(false)
   }
 
   const handleRemoveTag = (index: number) => {
@@ -180,7 +173,6 @@ export default function SettingsPage() {
     setLocalCustomTypes(getCustomDecisionTypes())
     setNewTypeLabel('')
     setNewTypeColor(DEFAULT_COLOR)
-    setNewTypeDialogOpen(false)
   }
 
   const handleRemoveType = (id: string) => {
@@ -261,11 +253,8 @@ export default function SettingsPage() {
         <ListCard
           title="Custom Decision Types"
           count={customTypes.length}
-          headerAction={<AddPlusButton label="Add custom decision type" onClick={() => setNewTypeDialogOpen(true)} />}
         >
-          {customTypes.length === 0 ? (
-            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>None yet.</Typography>
-          ) : (
+          {customTypes.length > 0 && (
             <Reorder.Group
               axis="y"
               values={customTypes}
@@ -287,17 +276,37 @@ export default function SettingsPage() {
               ))}
             </Reorder.Group>
           )}
+          {/* Inline add row — replaces the previous "+ Add custom decision
+              type" button + dialog. Single TextField + colour picker +
+              Add. Hitting Enter or clicking Add appends, then clears. */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: customTypes.length > 0 ? 1 : 0.5 }}>
+            <TextField
+              size="small"
+              placeholder="e.g. Hedge, Rebalance, Earnings play"
+              value={newTypeLabel}
+              onChange={(e) => setNewTypeLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddType() } }}
+              sx={{ flex: 1 }}
+            />
+            <input
+              type="color"
+              value={newTypeColor}
+              onChange={(e) => setNewTypeColor(e.target.value)}
+              style={{ width: 36, height: 32, cursor: 'pointer', border: 'none', borderRadius: 4, flexShrink: 0 }}
+              aria-label="Pick colour for new decision type"
+            />
+            <Button size="small" variant="outlined" disabled={!newTypeLabel.trim()} onClick={handleAddType} sx={{ textTransform: 'none', fontWeight: 600, flexShrink: 0 }}>
+              Add
+            </Button>
+          </Box>
         </ListCard>
 
         {/* Decision Reason Presets */}
         <ListCard
           title="Decision Reason Presets"
           count={reasonPresets.length}
-          headerAction={<AddPlusButton label="Add reason preset" onClick={() => setNewReasonDialogOpen(true)} />}
         >
-          {reasonPresets.length === 0 ? (
-            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>None yet.</Typography>
-          ) : (
+          {reasonPresets.length > 0 && (
             <Reorder.Group
               axis="y"
               values={reasonPresets}
@@ -321,17 +330,27 @@ export default function SettingsPage() {
               ))}
             </Reorder.Group>
           )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: reasonPresets.length > 0 ? 1 : 0.5 }}>
+            <TextField
+              size="small"
+              placeholder="e.g. Cheap, Too expensive, Momentum"
+              value={newReason}
+              onChange={(e) => setNewReason(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddReason() } }}
+              sx={{ flex: 1 }}
+            />
+            <Button size="small" variant="outlined" disabled={!newReason.trim()} onClick={handleAddReason} sx={{ textTransform: 'none', fontWeight: 600, flexShrink: 0 }}>
+              Add
+            </Button>
+          </Box>
         </ListCard>
 
         {/* Entry Tag Presets */}
         <ListCard
           title="Entry Tag Presets"
           count={tagPresets.length}
-          headerAction={<AddPlusButton label="Add tag preset" onClick={() => setNewTagDialogOpen(true)} />}
         >
-          {tagPresets.length === 0 ? (
-            <Typography color="text.secondary" variant="caption" sx={{ pl: 0.5 }}>None yet.</Typography>
-          ) : (
+          {tagPresets.length > 0 && (
             <Reorder.Group
               axis="y"
               values={tagPresets}
@@ -353,90 +372,26 @@ export default function SettingsPage() {
               ))}
             </Reorder.Group>
           )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: tagPresets.length > 0 ? 1 : 0.5 }}>
+            <TextField
+              size="small"
+              placeholder="e.g. research, watchlist, follow-up"
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag() } }}
+              sx={{ flex: 1 }}
+            />
+            <Button size="small" variant="outlined" disabled={!newTag.trim()} onClick={handleAddTag} sx={{ textTransform: 'none', fontWeight: 600, flexShrink: 0 }}>
+              Add
+            </Button>
+          </Box>
         </ListCard>
       </Stack>
 
-      {/* Add Reason Dialog */}
-      <Dialog open={newReasonDialogOpen} onClose={() => setNewReasonDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Add reason preset</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <TextField
-            autoFocus
-            fullWidth
-            size="small"
-            label="Reason"
-            placeholder="e.g. Cheap, Too expensive, Momentum"
-            value={newReason}
-            onChange={(e) => setNewReason(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAddReason() }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNewReasonDialogOpen(false)} variant="outlined">Cancel</Button>
-          <Button onClick={handleAddReason} variant="contained" disabled={!newReason.trim()}>Add</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Add Tag Dialog */}
-      <Dialog open={newTagDialogOpen} onClose={() => setNewTagDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Add tag preset</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <TextField
-            autoFocus
-            fullWidth
-            size="small"
-            label="Tag"
-            placeholder="e.g. research, watchlist, follow-up"
-            value={newTag}
-            onChange={(e) => setNewTag(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAddTag() }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNewTagDialogOpen(false)} variant="outlined">Cancel</Button>
-          <Button onClick={handleAddTag} variant="contained" disabled={!newTag.trim()}>Add</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Add Custom Type Dialog */}
-      <Dialog open={newTypeDialogOpen} onClose={() => setNewTypeDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Add custom decision type</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <Stack spacing={2}>
-            <TextField
-              autoFocus
-              fullWidth
-              size="small"
-              label="Type name"
-              placeholder="e.g. Hedge, Rebalance, Earnings play"
-              value={newTypeLabel}
-              onChange={(e) => setNewTypeLabel(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleAddType() }}
-            />
-            <Box display="flex" alignItems="center" gap={2}>
-              <Typography variant="body2" color="text.secondary">Color:</Typography>
-              <input
-                type="color"
-                value={newTypeColor}
-                onChange={(e) => setNewTypeColor(e.target.value)}
-                style={{ width: 40, height: 32, cursor: 'pointer', border: 'none', borderRadius: 4 }}
-              />
-              {newTypeLabel.trim() && (
-                <DecisionChip
-                  type={`preview_${newTypeLabel}`}
-                  label={newTypeLabel}
-                  size="small"
-                  sx={{ pointerEvents: 'none', bgcolor: newTypeColor, color: '#fff', border: 'none', '& .MuiChip-label': { fontWeight: 600 } }}
-                />
-              )}
-            </Box>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setNewTypeDialogOpen(false)} variant="outlined">Cancel</Button>
-          <Button onClick={handleAddType} variant="contained" disabled={!newTypeLabel.trim()}>Add</Button>
-        </DialogActions>
-      </Dialog>
+      {/* The three Add-X dialogs that used to live here got inlined as
+          input rows at the bottom of each ListCard above. Click Add or
+          press Enter to append; the row clears for the next entry. No
+          modal interruption for "type a string + click Add." */}
     </Box>
   )
 }

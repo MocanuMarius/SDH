@@ -41,7 +41,7 @@ import TimelineIcon from '@mui/icons-material/Timeline'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
 import ActionFormDialog from '../components/ActionFormDialog'
 import OutcomeFormDialog from '../components/OutcomeFormDialog'
-import PredictionFormDialog from '../components/PredictionFormDialog'
+import PredictionInlineForm from '../components/PredictionInlineForm'
 import ConfirmDialog from '../components/ConfirmDialog'
 import DecisionCard from '../components/DecisionCard'
 import ValuationWidget from '../components/ValuationWidget'
@@ -572,17 +572,54 @@ export default function EntryDetailPage() {
         {/* Tab 1: Predictions */}
         {detailTab === 1 && (
           <Box sx={{ pt: 1.5 }}>
-            {predictions.length === 0 ? (
-              <EmptyState
-                dense
-                icon={<QueryStatsIcon />}
-                title="No predictions on this entry yet"
-                action={
-                  <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setEditingPrediction(null); setPredictionDialogOpen(true); }} sx={{ textTransform: 'none' }}>
-                    Add prediction
-                  </Button>
+            {/* Inline add/edit form — appears in-page when the user
+                clicks Add or Edit, no overlay. */}
+            <PredictionInlineForm
+              open={predictionDialogOpen}
+              onClose={() => { setPredictionDialogOpen(false); setEditingPrediction(null); }}
+              initial={editingPrediction}
+              onSubmit={async (data) => {
+                if (!id) return
+                if (editingPrediction) {
+                  await updatePrediction(editingPrediction.id, {
+                    probability: data.probability,
+                    end_date: data.end_date,
+                    type: data.type,
+                    label: data.label || null,
+                    ticker: data.ticker || null,
+                    sub_skill: data.sub_skill,
+                  })
+                } else {
+                  await createPrediction({
+                    entry_id: id,
+                    probability: data.probability,
+                    end_date: data.end_date,
+                    type: data.type,
+                    label: data.label || null,
+                    ticker: data.ticker || null,
+                    sub_skill: data.sub_skill,
+                  })
                 }
-              />
+                invalidate.predictions(id)
+                showSuccess(editingPrediction ? 'Prediction updated' : 'Prediction added')
+                setPredictionDialogOpen(false)
+                setEditingPrediction(null)
+              }}
+            />
+
+            {predictions.length === 0 ? (
+              !predictionDialogOpen ? (
+                <EmptyState
+                  dense
+                  icon={<QueryStatsIcon />}
+                  title="No predictions on this entry yet"
+                  action={
+                    <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setEditingPrediction(null); setPredictionDialogOpen(true); }} sx={{ textTransform: 'none' }}>
+                      Add prediction
+                    </Button>
+                  }
+                />
+              ) : null
             ) : (
               <Stack spacing={1}>
                 {predictions.map((p) => (
@@ -737,36 +774,9 @@ export default function EntryDetailPage() {
           showSuccess('Reminder set')
         }}
       />
-      <PredictionFormDialog
-        open={predictionDialogOpen}
-        onClose={() => { setPredictionDialogOpen(false); setEditingPrediction(null); }}
-        initial={editingPrediction}
-        onSubmit={async (data) => {
-          if (!id) return
-          if (editingPrediction) {
-            await updatePrediction(editingPrediction.id, {
-              probability: data.probability,
-              end_date: data.end_date,
-              type: data.type,
-              label: data.label || null,
-              ticker: data.ticker || null,
-              sub_skill: data.sub_skill,
-            })
-          } else {
-            await createPrediction({
-              entry_id: id,
-              probability: data.probability,
-              end_date: data.end_date,
-              type: data.type,
-              label: data.label || null,
-              ticker: data.ticker || null,
-              sub_skill: data.sub_skill,
-            })
-          }
-          invalidate.predictions(id)
-          showSuccess(editingPrediction ? 'Prediction updated' : 'Prediction added')
-        }}
-      />
+      {/* PredictionFormDialog used to mount here as a global modal.
+          Inlined into the Predictions tab below — see the
+          PredictionInlineForm rendered inside the tab. */}
       {outcomeDialogActionId && (
         <OutcomeFormDialog
           open={!!outcomeDialogActionId}

@@ -9,13 +9,13 @@
  * the suggestions list with garbage.
  */
 
-import { useState, useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 import { Autocomplete, TextField, Box, Link, InputAdornment } from '@mui/material'
 import LabelIcon from '@mui/icons-material/Label'
 import { getReasonPresets, addReasonPreset } from '../utils/reasonPresets'
 import { listActions } from '../services/actionsService'
 import { stripMarkdown } from '../utils/text'
-import ManageReasonPresetsDialog from './ManageReasonPresetsDialog'
 
 // Patterns that indicate an automated/broker-generated reason — filter these out
 const NOISE_PATTERNS = [
@@ -55,7 +55,6 @@ export default function ReasonField({
 }: ReasonFieldProps) {
   const [recentReasons, setRecentReasons] = useState<string[]>([])
   const [presetsVersion, setPresetsVersion] = useState(0)
-  const [manageOpen, setManageOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -149,20 +148,14 @@ export default function ReasonField({
       />
       {showManagePresets && (
         <Link
-          component="button"
-          type="button"
+          component={RouterLink}
+          to="/settings"
           variant="caption"
-          onClick={() => setManageOpen(true)}
           sx={{ mt: 0.5, display: 'block' }}
         >
           Manage reason presets
         </Link>
       )}
-      <ManageReasonPresetsDialog
-        open={manageOpen}
-        onClose={() => setManageOpen(false)}
-        onPresetsChange={() => setPresetsVersion((v) => v + 1)}
-      />
     </Box>
   )
 }
