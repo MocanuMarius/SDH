@@ -1,20 +1,25 @@
 /**
- * Plain-text renderer that auto-linkifies $TICKER mentions as chips.
+ * Plain-text renderer that auto-linkifies $TICKER mentions as chips
+ * AND `http(s)://…` URLs as styled anchor tags. Used anywhere we
+ * display user-typed prose: entry body, decision reasons, outcome
+ * notes, reminder notes — anywhere the user might paste a research
+ * link or mention a ticker.
  *
  * Rules:
  *  - Paragraphs are separated by blank lines (\n\n+).
  *  - Inside a paragraph, a single \n becomes a soft line break.
- *  - $TICKER (e.g. $AAPL, $CSU.TO) renders as a clickable chip linking to /tickers/<company-key>.
- *  - No markdown syntax. **bold**, ###, > … render literally as the characters typed.
- *
- * Use this anywhere we display the plain-text body of an entry, the optional note on a
- * decision, or any user-typed prose that should NOT support markdown formatting.
+ *  - $TICKER (e.g. $AAPL, $CSU.TO) renders as a clickable chip
+ *    linking to /tickers/<company-key>.
+ *  - http(s) URLs render as proper <a href> with target="_blank"
+ *    + rel="noopener noreferrer" so the user's session is safe.
+ *  - No markdown syntax. **bold**, ###, > … render literally as the
+ *    characters typed.
  */
 
-import { Box, Chip, Typography } from '@mui/material'
+import { Box, Chip, Link, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import { normalizeTickerToCompany } from '../utils/tickerCompany'
-import { TICKER_IN_TEXT_REGEX } from '../utils/text'
+import { getRichSegments, type RichSegment } from '../utils/text'
 
 const TICKER_CHIP_SX = {
   mx: 0.25,
@@ -37,19 +42,32 @@ const TICKER_CHIP_SX = {
   '&:hover': { bgcolor: 'primary.100', color: 'primary.dark', borderColor: 'primary.main' },
 } as const
 
-/** Split a paragraph string into segments of plain text and ticker mentions. */
-function splitTickers(text: string): Array<{ kind: 'text'; value: string } | { kind: 'ticker'; symbol: string }> {
-  const out: Array<{ kind: 'text'; value: string } | { kind: 'ticker'; symbol: string }> = []
-  const re = new RegExp(TICKER_IN_TEXT_REGEX.source, 'gi')
-  let last = 0
-  let m: RegExpExecArray | null
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) out.push({ kind: 'text', value: text.slice(last, m.index) })
-    out.push({ kind: 'ticker', symbol: m[1].toUpperCase() })
-    last = m.index + m[0].length
+/**
+ * Per-line segment splitter — defers to the shared `getRichSegments`
+ * helper which knows about both ticker mentions and http(s) URLs.
+ *
+ * Note: `getRichSegments` runs the input through `stripMarkdown`,
+ * which collapses runs of whitespace. That's fine here because the
+ * paragraph splitter above already chunked on real newlines, so each
+ * line is being normalised intentionally.
+ */
+function splitRich(text: string): RichSegment[] {
+  return getRichSegments(text)
+}
+
+/** Truncate a long URL for display while keeping it clickable. Mostly
+ *  cosmetic — pasted research links can be 200+ chars and the raw
+ *  string blows out the layout. The full URL is still in href. */
+function shortenUrl(href: string): string {
+  if (href.length <= 60) return href
+  // Show "scheme://host/…last20chars" so the user still recognises it.
+  try {
+    const u = new URL(href)
+    const tail = href.slice(href.length - 20)
+    return `${u.host}/…${tail}`
+  } catch {
+    return href.slice(0, 50) + '…'
   }
-  if (last < text.length) out.push({ kind: 'text', value: text.slice(last) })
-  return out
 }
 
 interface PlainTextWithTickersProps {
@@ -62,10 +80,36 @@ interface PlainTextWithTickersProps {
   inline?: boolean
 }
 
-/** Render one line's worth of segments (text + ticker chips). Shared by both modes. */
+/** Render one line's worth of segments (text + ticker chips + URL
+ *  links). Shared by both inline + block modes. */
 function renderSegments(line: string, tickerAsLink: boolean) {
-  return splitTickers(line).map((seg, si) => {
-    if (seg.kind === 'text') return <span key={si}>{seg.value}</span>
+  return splitRich(line).map((seg, si) => {
+    if (seg.type === 'text') return <span key={si}>{seg.value}</span>
+    if (seg.type === 'url') {
+      // External link — open in a new tab, scrub the referrer so the
+      // user's session isn't leaked, and stop click propagation so
+      // clicking the link inside e.g. a clickable card doesn't ALSO
+      // navigate the parent.
+      return (
+        <Link
+          key={si}
+          href={seg.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          sx={{
+            color: 'primary.main',
+            fontWeight: 500,
+            textDecoration: 'underline',
+            textUnderlineOffset: 2,
+            wordBreak: 'break-all',
+            '&:hover': { color: 'primary.dark', textDecorationThickness: '2px' },
+          }}
+        >
+          {shortenUrl(seg.href)}
+        </Link>
+      )
+    }
     const company = normalizeTickerToCompany(seg.symbol) || seg.symbol
     const label = `$${seg.symbol}`
     if (!tickerAsLink) {
