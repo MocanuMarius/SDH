@@ -902,7 +902,28 @@ export default function EntryFormPage() {
         </ListCard>
       </Box>
 
-      <Box display="flex" gap={1.5} alignItems="center" sx={{ mt: 1 }}>
+      {/* Sticky save bar — on mobile it pins above the 56-px BottomNav
+          so the user never has to scroll-then-hunt for the button after
+          finishing a long entry. Desktop keeps the inline behaviour
+          since the button stays visible at the natural form bottom. */}
+      <Box
+        display="flex"
+        gap={1.5}
+        alignItems="center"
+        sx={{
+          mt: 1,
+          position: { xs: 'sticky', sm: 'static' },
+          bottom: { xs: 56, sm: 'auto' },
+          bgcolor: { xs: 'background.default', sm: 'transparent' },
+          pt: { xs: 1, sm: 0 },
+          pb: { xs: 1, sm: 0 },
+          borderTop: { xs: '1px solid', sm: 'none' },
+          borderColor: 'divider',
+          mx: { xs: -1.5, sm: 0 },
+          px: { xs: 1.5, sm: 0 },
+          zIndex: 4,
+        }}
+      >
         <Button
           type="submit"
           variant="contained"
