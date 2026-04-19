@@ -18,7 +18,6 @@ import {
   Tooltip,
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
-import CreateIcon from '@mui/icons-material/Create'
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp'
 import EditIcon from '@mui/icons-material/Edit'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
@@ -509,6 +508,11 @@ export default function EntryListPage() {
             '& .MuiToggleButton-root': { height: 26, fontSize: '0.65rem', px: 0.5, textTransform: 'none' },
           }}
         >
+          {/* Investment-bucket filter. The single-letter `S / M / I`
+              labels were cryptic at rest (audit O-4); now showing full
+              words `Spec / Mixed / Invest` at sm+ while keeping the
+              compact form on xs so the filter row still fits. The
+              colour tokens stay so the bucket is still scannable. */}
           <ToggleButtonGroup
             value={investmentFilter}
             exclusive
@@ -525,13 +529,25 @@ export default function EntryListPage() {
               <ToggleButton value="all">All {bucketCounts.all}</ToggleButton>
             </Tooltip>
             <Tooltip title="Speculation: short-dated, thin thesis, or no writeup">
-              <ToggleButton value="spec" sx={{ color: '#dc2626' }}>S {bucketCounts.spec}</ToggleButton>
+              <ToggleButton value="spec" sx={{ color: '#dc2626' }}>
+                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>S&nbsp;</Box>
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Spec&nbsp;</Box>
+                {bucketCounts.spec}
+              </ToggleButton>
             </Tooltip>
             <Tooltip title="Mixed: some structure, some gaps">
-              <ToggleButton value="mixed" sx={{ color: '#ca8a04' }}>M {bucketCounts.mixed}</ToggleButton>
+              <ToggleButton value="mixed" sx={{ color: '#ca8a04' }}>
+                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>M&nbsp;</Box>
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Mixed&nbsp;</Box>
+                {bucketCounts.mixed}
+              </ToggleButton>
             </Tooltip>
             <Tooltip title="Investment: detailed writeup + structure">
-              <ToggleButton value="invest" sx={{ color: '#16a34a' }}>I {bucketCounts.invest}</ToggleButton>
+              <ToggleButton value="invest" sx={{ color: '#16a34a' }}>
+                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>I&nbsp;</Box>
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Invest&nbsp;</Box>
+                {bucketCounts.invest}
+              </ToggleButton>
             </Tooltip>
           </ToggleButtonGroup>
           <Tooltip title={hideAutomated ? 'Currently hiding broker-imported entries — click to show them' : 'Currently showing broker-imported entries — click to hide them'}>
@@ -563,8 +579,13 @@ export default function EntryListPage() {
                 />
               )}
               sx={{
-                minWidth: 100,
-                flex: 1,
+                // L-2 fix: was `flex: 1` which made the Tags multiselect
+                // grab all remaining horizontal room and dominate the
+                // filter row. Pinning a tight max width keeps it
+                // discoverable but unobtrusive; the input still expands
+                // when the user actually types into it.
+                minWidth: 90,
+                maxWidth: 160,
                 // Match the 26px height used by the investment-bucket toggle
                 // group and the hide-automated chip to its right, and vertically
                 // centre the placeholder/value. The previous overrides on
@@ -645,22 +666,12 @@ export default function EntryListPage() {
         </Box>
       )}
 
-      {/* ── FABs ── */}
-      <Fab
-        color="primary"
-        aria-label="Start writing"
-        component={RouterLink}
-        to="/entries/new"
-        sx={{
-          position: 'fixed',
-          // On mobile, sit above the 56px bottom nav; on desktop, use safe-area only
-          bottom: { xs: 78, sm: 'max(16px, env(safe-area-inset-bottom))' },
-          right: { xs: 16, sm: 24 },
-        }}
-      >
-        <CreateIcon />
-      </Fab>
-
+      {/* The "Start writing" primary FAB used to live here too, but it
+          duplicated the "+ New" button in the PageHeader actions slot.
+          On every viewport that button stays visible from the top via
+          PageHeader's sticky strip, so the FAB was just noise. The
+          Scroll-to-top FAB stays — it has no equivalent affordance
+          elsewhere. */}
       <Zoom in={showScrollTop}>
         <Fab
           color="default"
