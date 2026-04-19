@@ -902,17 +902,20 @@ export default function TimelinePage() {
               the timeline plot below. Dismiss with the ✕ or by clicking
               the chart background. */}
           <Box sx={{ position: 'relative', mb: 1 }}>
+          {/* All chart chrome on a single row: range dropdown + Reset
+              (when zoomed) + settings gear. The old layout had nine
+              preset buttons taking the full row width with the gear on
+              the right; on mobile that wrapped onto two lines. The
+              dropdown collapses the same nine choices into one 80-px
+              control so everything fits at every breakpoint. */}
           <Box sx={{
             display: 'flex',
-            justifyContent: 'space-between',
             alignItems: 'center',
             pb: 1,
             borderBottom: '1px solid',
             borderColor: 'divider',
-            flexWrap: 'wrap',
-            gap: 1,
+            gap: 0.75,
           }}>
-            {/* Preset range buttons (shared with TickerTimelineChart). */}
             <RangeSelectorButtons
               value={range}
               noActive={zoomRange != null}
@@ -922,31 +925,24 @@ export default function TimelinePage() {
                 setMeasureSelection(null)
               }}
             />
-
-            {/* Right side of the range selector — Reset-zoom button (only
-                when a zoom is active) + settings gear (always). The gear
-                opens the full chart-settings modal with From/To dates,
-                benchmark picker, decision-type filter, and broker-import
-                toggle. */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-              {zoomRange != null && (
-                <Button
-                  size="small"
-                  onClick={() => { setZoomRange(null); setMeasureSelection(null) }}
-                  sx={{ fontSize: '0.75rem', color: 'text.secondary', minWidth: 0, px: 1 }}
-                >
-                  Reset
-                </Button>
-              )}
-              <IconButton
+            {zoomRange != null && (
+              <Button
                 size="small"
-                onClick={() => setSettingsOpen(true)}
-                aria-label="Chart settings"
-                sx={{ color: 'text.secondary' }}
+                onClick={() => { setZoomRange(null); setMeasureSelection(null) }}
+                sx={{ fontSize: '0.75rem', color: 'text.secondary', minWidth: 0, px: 1 }}
               >
-                <TuneIcon fontSize="small" />
-              </IconButton>
-            </Box>
+                Reset
+              </Button>
+            )}
+            <Box sx={{ flex: 1 }} />
+            <IconButton
+              size="small"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Chart settings"
+              sx={{ color: 'text.secondary', flexShrink: 0 }}
+            >
+              <TuneIcon fontSize="small" />
+            </IconButton>
           </Box>
 
           {/* Decision banner was lifted out of this position (was

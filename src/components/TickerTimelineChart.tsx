@@ -452,22 +452,19 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 1,
+          gap: 0.75,
           mb: 1,
-          flexWrap: 'wrap',
         }}
       >
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <RangeSelectorButtons
-            value={range}
-            onChange={(v) => { setRange(v); setUserChangedRange(true) }}
-            variant="tabs"
-          />
-        </Box>
+        <RangeSelectorButtons
+          value={range}
+          onChange={(v) => { setRange(v); setUserChangedRange(true) }}
+        />
+        <Box sx={{ flex: 1 }} />
         {/* Selected-compares count — compact cue that a benchmark is
             active without re-introducing the full compare chip strip. */}
         {compareSymbols.length > 0 && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color="text.secondary" noWrap>
             vs {compareSymbols.join(', ')}
           </Typography>
         )}

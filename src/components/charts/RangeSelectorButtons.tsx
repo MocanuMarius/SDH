@@ -1,15 +1,24 @@
 /**
- * Range-preset toggle buttons (1M / 3M / 6M / YTD / 1Y / …) used by both
- * the timeline page and the per-ticker chart card. Identical visuals
- * across both, so it lived as duplicated JSX in two places — extracted
- * here so any tweak (sizing, label set, theming) propagates to both.
+ * Range-preset selector for chart pages. One value, one onChange, three
+ * presentation variants:
+ *   - "dropdown" (default) — compact MUI Select showing the current
+ *     label (e.g. "6M"). Used by both TimelinePage and the per-ticker
+ *     chart card so the controls row stays tight: dropdown + Reset +
+ *     gear all fit on one line. The previous always-visible row of nine
+ *     toggle buttons crowded the chart's chrome at small widths and
+ *     made the gear/Reset wrap onto a second line.
+ *   - "buttons" — legacy flat text-button row. Kept for any caller that
+ *     still wants the always-visible presets; nothing in the app uses
+ *     it after the dropdown migration but the variant stays as a
+ *     non-breaking option.
+ *   - "tabs" — outlined chip-tabs row. Same story as "buttons".
  *
  * Behaviour-only — no internal state. Parent owns `value`, `onChange`,
- * and the optional `disabled` flag (used when a zoom is active so no
+ * and the optional `noActive` flag (used when a zoom is active so no
  * preset reads as "current").
  */
 
-import { Box, Button, Tabs, Tab } from '@mui/material'
+import { Box, Button, FormControl, MenuItem, Select, Tabs, Tab } from '@mui/material'
 import type { ChartRange } from '../../services/chartApiService'
 
 export const TIMELINE_RANGES: { value: ChartRange; label: string }[] = [
@@ -30,17 +39,53 @@ export interface RangeSelectorButtonsProps {
   /** When true, no preset shows as active (e.g. a custom zoom is in
    *  effect so neither 1Y nor 2Y nor anything else perfectly fits). */
   noActive?: boolean
-  /** "buttons" — flat text-button row used by TimelinePage.
-   *  "tabs"    — outlined tab chips used by TickerTimelineChart. */
-  variant?: 'buttons' | 'tabs'
+  /** "dropdown" — compact MUI Select (DEFAULT, used everywhere).
+   *  "buttons"  — legacy flat text-button row.
+   *  "tabs"     — legacy outlined tab chips. */
+  variant?: 'dropdown' | 'buttons' | 'tabs'
 }
 
 export default function RangeSelectorButtons({
   value,
   onChange,
   noActive = false,
-  variant = 'buttons',
+  variant = 'dropdown',
 }: RangeSelectorButtonsProps) {
+  if (variant === 'dropdown') {
+    // Render a "Custom" entry only when the parent indicates we're in a
+    // zoom that doesn't match any preset, so the Select has something to
+    // show without the user wondering why nothing is selected.
+    return (
+      <FormControl size="small" variant="outlined" sx={{ minWidth: 88 }}>
+        <Select
+          value={noActive ? '__zoom__' : value}
+          onChange={(e) => {
+            const v = e.target.value as string
+            if (v !== '__zoom__') onChange(v as ChartRange)
+          }}
+          sx={{
+            // Compact preset selector — height matches the gear IconButton
+            // (~32 px) so the whole controls row aligns nicely.
+            height: 32,
+            fontSize: '0.78rem',
+            fontWeight: 600,
+            '& .MuiSelect-select': { py: 0.5, pr: '24px !important', pl: 1.25 },
+          }}
+        >
+          {noActive && (
+            <MenuItem value="__zoom__" disabled sx={{ fontSize: '0.78rem' }}>
+              Custom zoom
+            </MenuItem>
+          )}
+          {TIMELINE_RANGES.map((r) => (
+            <MenuItem key={r.value} value={r.value} sx={{ fontSize: '0.78rem' }}>
+              {r.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    )
+  }
   if (variant === 'tabs') {
     return (
       <Tabs
