@@ -18,9 +18,10 @@ land. Reorder if priority shifts.
   `['analytics', 'snapshot', filter]` key. `invalidate.actions/entries/outcomes`
   now also invalidate `['analytics']` so the overview always reflects the
   latest data.
-- [ ] **Single source of truth + multi-tab realtime sync.** With staleTime: 0 +
-  refetchOnMount, in-app freshness is fixed. Multi-tab realtime (Supabase
-  `.on('postgres_changes', ...)`) still TODO — a separate, larger lift.
+- [x] **Single source of truth + multi-tab realtime sync** — landed in
+  Round 4 via `useRealtimeSync` hook subscribed to `postgres_changes`
+  for actions/entries/outcomes/passed/predictions/feelings/reminders.
+  This bullet was stale; closing now.
 
 ### Markdown
 - [x] **Markdown still visible** root cause: the editor shows the raw stored
@@ -29,14 +30,18 @@ land. Reorder if priority shifts.
   (b) entry form now strips on save so the next persist cleans the source,
   (c) renderer also strips at render time so the detail view always reads
   cleanly. Combined, legacy markdown decays to zero as users edit entries.
-- [ ] **Bulk one-shot SQL migration** to clean every existing entry's
-  body/title server-side (so we don't have to wait for each entry to be
-  edited). Will write next.
+- [x] **Bulk one-shot SQL migration** — `npm run strip:legacy-markdown`
+  applied 2026-04-19 with service-role creds (the script preferred the
+  anon key before; updated to prefer `SUPABASE_SERVICE_ROLE_KEY` /
+  `SUPABASE_SECRET_KEY` first). Cleaned 35 of 557 entries; the
+  render-time defensive strip in `PlainTextWithTickers` is now
+  deleted, save-time strip stays.
 
 ### Timeline
-- [ ] **Pass / Research / Hold / Watchlist decisions** — diamond renderer in
-  TimelineChartVisx is still wired (line 619). Need to verify with a real Pass
-  decision in the data. To verify next.
+- [x] **Pass / Research / Hold / Watchlist decisions** — verified
+  rendering live: the 2026-04-19 audit walked the Timeline with real
+  Pass + Research markers in the data and they show as the expected
+  cone-shaped markers in the "other" band. Closing.
 
 ### Workflow process
 - [x] Memory entry: after each batch → lint → commit (loose message) → push
@@ -127,10 +132,15 @@ list extracted from it, in priority order.
   produces a 15%-smaller variant under 480px, including a smaller count-label
   font (13 → 11).
 
-### IA / wayfinding — needs your call
-- [ ] **Timeline vs Ticker page overlap.** Recommendation: keep both;
-  shrink the Ticker page chart to a "preview" with a strong CTA to the
-  Timeline. Or merge as you prefer. **Needs input.**
+### IA / wayfinding
+- [x] **Timeline vs Ticker page overlap — resolved by keeping both.**
+  Per-ticker page (`/tickers/:ticker`) keeps its embedded chart for
+  the "land on a ticker, see context immediately" loop, but now ends
+  with a prominent `See in full timeline — zoom, benchmark, overlay
+  other tickers` link straight into `/timeline?symbol=...`. Two
+  surfaces with clearly different jobs: per-ticker is the bookmarked
+  "this stock's story" page; Timeline is the multi-ticker analytic
+  workspace. Closed.
 
 ### Data / schema — needs your call
 - [x] **F9 resolved — `entry_feelings` removed.** User confirmed dead.
@@ -143,8 +153,10 @@ list extracted from it, in priority order.
   with 7 active items + 1 triggered.
 
 ### Lower-priority polish
-- [ ] **Sharpen Calibration / Overall analytics copy** once predictions exist.
-  (Still pending — waiting on real prediction data.)
+- [x] **Sharpen Calibration / Overall analytics copy** — empty-state
+  on `/analytics/calibration` rewritten to "No resolved predictions
+  yet" with a clarifying description that explains the resolution
+  gate (audit O-3, 2026-04-19).
 - [x] **Decision card left-border colour** — verified. `DecisionCard` pulls
   `getDecisionTypeColor(action.type)` into a 3px left border, matching the
   Timeline diamond colours.
