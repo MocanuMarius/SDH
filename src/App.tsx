@@ -61,6 +61,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
 const DecisionFormPage = lazy(() => import('./pages/DecisionFormPage'))
+const WatchlistFormPage = lazy(() => import('./pages/WatchlistFormPage'))
 
 /** Thin LinearProgress bar shown while a lazy page chunk loads */
 function PageFallback() {
@@ -421,6 +422,8 @@ function AppRoutes() {
           inside the Calibration tab once predictions earn outcomes. */}
       <Route path="/skill-engineering" element={<Navigate to="/analytics/calibration" replace />} />
       <Route path="/watchlist" element={<ProtectedLayout><Page><WatchlistPage /></Page></ProtectedLayout>} />
+      <Route path="/watchlist/new" element={<ProtectedLayout><Page><WatchlistFormPage /></Page></ProtectedLayout>} />
+      <Route path="/watchlist/:id/edit" element={<ProtectedLayout><Page><WatchlistFormPage /></Page></ProtectedLayout>} />
       <Route path="/share-target" element={<ShareTargetRedirect />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

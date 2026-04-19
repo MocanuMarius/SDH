@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Box,
   Card,
@@ -6,8 +7,6 @@ import {
   Typography,
   Button,
   TextField,
-  Select,
-  MenuItem,
   Table,
   TableBody,
   TableCell,
@@ -22,7 +21,6 @@ import {
   CircularProgress,
   Stack,
   Chip,
-  FormControl,
   IconButton,
   InputAdornment,
   Divider,
@@ -40,7 +38,6 @@ import AddIcon from '@mui/icons-material/Add'
 import HistoryIcon from '@mui/icons-material/History'
 import SearchIcon from '@mui/icons-material/Search'
 import { supabase } from '../services/supabaseClient'
-import TickerAutocomplete from '../components/TickerAutocomplete'
 import SwipeableCard from '../components/SwipeableCard'
 import { PageHeader, EmptyState } from '../components/system'
 import BookmarksIcon from '@mui/icons-material/Bookmarks'
@@ -148,27 +145,19 @@ function AuditDetail({ entry }: { entry: AuditEntry }) {
 }
 
 export default function WatchlistPage() {
+  const navigate = useNavigate()
   const [items, setItems] = useState<WatchlistItem[]>([])
   const [history, setHistory] = useState<AlertHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [openDialog, setOpenDialog] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editingSnapshot, setEditingSnapshot] = useState<{ condition: string; alert_price: number } | null>(null)
+  // Add/Edit form state used to live here for the in-page Dialog;
+  // moved to WatchlistFormPage at /watchlist/new and /watchlist/:id/edit.
   // Log dialog
   const [logItem, setLogItem] = useState<WatchlistItem | null>(null)
   const [logEntries, setLogEntries] = useState<AuditEntry[]>([])
   const [logLoading, setLogLoading] = useState(false)
-
-  // Form state
-  const [ticker, setTicker] = useState('')
-  const [alertPrice, setAlertPrice] = useState('')
-  const [condition, setCondition] = useState('>')
-  const [currentPrice, setCurrentPrice] = useState<number | null>(null)
   const muiTheme = useTheme()
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'))
-  const [_fetchingPrice, setFetchingPrice] = useState(false)
-  const [currency, setCurrency] = useState<string>('USD')
 
   // Cached current prices for all alerts
   const [priceCache, setPriceCache] = useState<Record<string, number>>({})
@@ -176,8 +165,6 @@ export default function WatchlistPage() {
   // Search filter
   const [searchTicker, setSearchTicker] = useState('')
   const [activeTab, setActiveTab] = useState(0)
-
-  const CONDITIONS = ['<', '>', '<=', '>=', '==', '!=']
 
   const filteredItems = items.filter((item) =>
     item.ticker.toUpperCase().includes(searchTicker.toUpperCase())
@@ -191,7 +178,7 @@ export default function WatchlistPage() {
   useEffect(() => {
     if (items.length > 0) {
       items.forEach((item) => {
-        fetchCurrentPrice(item.ticker, false).then((price) => {
+        fetchCurrentPrice(item.ticker).then((price) => {
           if (price) {
             setPriceCache((prev) => ({ ...prev, [item.ticker]: price }))
           }
@@ -200,24 +187,19 @@ export default function WatchlistPage() {
     }
   }, [items])
 
-  const fetchCurrentPrice = async (tickerSymbol: string, isNewSelection = false): Promise<number | null> => {
-    if (!tickerSymbol.trim()) { setCurrentPrice(null); setCurrency('USD'); return null }
-    setFetchingPrice(true)
+  // Lightweight price fetch — used to populate the priceCache for
+  // the visible list rows. The form-side variant lives in
+  // WatchlistFormPage (different state machine).
+  const fetchCurrentPrice = async (tickerSymbol: string): Promise<number | null> => {
+    if (!tickerSymbol.trim()) return null
     try {
       const res = await fetch(`/api/quote?symbol=${encodeURIComponent(tickerSymbol)}`)
       if (res.ok) {
         const data = await res.json()
-        if (data.price) {
-          setCurrentPrice(data.price)
-          setCurrency(data.currency || 'USD')
-          if (isNewSelection) setAlertPrice(data.price.toFixed(2))
-          return data.price
-        }
+        if (data.price) return data.price
       }
     } catch (e) {
       console.error('Error fetching price:', e)
-    } finally {
-      setFetchingPrice(false)
     }
     return null
   }
@@ -244,86 +226,10 @@ export default function WatchlistPage() {
     }
   }
 
-  const handleOpenDialog = async (item?: WatchlistItem) => {
-    if (item) {
-      setEditingId(item.id)
-      setEditingSnapshot({ condition: item.condition, alert_price: item.alert_price })
-      setTicker(item.ticker)
-      setAlertPrice(item.alert_price.toString())
-      setCondition(item.condition)
-      await fetchCurrentPrice(item.ticker)
-    } else {
-      setEditingId(null)
-      setEditingSnapshot(null)
-      setTicker('')
-      setAlertPrice('')
-      setCondition('>')
-      setCurrentPrice(null)
-    }
-    setOpenDialog(true)
-  }
-
-  const handleTickerChange = (newTicker: string) => {
-    setTicker(newTicker)
-    if (newTicker) fetchCurrentPrice(newTicker, false)
-  }
-
-  const handleTickerSelect = (result: { symbol: string }) => { fetchCurrentPrice(result.symbol, true) }
-
-  const calculatePriceChange = () => {
-    if (!currentPrice || !alertPrice) return null
-    return ((parseFloat(alertPrice) - currentPrice) / currentPrice) * 100
-  }
-
-  const getPriceChangeColor = (diff: number | null) => {
-    if (diff === null) return 'text.secondary'
-    return diff > 0 ? 'success.main' : diff < 0 ? 'error.main' : 'text.secondary'
-  }
-
-  const handleCloseDialog = () => {
-    setOpenDialog(false); setEditingId(null); setEditingSnapshot(null)
-    setTicker(''); setAlertPrice(''); setCondition('>')
-  }
-
-  const handleSave = async () => {
-    if (!ticker.trim() || !alertPrice) { setError('Please fill in all fields'); return }
-    try {
-      const data = { ticker: ticker.toUpperCase(), alert_price: parseFloat(alertPrice), condition }
-
-      if (editingId) {
-        const { error } = await supabase
-          .from('watchlist_items')
-          .update({ ...data, trigger_count: 0, status: 'active' })
-          .eq('id', editingId)
-        if (error) throw error
-
-        await supabase.from('watchlist_audit_log').insert({
-          watchlist_item_id: editingId,
-          event_type: 'edited',
-          details: {
-            before: editingSnapshot,
-            after: { condition, alert_price: parseFloat(alertPrice) },
-          },
-        })
-      } else {
-        const { data: inserted, error } = await supabase
-          .from('watchlist_items').insert([data]).select().single()
-        if (error) throw error
-
-        await supabase.from('watchlist_audit_log').insert({
-          watchlist_item_id: inserted.id,
-          event_type: 'created',
-          details: { ticker: data.ticker, condition, alert_price: data.alert_price },
-        })
-      }
-
-      handleCloseDialog()
-      await loadWatchlist()
-    } catch (e) {
-      console.error('Error saving alert:', e)
-      setError(e instanceof Error ? e.message : 'Failed to save alert')
-    }
-  }
+  // Open/close/save handlers for the in-page Add/Edit Dialog have all
+  // moved to WatchlistFormPage. The list page now just navigates to
+  // /watchlist/new and /watchlist/:id/edit and reloads on focus via
+  // its mount effect.
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this alert?')) return
@@ -407,7 +313,7 @@ export default function WatchlistPage() {
             <Tab label={`Triggered (${history.length})`} />
           </Tooltip>
         </Tabs>
-        <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => handleOpenDialog()} sx={{ textTransform: 'none', flexShrink: 0 }}>
+        <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => navigate('/watchlist/new')} sx={{ textTransform: 'none', flexShrink: 0 }}>
           Add
         </Button>
       </Box>
@@ -451,7 +357,7 @@ export default function WatchlistPage() {
                       key={item.id}
                       actions={[
                         { icon: <HistoryIcon sx={{ fontSize: 20 }} />, label: 'Log', onClick: () => handleOpenLog(item), color: '#475569' },
-                        { icon: <EditIcon sx={{ fontSize: 20 }} />, label: 'Edit', onClick: () => handleOpenDialog(item), color: '#2563eb' },
+                        { icon: <EditIcon sx={{ fontSize: 20 }} />, label: 'Edit', onClick: () => navigate(`/watchlist/${item.id}/edit`), color: '#2563eb' },
                         { icon: <DeleteIcon sx={{ fontSize: 20 }} />, label: 'Delete', onClick: () => handleDelete(item.id), color: '#dc2626' },
                       ]}
                       sx={{
@@ -534,7 +440,7 @@ export default function WatchlistPage() {
                           <TableCell align="right">
                             <Stack direction="row" spacing={0.25}>
                               <IconButton size="small" onClick={() => handleOpenLog(item)}><HistoryIcon fontSize="small" /></IconButton>
-                              <IconButton size="small" onClick={() => handleOpenDialog(item)}><EditIcon fontSize="small" /></IconButton>
+                              <IconButton size="small" onClick={() => navigate(`/watchlist/${item.id}/edit`)}><EditIcon fontSize="small" /></IconButton>
                               <IconButton size="small" color="error" onClick={() => handleDelete(item.id)}><DeleteIcon fontSize="small" /></IconButton>
                             </Stack>
                           </TableCell>
@@ -573,110 +479,10 @@ export default function WatchlistPage() {
         </Card>
       )}
 
-      {/* Add/Edit dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="xs" fullWidth fullScreen={isMobile}>
-        <DialogTitle sx={{ pb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {editingId ? 'Edit Alert' : 'Add Alert'}
-          {isMobile && (
-            <IconButton size="small" onClick={handleCloseDialog} aria-label="Close" edge="end">
-              <CloseIcon />
-            </IconButton>
-          )}
-        </DialogTitle>
-        <DialogContent>
-          <Stack spacing={2.5} sx={{ pt: 1 }}>
-            {/* Ticker search */}
-            <Box>
-              <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Symbol
-              </Typography>
-              <TickerAutocomplete
-                value={ticker}
-                onChange={handleTickerChange}
-                onSelectResult={handleTickerSelect}
-                label=""
-                placeholder="Type ticker or company name"
-                fullWidth
-                size="small"
-              />
-            </Box>
-
-            {/* Current price */}
-            {currentPrice != null && (
-              <Box sx={{ px: 1, py: 0.75, bgcolor: 'grey.50', borderRadius: 1 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Current price: <strong>${currentPrice.toFixed(2)}</strong> {currency}
-                </Typography>
-              </Box>
-            )}
-
-            {/* Alert when price... */}
-            <Box>
-              <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Alert when price
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <FormControl size="small" sx={{ width: 72, flexShrink: 0 }}>
-                  <Select
-                    value={condition}
-                    onChange={(e) => setCondition(e.target.value)}
-                    sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '1rem', textAlign: 'center' }}
-                  >
-                    {CONDITIONS.map((c) => (
-                      <MenuItem key={c} value={c} sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{c}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <TextField
-                  placeholder="0.00"
-                  type="number"
-                  value={alertPrice}
-                  onChange={(e) => setAlertPrice(e.target.value)}
-                  size="small"
-                  fullWidth
-                  inputProps={{ step: '0.01', inputMode: 'decimal' }}
-                  InputProps={{
-                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                  }}
-                />
-              </Box>
-            </Box>
-
-            {/* % from current */}
-            {currentPrice && alertPrice && calculatePriceChange() !== null && (
-              <Typography
-                variant="body2"
-                sx={{ fontWeight: 700, color: getPriceChangeColor(calculatePriceChange()), pl: 0.5 }}
-              >
-                {calculatePriceChange()! > 0 ? '+' : ''}{calculatePriceChange()!.toFixed(1)}% from current
-              </Typography>
-            )}
-
-            {/* Status toggle — only shown when editing an existing alert */}
-            {editingId && (() => {
-              const editItem = items.find((i) => i.id === editingId)
-              if (!editItem) return null
-              return (
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 1, borderTop: 1, borderColor: 'divider' }}>
-                  <Typography variant="body2" color="text.secondary">
-                    Alert {editItem.status === 'active' ? 'active' : 'paused'}
-                  </Typography>
-                  <Switch
-                    checked={editItem.status === 'active'}
-                    onChange={() => handleToggleStatus(editItem)}
-                  />
-                </Box>
-              )
-            })()}
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCloseDialog} variant="outlined">Cancel</Button>
-          <Button onClick={handleSave} variant="contained" disabled={!ticker.trim() || !alertPrice}>
-            {editingId ? 'Update' : 'Add alert'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* The Add/Edit alert Dialog used to mount here. Both flows now
+          navigate to /watchlist/new and /watchlist/:id/edit
+          (WatchlistFormPage). The list reloads when the user navigates
+          back since `loadWatchlist` runs in this page's mount effect. */}
 
       {/* Audit log dialog */}
       <Dialog open={!!logItem} onClose={() => setLogItem(null)} maxWidth="sm" fullWidth fullScreen={isMobile}>

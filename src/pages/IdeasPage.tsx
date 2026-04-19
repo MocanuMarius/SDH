@@ -113,7 +113,9 @@ export default function IdeasPage() {
     {
       field: 'ticker',
       headerName: '$',
-      width: isMobile ? 88 : 120,
+      // 88 px was eating tickers with suffixes like $MTX.DE → $MTX...
+      // 108 fits the longest realistic ticker shape.
+      width: isMobile ? 108 : 120,
       renderCell: (p: GridRenderCellParams<IdeaRow>) => (
         <Chip
           size="small"
@@ -129,8 +131,17 @@ export default function IdeasPage() {
       headerName: 'Name',
       flex: 1,
       minWidth: isMobile ? 100 : 140,
-      renderCell: (p: GridRenderCellParams<IdeaRow>) =>
-        (p.value as string) || p.row.ticker,
+      // Was falling back to `p.row.ticker` when no company name was set,
+      // which duplicated the ticker on most rows ("$CRC | CRC", "$AMD |
+      // AMD"). Now we just render the company name when present and a
+      // muted dash when not — the ticker chip in the column to the
+      // left is the source of truth.
+      renderCell: (p: GridRenderCellParams<IdeaRow>) => {
+        const value = (p.value as string)?.trim()
+        return value && value.toUpperCase() !== p.row.ticker.toUpperCase()
+          ? value
+          : <span style={{ color: 'var(--mui-palette-text-disabled, #94a3b8)' }}>—</span>
+      },
     },
     {
       field: 'lastDate',
