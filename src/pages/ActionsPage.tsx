@@ -188,7 +188,10 @@ export default function ActionsPage() {
       {
         field: 'action_date',
         headerName: 'Date',
-        width: isMobile ? 84 : 120,
+        // 84 px was eating the tail off labels like "3 months ago" — they
+        // truncated to "3 months a..." on mobile with no tooltip on the
+        // grid cell. 108 px fits the longest realistic label.
+        width: isMobile ? 108 : 120,
         renderCell: (p: GridRenderCellParams<Row>) => <RelativeDate date={p.value as string} />,
       },
       {

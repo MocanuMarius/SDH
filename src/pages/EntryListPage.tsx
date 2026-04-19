@@ -28,6 +28,7 @@ import RemoveIcon from '@mui/icons-material/Remove'
 import LoopIcon from '@mui/icons-material/Loop'
 import { countAutomatedEntries } from '../services/entriesService'
 import type { EntryWithActions } from '../services/entriesService'
+import { stripLegacyMarkdown } from '../utils/stripLegacyMarkdown'
 import { useDebounce } from '../hooks/useDebounce'
 import { useEntriesWithActions } from '../hooks/queries'
 import { getChartCategory } from '../theme/decisionTypes'
@@ -264,8 +265,12 @@ const EntryListRow = memo(function EntryListRow({ entry }: { entry: EntryWithAct
   // Title minus any ticker mentions — so "$UBER short speculation" shows
   // just "short speculation" as the title text (no duplicate ticker next
   // to the prominent left-side ticker chip). Collapse resulting whitespace.
+  // Also strip legacy markdown markers — historical titles include things
+  // like `\`#research\`` (literal backticks) that the body-text path
+  // already cleans via PlainTextWithTickers but the title text was
+  // rendering raw, so old entries showed as "`#research`" in the list.
   const rawTitle = entry.title_markdown?.trim() || ''
-  const titleProse = rawTitle
+  const titleProse = stripLegacyMarkdown(rawTitle)
     .replace(/\$[A-Z][A-Z0-9.:]{0,9}/gi, '')
     .replace(/\s+/g, ' ')
     .trim()
