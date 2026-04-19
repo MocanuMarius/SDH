@@ -40,6 +40,7 @@ import TimelineChartVisx, { type TimelineChartPoint, getTimelineChartResponsiveM
 import RangeSelectorButtons from './charts/RangeSelectorButtons'
 import MeasureStatsPill from './charts/MeasureStatsPill'
 import ChartHoverOverlays from './charts/ChartHoverOverlays'
+import { computeMeasureSelection } from './charts/measureDragGeometry'
 
 // Cap the number of points sent to the chart. SVG renders thousands fine,
 // but downsampling speeds up clustering & marker layout for long ranges.
@@ -338,18 +339,15 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
   }
   const commitSelection = (sel: { startX: number; endX: number }) => {
     if (!chartWrapperRef.current) return
-    if (Math.abs(sel.endX - sel.startX) < 20) return  // accidental drag
     const rect = chartWrapperRef.current.getBoundingClientRect()
-    const plotWidth = rect.width - plotLeft - plotRight
-    if (plotWidth <= 0) return
-    const dataLen = chartPoints.length
-    const [x1, x2] = sel.startX < sel.endX ? [sel.startX, sel.endX] : [sel.endX, sel.startX]
-    const plotX1 = Math.max(0, x1 - plotLeft)
-    const plotX2 = Math.min(plotWidth, x2 - plotLeft)
-    const startIndex = Math.max(0, Math.min(Math.floor((plotX1 / plotWidth) * dataLen), dataLen - 1))
-    let endIndex = Math.max(0, Math.min(Math.ceil((plotX2 / plotWidth) * dataLen), dataLen - 1))
-    if (endIndex <= startIndex) endIndex = Math.min(startIndex + 1, dataLen - 1)
-    setMeasureSelection({ startIndex, endIndex })
+    const next = computeMeasureSelection(sel.startX, sel.endX, {
+      wrapperWidth: rect.width,
+      plotLeft,
+      plotRight,
+      dataLength: chartPoints.length,
+    })
+    if (!next) return
+    setMeasureSelection(next)
     justFinishedDragRef.current = true
   }
   const handleMeasureMouseUp = () => {

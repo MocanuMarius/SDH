@@ -30,6 +30,7 @@ import { ParentSize } from '@visx/responsive'
 import TimelineChartVisx, { getTimelineChartResponsiveMargin, type DecisionOverlayInfo } from '../components/TimelineChartVisx'
 import RangeSelectorButtons from '../components/charts/RangeSelectorButtons'
 import ChartHoverOverlays from '../components/charts/ChartHoverOverlays'
+import { computeMeasureSelection } from '../components/charts/measureDragGeometry'
 import { fetchChartData, type ChartRange } from '../services/chartApiService'
 import { useEncodedUrlState } from '../hooks/useEncodedUrlState'
 import { encodeUrlState, decodeUrlState } from '../utils/urlState'
@@ -551,28 +552,20 @@ export default function TimelinePage() {
 
     const wrap = chartWrapperRef.current
     if (!wrap) return
-    const startX = selectStartXRef.current
-    const endX = selectEndXRef.current
-    const span = Math.abs(endX - startX)
-    // Threshold raised 10 → 20 to disambiguate "click" from "measure-drag"
-    // on desktop. A genuine click (small tremor) won't accidentally fire
-    // a measurement; deliberate drags (≥20 px) still trigger one.
-    if (span < 20) return
-    const rect = wrap.getBoundingClientRect()
     const margins = getPlotMargins()
-    const plotWidth = rect.width - margins.left - margins.right
-    if (plotWidth <= 0) return
-    const data = chartDisplayDataRef.current
-    const dataLen = data.length
-    if (dataLen === 0) return
-    const [x1, x2] = startX < endX ? [startX, endX] : [endX, startX]
-    const plotX1 = Math.max(0, x1 - margins.left)
-    const plotX2 = Math.min(plotWidth, x2 - margins.left)
-    const startIndexInDisplay = Math.max(0, Math.min(Math.floor((plotX1 / plotWidth) * dataLen), dataLen - 1))
-    let endIndexInDisplay = Math.max(0, Math.min(Math.ceil((plotX2 / plotWidth) * dataLen), dataLen - 1))
-    if (endIndexInDisplay <= startIndexInDisplay) endIndexInDisplay = Math.min(startIndexInDisplay + 1, dataLen - 1)
-    log('endRangeDrag -> apply measure selection', { startIndexInDisplay, endIndexInDisplay, dataLen })
-    setMeasureSelection({ startIndex: startIndexInDisplay, endIndex: endIndexInDisplay })
+    const next = computeMeasureSelection(
+      selectStartXRef.current,
+      selectEndXRef.current,
+      {
+        wrapperWidth: wrap.getBoundingClientRect().width,
+        plotLeft: margins.left,
+        plotRight: margins.right,
+        dataLength: chartDisplayDataRef.current.length,
+      },
+    )
+    if (!next) return
+    log('endRangeDrag -> apply measure selection', next)
+    setMeasureSelection(next)
     justFinishedDragRef.current = true
   }, [])
 
