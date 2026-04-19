@@ -52,13 +52,16 @@ export default function CalibrationDashboardPage() {
 
   if (!snapshot) return null
 
-  // Empty state — no predictions in the system means there's nothing to calibrate.
-  // Render a clean explainer + CTA instead of a card full of dashes.
+  // Empty state — no RESOLVED predictions, so there's nothing to score.
+  // Old copy ("No predictions to calibrate yet") read as "you have no
+  // predictions at all", which confused users who'd just added one but
+  // its by-date hadn't passed. Be explicit about the resolution gate.
   if (snapshot.totalPredictions === 0) {
     return (
       <EmptyState
         icon={<InsightsIcon />}
-        title="No predictions to calibrate yet"
+        title="No resolved predictions yet"
+        description="Predictions show up here once their by-date has passed and you've recorded the outcome. Active predictions live on the entry that owns them until then."
         action={
           <Button component={RouterLink} to="/entries/new" variant="contained" size="small">
             New entry
