@@ -730,36 +730,11 @@ export default function InsightsPage() {
         </Grid>
       </Grid>
 
-      {/* Last 4 weeks + All time summary blocks */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Last 4 weeks
-            </Typography>
-            <Typography variant="body1">
-              {entriesPerWeek} avg journal entries/week · {decisionsPerWeek} avg trades/week
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {tagsPerWeek} avg tags/week · {ideasPerWeek} avg tickers/week · {newIdeasLast4} new
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              All time
-            </Typography>
-            <Typography variant="body1">
-              {entriesCount} journal entries · {actionsCount} trades
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {tagsCount} Tags · {ideasCount} Tickers
-            </Typography>
-          </Paper>
-        </Grid>
-      </Grid>
-
+      {/* Activity rollups — All time + Last 4 weeks. The exact same
+          two cards used to render TWICE in a row (once as a "summary"
+          block right under the KPI grid, then again under an
+          "Activity" heading); deleted the first occurrence so each
+          stat appears once. */}
       <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1, mt: 1 }}>
         Activity
       </Typography>
