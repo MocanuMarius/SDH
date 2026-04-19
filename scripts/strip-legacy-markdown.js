@@ -40,7 +40,13 @@ const supabaseUrl =
   process.env.VITE_SUPABASE_URL ||
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   process.env.SUPABASE_URL
+// Prefer service-role key when available so the script can bypass RLS
+// and see every user's row (this is a single-user app today, but the
+// RLS policy still requires `auth.uid()`, which a script doesn't have).
+// Fall back to anon for local dev where service role isn't set.
 const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SECRET_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   process.env.SUPABASE_ANON_KEY

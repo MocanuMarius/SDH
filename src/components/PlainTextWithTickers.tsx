@@ -15,7 +15,6 @@ import { Box, Chip, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import { normalizeTickerToCompany } from '../utils/tickerCompany'
 import { TICKER_IN_TEXT_REGEX } from '../utils/text'
-import { stripLegacyMarkdown } from '../utils/stripLegacyMarkdown'
 
 const TICKER_CHIP_SX = {
   mx: 0.25,
@@ -93,22 +92,16 @@ export default function PlainTextWithTickers({
 }: PlainTextWithTickersProps) {
   if (!source || !source.trim()) return null
 
-  // Defensive: quietly strip any legacy markdown markers (`**`, `#`, `>`,
-  // bullets) at render time so historical entries read as clean prose
-  // even if they predate the strip-on-save in EntryFormPage.
-  //
-  // Removal checklist (roadmap item E — blocked on a DB migration, NOT on
-  // any additional code change):
-  //   1. Run `DRY_RUN=1 npm run strip:legacy-markdown` while logged in
-  //      with service-role creds (anon key hits RLS and returns 0 rows,
-  //      which is the false-positive I kept tripping on). Confirm the
-  //      "Would update N entries" count.
-  //   2. Run `DRY_RUN=0 npm run strip:legacy-markdown` to apply.
-  //   3. Delete this `stripLegacyMarkdown(source)` call + its import.
-  //
-  // Utility itself is cheap (a handful of regexes, no allocations on
-  // already-clean input) so keeping it pending verification is fine.
-  const cleaned = stripLegacyMarkdown(source)
+  // The render-time `stripLegacyMarkdown(source)` defensive call has
+  // been retired — the bulk DB migration (`npm run strip:legacy-markdown`
+  // with service-role creds) ran on 2026-04-19 and updated the 35
+  // entries that still held markdown markers. New writes are sanitised
+  // at save time inside EntryFormPage. The `stripLegacyMarkdown` util
+  // stays in the tree because EntryFormPage's save path still uses it
+  // and a few list-rendering paths (e.g. EntryListPage's title prose)
+  // call it as a paranoid no-op for the rare case where a row that
+  // missed the migration sneaks back in.
+  const cleaned = source
 
   if (inline) {
     // Collapse all whitespace to a single line for title-style rendering.
