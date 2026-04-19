@@ -20,6 +20,8 @@ import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams, GridColumnVisibilityModel } from '@mui/x-data-grid'
 import { type ActionWithEntry } from '../services/actionsService'
 import { createOutcome } from '../services/outcomesService'
+import { createReminder } from '../services/remindersService'
+import { useAuth } from '../contexts/AuthContext'
 import { useActions, useOutcomesByActionIds, useInvalidate } from '../hooks/queries'
 import { fetchChartData } from '../services/chartApiService'
 import PlainTextWithTickers from '../components/PlainTextWithTickers'
@@ -45,6 +47,7 @@ function parsePrice(price: string | null | undefined): number | null {
 }
 
 export default function ActionsPage() {
+  const { user } = useAuth()
   const { openChart } = useTickerChart()
   const [currentPriceByTicker, setCurrentPriceByTicker] = useState<Record<string, number>>({})
   const [error, setError] = useState<string | null>(null)
@@ -402,6 +405,26 @@ export default function ActionsPage() {
               error_type: data.error_type,
               what_i_remember_now: data.what_i_remember_now,
             })
+            // Follow-up reminder — closes the loop. The user picks
+            // "check back in 60 days" inside the dialog; we create
+            // the actual `reminders` row here so it surfaces in the
+            // Reminders drawer when its date comes around.
+            if (data.follow_up_in_days != null && user?.id) {
+              const date = new Date()
+              date.setDate(date.getDate() + data.follow_up_in_days)
+              const reminderDate = date.toISOString().slice(0, 10)
+              const ticker = outcomeDialogAction.ticker?.trim().toUpperCase() ?? ''
+              await createReminder(user.id, {
+                entry_id: outcomeDialogAction.entry_id ?? null,
+                type: 'entry_review',
+                reminder_date: reminderDate,
+                note: ticker
+                  ? `Check what happened with $${ticker} since this decision`
+                  : 'Check what happened since this decision',
+                ticker,
+              })
+              invalidate.reminders?.()
+            }
             // Close immediately — react-query refreshes everything subscribed to outcomes.
             setOutcomeDialogAction(null)
             invalidate.outcomes()

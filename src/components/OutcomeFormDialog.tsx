@@ -1,30 +1,37 @@
 /**
  * Outcome dialog — log how a closed decision actually played out.
  *
- * Design goal: the common case is "I closed this, here's what
- * happened, file it." So the top of the form is dead simple: P&L +
- * Date + a one-line note. Below that, three big VERDICT chips
- * (Right / Wrong / Inconclusive) — same shape as
- * `ResolveStaleIdeaDialog` because the same UX worked there. After a
- * verdict is picked, a small Yes/No surfaces for "was your reasoning
- * sound?" so the process-vs-outcome split stays available without
- * forcing a slider.
+ * Design goal (rewritten): focus on QUALITY data (verdict + reasoning
+ * + lesson) not QUANTITY data (P&L numbers). The user's framing:
+ * "I don't want to manually input P&L; I want to figure out what
+ * happened by looking at how the stock moved, and add reasoning."
  *
- * The deeper fields (driver flag, error-type tags, post-mortem
- * paragraphs, 500-word closing memo) all live behind accordions —
- * collapsed by default, opened only when the user wants to write
- * something real. Earlier the form put the process/outcome sliders
- * + driver dropdown front and centre, which made every "log an
- * outcome" feel like a research paper.
+ * So the primary surface is now:
+ *   - Date (when the outcome was recorded)
+ *   - Notes (one-line snapshot of what happened)
+ *   - Verdict chips (Right / Wrong / Inconclusive)
+ *   - "Was your reasoning sound?" toggle
+ *   - "Check back in…" follow-up reminder chips (30/60/90/180/365 d)
  *
- * Schema mapping kept identical to before so old rows + analytics
- * still work:
+ * Realised P&L is gone from the basic surface. It still lives in the
+ * Post-mortem accordion as an optional number for the rare case
+ * someone wants to record an exact figure, but it's never required
+ * and the chart-derived price-since-decision read in the surrounding
+ * UI gives the user the "how did the stock move" answer for free.
+ *
+ * Follow-up reminder: when the user picks one of the day chips, the
+ * parent component (which actually has DB write access) creates a
+ * `reminders` row scheduled for that day with a sensible auto-note.
+ * The dialog itself just collects the choice; ActionsPage /
+ * EntryDetailPage handle the DB call.
+ *
+ * Schema mapping kept identical for the verdict + process scoring so
+ * old rows + analytics still work:
  *   - Right call    → outcome_score 5, outcome_quality 'good'
  *   - Wrong call    → outcome_score 1, outcome_quality 'bad'
  *   - Inconclusive  → outcome_score 3, outcome_quality null
  *   - Reasoning Yes → process_score 4, process_quality 'good'
  *   - Reasoning No  → process_score 2, process_quality 'bad'
- *   - Driver, post-mortem, closing memo, error types unchanged.
  */
 
 import { useState, useEffect } from 'react'
@@ -71,6 +78,10 @@ interface OutcomeFormDialogProps {
     closing_memo: string
     error_type: ErrorType[] | null
     what_i_remember_now: string
+    /** Days from today to schedule a follow-up reminder. The parent
+     *  is responsible for creating the actual `reminders` row when
+     *  this is non-null. Pass null for "no reminder, just save". */
+    follow_up_in_days: number | null
   }) => Promise<void>
   initial: Outcome | null
   actionLabel?: string
@@ -159,6 +170,10 @@ export default function OutcomeFormDialog({
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [verdict, setVerdict] = useState<Verdict | null>(null)
   const [processVerdict, setProcessVerdict] = useState<ProcessVerdict>(null)
+  // Follow-up reminder: not stored on the outcome itself — the parent
+  // creates a reminders row when the user picks a non-null value here
+  // and the outcome saves successfully.
+  const [followUpDays, setFollowUpDays] = useState<number | null>(null)
   const [driver, setDriver] = useState<OutcomeDriver>(initial?.driver ?? null)
   const [post_mortem_notes, setPostMortemNotes] = useState((initial as Outcome & { post_mortem_notes?: string | null })?.post_mortem_notes ?? '')
   const [closing_memo, setClosingMemo] = useState((initial as Outcome & { closing_memo?: string | null })?.closing_memo ?? '')
@@ -187,6 +202,9 @@ export default function OutcomeFormDialog({
         ? existingOutcomeScore
         : legacyOutcome === 'good' ? 4 : legacyOutcome === 'bad' ? 2 : null
       setVerdict(scoreToVerdict(resolvedOutcome))
+      // Editing an existing outcome: don't suggest creating a new
+      // reminder — the user is fixing wording, not closing a loop.
+      setFollowUpDays(null)
       setClosingMemo((initial as Outcome & { closing_memo?: string | null }).closing_memo ?? '')
       setErrorType((initial as Outcome & { error_type?: ErrorType[] | null }).error_type ?? [])
       setWhatIRememberNow((initial as Outcome & { what_i_remember_now?: string | null }).what_i_remember_now ?? '')
@@ -196,6 +214,10 @@ export default function OutcomeFormDialog({
       setNotes('')
       setVerdict(null)
       setProcessVerdict(null)
+      // Default to a 60-day follow-up — the most common useful
+      // "see what happened" interval. User can clear it or pick
+      // a different chip before saving.
+      setFollowUpDays(60)
       setDriver(null)
       setPostMortemNotes('')
       setClosingMemo('')
@@ -227,6 +249,7 @@ export default function OutcomeFormDialog({
         closing_memo: closing_memo.trim(),
         error_type: error_type.length ? error_type : null,
         what_i_remember_now: what_i_remember_now.trim(),
+        follow_up_in_days: followUpDays,
       })
       onClose()
     } catch (err) {
@@ -250,29 +273,22 @@ export default function OutcomeFormDialog({
       </DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1.5, overflowY: 'auto' }}>
-          {/* Result — the only fields the common case really needs. */}
+          {/* Result — quality fields only. The realised P&L number
+              field used to live up here; it's been moved into the
+              Post-mortem accordion below as an optional input
+              (per the design pivot to "quality data, not quantity").
+              The chart on the surrounding page already shows how the
+              price moved — that's the actual "what happened" answer. */}
           <Typography component="span" sx={SECTION_HEADING_SX} display="block">Result</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-            <TextField
-              size="small"
-              label="Realized P&L"
-              type="number"
-              value={realized_pnl}
-              onChange={(e) => setRealizedPnl(e.target.value)}
-              placeholder="e.g. 150.50 or -20"
-              inputProps={{ step: 0.01 }}
-              sx={{ minWidth: 140 }}
-            />
-            <TextField
-              size="small"
-              label="Date"
-              type="date"
-              value={outcome_date}
-              onChange={(e) => setOutcomeDate(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              sx={{ minWidth: 160 }}
-            />
-          </Box>
+          <TextField
+            size="small"
+            label="Date"
+            type="date"
+            value={outcome_date}
+            onChange={(e) => setOutcomeDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
+            fullWidth
+          />
           <TextField
             size="small"
             label="Notes"
@@ -347,6 +363,50 @@ export default function OutcomeFormDialog({
               </Box>
             </Box>
           )}
+
+          {/* Follow-up reminder — the "what happened next" loop. Closing
+              an outcome doesn't end the story; coming back in 60 days
+              to see how the stock moved is where the actual learning
+              happens. Defaults to 60 days for new outcomes; user can
+              clear or pick a different interval. The parent
+              (ActionsPage / EntryDetailPage) creates the reminders row
+              when this is non-null on submit. */}
+          <Typography component="span" sx={SECTION_HEADING_SX} display="block">
+            Check back later
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: -0.5, mb: 0.5, display: 'block' }}>
+            Pop a reminder so you can look at the chart later and see what actually happened after this decision.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+            {[
+              { days: 30, label: '1 month' },
+              { days: 60, label: '2 months' },
+              { days: 90, label: '3 months' },
+              { days: 180, label: '6 months' },
+              { days: 365, label: '1 year' },
+            ].map((opt) => {
+              const selected = followUpDays === opt.days
+              return (
+                <Chip
+                  key={opt.days}
+                  label={opt.label}
+                  size="small"
+                  variant={selected ? 'filled' : 'outlined'}
+                  color={selected ? 'primary' : 'default'}
+                  onClick={() => setFollowUpDays(selected ? null : opt.days)}
+                  sx={{ fontWeight: selected ? 700 : 500 }}
+                />
+              )
+            })}
+            <Chip
+              label="No reminder"
+              size="small"
+              variant={followUpDays === null ? 'filled' : 'outlined'}
+              color={followUpDays === null ? 'default' : 'default'}
+              onClick={() => setFollowUpDays(null)}
+              sx={{ fontWeight: followUpDays === null ? 700 : 500, color: followUpDays === null ? 'text.secondary' : undefined }}
+            />
+          </Box>
 
           {/* Deeper fields — collapsed accordions. The common case
               never opens these; the rare "I want to actually write
@@ -426,6 +486,23 @@ export default function OutcomeFormDialog({
                 minRows={2}
                 fullWidth
                 helperText="Then vs now — surface hindsight bias"
+              />
+              {/* Realised P&L — used to live in the primary fields,
+                  moved here as an optional input for the rare case
+                  someone wants to record an exact figure. The chart
+                  in the page around this dialog already shows the
+                  price-since-decision, so the actual "what happened"
+                  answer doesn't depend on the user typing anything. */}
+              <TextField
+                size="small"
+                label="Realised P&L (optional)"
+                type="number"
+                value={realized_pnl}
+                onChange={(e) => setRealizedPnl(e.target.value)}
+                placeholder="e.g. 150.50 or -20"
+                inputProps={{ step: 0.01 }}
+                fullWidth
+                helperText="Skip — the chart already shows how the price moved."
               />
             </AccordionDetails>
           </Accordion>

@@ -811,6 +811,31 @@ export default function EntryDetailPage() {
               })
             }
             const wasEdit = !!outcomesByActionId[outcomeDialogActionId]
+            // Follow-up reminder — only on NEW outcomes (editing
+            // doesn't suggest a new follow-up). Closes the
+            // "what happened next" loop the verdict starts.
+            if (!wasEdit && data.follow_up_in_days != null && user?.id) {
+              const action = actions.find((a) => a.id === outcomeDialogActionId)
+              const date = new Date()
+              date.setDate(date.getDate() + data.follow_up_in_days)
+              const reminderDate = date.toISOString().slice(0, 10)
+              const ticker = action?.ticker?.trim().toUpperCase() ?? ''
+              try {
+                await createReminder(user.id, {
+                  entry_id: id ?? null,
+                  type: 'entry_review',
+                  reminder_date: reminderDate,
+                  note: ticker
+                    ? `Check what happened with $${ticker} since this decision`
+                    : 'Check what happened since this decision',
+                  ticker,
+                })
+                invalidate.reminders()
+              } catch {
+                // Non-fatal — outcome already saved; surface a soft warning instead.
+                showSuccess('Outcome saved (reminder failed — retry from Reminders)')
+              }
+            }
             invalidate.outcomes()
             setOutcomeDialogActionId(null)
             showSuccess(wasEdit ? 'Outcome updated' : 'Outcome recorded')

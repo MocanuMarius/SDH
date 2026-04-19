@@ -178,7 +178,8 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
               )}
               <Typography variant="caption" color="text.secondary">
                 <Box component="span" sx={{ fontWeight: 600 }}>Outcome:</Box>{' '}
-                {outcome.realized_pnl != null ? `P&L ${outcome.realized_pnl}` : '—'} · {outcome.outcome_date}
+                {outcome.outcome_date}
+                {outcome.realized_pnl != null && ` · P&L ${outcome.realized_pnl}`}
                 {outcome.driver && ` · Driver: ${outcome.driver === 'thesis' ? 'Thesis' : 'Other'}`}
                 {outcome.process_quality && outcome.outcome_quality && (
                   <> · Process: {outcome.process_quality} · Outcome: {outcome.outcome_quality}</>
