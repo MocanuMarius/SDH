@@ -1,3 +1,32 @@
+/**
+ * Outcome dialog — log how a closed decision actually played out.
+ *
+ * Design goal: the common case is "I closed this, here's what
+ * happened, file it." So the top of the form is dead simple: P&L +
+ * Date + a one-line note. Below that, three big VERDICT chips
+ * (Right / Wrong / Inconclusive) — same shape as
+ * `ResolveStaleIdeaDialog` because the same UX worked there. After a
+ * verdict is picked, a small Yes/No surfaces for "was your reasoning
+ * sound?" so the process-vs-outcome split stays available without
+ * forcing a slider.
+ *
+ * The deeper fields (driver flag, error-type tags, post-mortem
+ * paragraphs, 500-word closing memo) all live behind accordions —
+ * collapsed by default, opened only when the user wants to write
+ * something real. Earlier the form put the process/outcome sliders
+ * + driver dropdown front and centre, which made every "log an
+ * outcome" feel like a research paper.
+ *
+ * Schema mapping kept identical to before so old rows + analytics
+ * still work:
+ *   - Right call    → outcome_score 5, outcome_quality 'good'
+ *   - Wrong call    → outcome_score 1, outcome_quality 'bad'
+ *   - Inconclusive  → outcome_score 3, outcome_quality null
+ *   - Reasoning Yes → process_score 4, process_quality 'good'
+ *   - Reasoning No  → process_score 2, process_quality 'bad'
+ *   - Driver, post-mortem, closing memo, error types unchanged.
+ */
+
 import { useState, useEffect } from 'react'
 import {
   Box,
@@ -11,9 +40,7 @@ import {
   Select,
   MenuItem,
   Typography,
-  Divider,
-  Slider,
-  Stack,
+  Chip,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -70,25 +97,53 @@ const MEMO_TEMPLATE = `**Original thesis**
 **Recurring theme for the lesson library**
 `
 
-const SCORE_LABELS: Record<number, string> = {
-  1: '1 — poor',
-  2: '2',
-  3: '3 — ok',
-  4: '4',
-  5: '5 — excellent',
+// Verdict chips → outcome_score mapping. 5/3/1 cleanly reads as
+// good/neutral/bad in calibration reports and matches the same
+// scheme used by ResolveStaleIdeaDialog.
+type Verdict = 'right' | 'wrong' | 'inconclusive'
+const VERDICT_LABEL: Record<Verdict, string> = {
+  right: 'Right call',
+  wrong: 'Wrong call',
+  inconclusive: 'Inconclusive',
+}
+const VERDICT_COLOR: Record<Verdict, string> = {
+  right: '#16a34a',
+  wrong: '#dc2626',
+  inconclusive: '#64748b',
+}
+const VERDICT_SCORE: Record<Verdict, number> = { right: 5, wrong: 1, inconclusive: 3 }
+const VERDICT_QUALITY: Record<Verdict, ProcessOutcomeQuality> = {
+  right: 'good',
+  wrong: 'bad',
+  inconclusive: null,
 }
 
-/** >=3 maps to binary 'good', <3 to 'bad', null stays null. Kept for back-compat. */
-function scoreToBinary(score: number | null): ProcessOutcomeQuality {
+/** Process toggle → process_score mapping. 4 = "good enough", 2 = "had gaps". */
+type ProcessVerdict = 'sound' | 'gaps' | null
+const PROCESS_SCORE: Record<Exclude<ProcessVerdict, null>, number> = { sound: 4, gaps: 2 }
+const PROCESS_QUALITY: Record<Exclude<ProcessVerdict, null>, ProcessOutcomeQuality> = {
+  sound: 'good',
+  gaps: 'bad',
+}
+
+/** Reverse-engineer the verdict + process state from an existing
+ *  numeric score so editing a saved outcome shows the same chip. */
+function scoreToVerdict(score: number | null | undefined): Verdict | null {
   if (score == null) return null
-  return score >= 3 ? 'good' : 'bad'
+  if (score >= 4) return 'right'
+  if (score <= 2) return 'wrong'
+  return 'inconclusive'
+}
+function processScoreToVerdict(score: number | null | undefined): ProcessVerdict {
+  if (score == null) return null
+  return score >= 3 ? 'sound' : 'gaps'
 }
 
 const getToday = () => new Date().toISOString().slice(0, 10)
 const DRIVER_OPTIONS: { value: OutcomeDriver; label: string }[] = [
   { value: null, label: 'Not set' },
-  { value: 'thesis', label: 'Thesis (thesis drove the result)' },
-  { value: 'other', label: 'Other (e.g. luck; right for wrong reasons)' },
+  { value: 'thesis', label: 'Thesis (the writeup drove the result)' },
+  { value: 'other', label: 'Other / luck (right for wrong reasons)' },
 ]
 
 export default function OutcomeFormDialog({
@@ -98,14 +153,14 @@ export default function OutcomeFormDialog({
   initial,
   actionLabel,
 }: OutcomeFormDialogProps) {
-  
+
   const [realized_pnl, setRealizedPnl] = useState<string>(initial?.realized_pnl != null ? String(initial.realized_pnl) : '')
   const [outcome_date, setOutcomeDate] = useState(initial?.outcome_date ?? getToday())
   const [notes, setNotes] = useState(initial?.notes ?? '')
+  const [verdict, setVerdict] = useState<Verdict | null>(null)
+  const [processVerdict, setProcessVerdict] = useState<ProcessVerdict>(null)
   const [driver, setDriver] = useState<OutcomeDriver>(initial?.driver ?? null)
   const [post_mortem_notes, setPostMortemNotes] = useState((initial as Outcome & { post_mortem_notes?: string | null })?.post_mortem_notes ?? '')
-  const [process_score, setProcessScore] = useState<number | null>((initial as Outcome & { process_score?: number | null })?.process_score ?? null)
-  const [outcome_score, setOutcomeScore] = useState<number | null>((initial as Outcome & { outcome_score?: number | null })?.outcome_score ?? null)
   const [closing_memo, setClosingMemo] = useState((initial as Outcome & { closing_memo?: string | null })?.closing_memo ?? '')
   const [error_type, setErrorType] = useState<ErrorType[]>(((initial as Outcome & { error_type?: ErrorType[] | null })?.error_type) ?? [])
   const [what_i_remember_now, setWhatIRememberNow] = useState((initial as Outcome & { what_i_remember_now?: string | null })?.what_i_remember_now ?? '')
@@ -122,14 +177,16 @@ export default function OutcomeFormDialog({
       // Prefer new numeric score; fall back to legacy binary (good=4, bad=2) so old rows still edit cleanly.
       const existingProcessScore = (initial as Outcome & { process_score?: number | null }).process_score
       const legacyProcess = (initial as Outcome & { process_quality?: ProcessOutcomeQuality }).process_quality
-      setProcessScore(
-        existingProcessScore != null ? existingProcessScore : legacyProcess === 'good' ? 4 : legacyProcess === 'bad' ? 2 : null
-      )
+      const resolvedProcess = existingProcessScore != null
+        ? existingProcessScore
+        : legacyProcess === 'good' ? 4 : legacyProcess === 'bad' ? 2 : null
+      setProcessVerdict(processScoreToVerdict(resolvedProcess))
       const existingOutcomeScore = (initial as Outcome & { outcome_score?: number | null }).outcome_score
       const legacyOutcome = (initial as Outcome & { outcome_quality?: ProcessOutcomeQuality }).outcome_quality
-      setOutcomeScore(
-        existingOutcomeScore != null ? existingOutcomeScore : legacyOutcome === 'good' ? 4 : legacyOutcome === 'bad' ? 2 : null
-      )
+      const resolvedOutcome = existingOutcomeScore != null
+        ? existingOutcomeScore
+        : legacyOutcome === 'good' ? 4 : legacyOutcome === 'bad' ? 2 : null
+      setVerdict(scoreToVerdict(resolvedOutcome))
       setClosingMemo((initial as Outcome & { closing_memo?: string | null }).closing_memo ?? '')
       setErrorType((initial as Outcome & { error_type?: ErrorType[] | null }).error_type ?? [])
       setWhatIRememberNow((initial as Outcome & { what_i_remember_now?: string | null }).what_i_remember_now ?? '')
@@ -137,10 +194,10 @@ export default function OutcomeFormDialog({
       setRealizedPnl('')
       setOutcomeDate(getToday())
       setNotes('')
+      setVerdict(null)
+      setProcessVerdict(null)
       setDriver(null)
       setPostMortemNotes('')
-      setProcessScore(null)
-      setOutcomeScore(null)
       setClosingMemo('')
       setErrorType([])
       setWhatIRememberNow('')
@@ -153,15 +210,18 @@ export default function OutcomeFormDialog({
     setSubmitError(null)
     try {
       const pnl = realized_pnl.trim() === '' ? null : Number(realized_pnl)
+      const outcome_score = verdict ? VERDICT_SCORE[verdict] : null
+      const outcome_quality = verdict ? VERDICT_QUALITY[verdict] : null
+      const process_score = processVerdict ? PROCESS_SCORE[processVerdict] : null
+      const process_quality = processVerdict ? PROCESS_QUALITY[processVerdict] : null
       await onSubmit({
         realized_pnl: pnl,
         outcome_date,
         notes,
         driver,
         post_mortem_notes: post_mortem_notes.trim(),
-        // Keep legacy binary field synced with new 1-5 score so old views still work.
-        process_quality: scoreToBinary(process_score),
-        outcome_quality: scoreToBinary(outcome_score),
+        process_quality,
+        outcome_quality,
         process_score,
         outcome_score,
         closing_memo: closing_memo.trim(),
@@ -190,7 +250,7 @@ export default function OutcomeFormDialog({
       </DialogTitle>
       <form onSubmit={handleSubmit}>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1.5, overflowY: 'auto' }}>
-          {/* Outcome basics */}
+          {/* Result — the only fields the common case really needs. */}
           <Typography component="span" sx={SECTION_HEADING_SX} display="block">Result</Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
             <TextField
@@ -218,104 +278,90 @@ export default function OutcomeFormDialog({
             label="Notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Short outcome notes"
+            placeholder="One line on what happened"
             multiline
             minRows={2}
             fullWidth
           />
 
-          <Divider sx={{ my: 0.5 }} />
+          {/* Verdict — three big chips, same UX shape as
+              ResolveStaleIdeaDialog. Replaces the old "Process × Outcome"
+              twin-slider section that asked the user to fiddle with two
+              0–5 sliders before saving. */}
+          <Typography component="span" sx={SECTION_HEADING_SX} display="block">How did it go?</Typography>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 0.75 }}>
+            {(['right', 'wrong', 'inconclusive'] as const).map((v) => {
+              const selected = verdict === v
+              return (
+                <Chip
+                  key={v}
+                  label={VERDICT_LABEL[v]}
+                  onClick={() => setVerdict(v)}
+                  variant={selected ? 'filled' : 'outlined'}
+                  sx={{
+                    flex: 1,
+                    height: 40,
+                    fontSize: '0.9rem',
+                    fontWeight: selected ? 700 : 500,
+                    borderRadius: 1.5,
+                    bgcolor: selected ? VERDICT_COLOR[v] : 'transparent',
+                    color: selected ? '#fff' : VERDICT_COLOR[v],
+                    borderColor: VERDICT_COLOR[v],
+                    borderWidth: 1.5,
+                    '&:hover': {
+                      bgcolor: selected ? VERDICT_COLOR[v] : `${VERDICT_COLOR[v]}15`,
+                    },
+                  }}
+                />
+              )
+            })}
+          </Box>
 
-          {/* Driver & scores */}
-          <Typography component="span" sx={SECTION_HEADING_SX} display="block">Process × Outcome</Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: -0.5, mb: 0.5, display: 'block' }}>
-            Score process and outcome independently. A good-process / bad-outcome trade is a win. A bad-process / good-outcome trade is a warning.
-          </Typography>
-          <FormControl size="small" fullWidth>
-            <InputLabel>Driver</InputLabel>
-            <Select
-              value={driver ?? ''}
-              label="Driver"
-              onChange={(e) => setDriver((e.target.value || null) as OutcomeDriver)}
-            >
-              {DRIVER_OPTIONS.map((opt) => (
-                <MenuItem key={String(opt.value)} value={opt.value ?? ''}>
-                  {opt.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Stack spacing={2} sx={{ px: 1, py: 0.5 }}>
-            <Box>
-              <Box display="flex" justifyContent="space-between" alignItems="baseline">
-                <Typography variant="body2" fontWeight={600}>
-                  Process score
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {process_score != null ? SCORE_LABELS[process_score] : 'not set'}
-                </Typography>
-              </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Was research adequate? Reasoning sound given what you knew? Bias-aware? Rules followed?
+          {/* Reasoning toggle — only shown after a verdict is picked.
+              The whole point of the process-vs-outcome split is that
+              "right call but bad reasoning" is a warning even when it
+              made money; surfacing the question only after a verdict
+              keeps the form quiet for users who don't care. */}
+          {verdict && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Was your reasoning sound?
               </Typography>
-              <Slider
-                value={process_score ?? 0}
-                onChange={(_, v) => setProcessScore(v === 0 ? null : (v as number))}
-                min={0}
-                max={5}
-                step={1}
-                marks={[
-                  { value: 0, label: '—' },
-                  { value: 1, label: '1' },
-                  { value: 2, label: '2' },
-                  { value: 3, label: '3' },
-                  { value: 4, label: '4' },
-                  { value: 5, label: '5' },
-                ]}
-                size="small"
-              />
-            </Box>
-            <Box>
-              <Box display="flex" justifyContent="space-between" alignItems="baseline">
-                <Typography variant="body2" fontWeight={600}>
-                  Outcome score
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {outcome_score != null ? SCORE_LABELS[outcome_score] : 'not set'}
-                </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <Chip
+                  label="Yes — solid process"
+                  size="small"
+                  variant={processVerdict === 'sound' ? 'filled' : 'outlined'}
+                  color={processVerdict === 'sound' ? 'primary' : 'default'}
+                  onClick={() => setProcessVerdict(processVerdict === 'sound' ? null : 'sound')}
+                  sx={{ fontWeight: processVerdict === 'sound' ? 700 : 500 }}
+                />
+                <Chip
+                  label="No — gaps"
+                  size="small"
+                  variant={processVerdict === 'gaps' ? 'filled' : 'outlined'}
+                  color={processVerdict === 'gaps' ? 'warning' : 'default'}
+                  onClick={() => setProcessVerdict(processVerdict === 'gaps' ? null : 'gaps')}
+                  sx={{ fontWeight: processVerdict === 'gaps' ? 700 : 500 }}
+                />
               </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Independent of process — did the trade actually make money?
-              </Typography>
-              <Slider
-                value={outcome_score ?? 0}
-                onChange={(_, v) => setOutcomeScore(v === 0 ? null : (v as number))}
-                min={0}
-                max={5}
-                step={1}
-                marks={[
-                  { value: 0, label: '—' },
-                  { value: 1, label: '1' },
-                  { value: 2, label: '2' },
-                  { value: 3, label: '3' },
-                  { value: 4, label: '4' },
-                  { value: 5, label: '5' },
-                ]}
-                size="small"
-              />
             </Box>
-          </Stack>
+          )}
 
-          {/* Error type — compact accordion so the essential fields stay visible */}
+          {/* Deeper fields — collapsed accordions. The common case
+              never opens these; the rare "I want to actually write
+              this up" case has full breathing room. */}
+
+          {/* Error types accordion */}
           <Accordion disableGutters sx={{ mt: 1, boxShadow: 'none', '&:before': { display: 'none' }, border: 1, borderColor: 'divider' }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}>
               <Typography variant="body2" fontWeight={600}>
-                Error type {error_type.length > 0 ? `(${error_type.length})` : ''}
+                Tag error types {error_type.length > 0 ? `(${error_type.length})` : ''}
               </Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ pt: 0 }}>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Weakness profile (F21). Pick any that apply.
+                Pick any that apply — builds your weakness profile over time.
               </Typography>
               <FormGroup row sx={{ gap: 0.5, flexWrap: 'wrap' }}>
                 {ERROR_TYPES.map((t) => (
@@ -335,28 +381,44 @@ export default function OutcomeFormDialog({
             </AccordionDetails>
           </Accordion>
 
-          {/* Post-mortem — accordion */}
+          {/* Post-mortem accordion — bundles the Driver dropdown + the
+              two long-form text fields. Driver lives here now (it
+              used to sit above the sliders) because it's the rare
+              advanced toggle. */}
           <Accordion disableGutters sx={{ boxShadow: 'none', '&:before': { display: 'none' }, border: 1, borderColor: 'divider' }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}>
               <Typography variant="body2" fontWeight={600}>
-                Post-mortem / learning {(post_mortem_notes || what_i_remember_now) && '•'}
+                Post-mortem &amp; lessons {(post_mortem_notes || what_i_remember_now || driver) && '•'}
               </Typography>
             </AccordionSummary>
             <AccordionDetails sx={{ pt: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <FormControl size="small" fullWidth>
+                <InputLabel>What drove the result?</InputLabel>
+                <Select
+                  value={driver ?? ''}
+                  label="What drove the result?"
+                  onChange={(e) => setDriver((e.target.value || null) as OutcomeDriver)}
+                >
+                  {DRIVER_OPTIONS.map((opt) => (
+                    <MenuItem key={String(opt.value)} value={opt.value ?? ''}>
+                      {opt.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField
                 size="small"
-                label="What would you do differently? (F13)"
+                label="What would you do differently?"
                 value={post_mortem_notes}
                 onChange={(e) => setPostMortemNotes(e.target.value)}
                 placeholder="What happened? Where did reasoning fail or succeed? What would you do differently?"
                 multiline
                 minRows={3}
                 fullWidth
-                helperText="What happened → where reasoning failed/succeeded → do differently"
               />
               <TextField
                 size="small"
-                label="What I remember now (F29)"
+                label="What I remember now"
                 value={what_i_remember_now}
                 onChange={(e) => setWhatIRememberNow(e.target.value)}
                 placeholder="Compare to your pre-decision reason to spot hindsight bias"
@@ -368,7 +430,8 @@ export default function OutcomeFormDialog({
             </AccordionDetails>
           </Accordion>
 
-          {/* Closing memo accordion */}
+          {/* Closing memo accordion — auto-expands when there's
+              already content to edit. */}
           <Accordion disableGutters defaultExpanded={closing_memo.trim().length > 0} sx={{ boxShadow: 'none', '&:before': { display: 'none' }, border: 1, borderColor: 'divider' }}>
             <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}>
               <Typography variant="body2" fontWeight={600}>
