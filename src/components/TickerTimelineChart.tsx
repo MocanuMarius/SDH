@@ -476,7 +476,12 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
         </IconButton>
       </Box>
 
-      {/* Range summary line — current price, %change, CAGR, date range. */}
+      {/* Range summary line — current price + %change + CAGR. The
+          date span and the price min/max used to live here too, but
+          those are pure chart-axis duplicates: the x-axis shows the
+          date span, the y-axis shows the price range. Two lines of
+          metadata that the chart immediately below already showed
+          twice. Just the actually-computed metrics stay. */}
       {rangeSummary && (
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
           <Typography variant="h6" fontWeight={700} component="span">
@@ -498,12 +503,6 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
               {rangeSummary.cagr >= 0 ? '+' : ''}{rangeSummary.cagr.toFixed(1)}%/yr
             </Typography>
           )}
-          <Typography variant="caption" color="text.secondary" component="span">
-            {rangeSummary.startDate} – {rangeSummary.endDate}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" component="span">
-            Range ${rangeSummary.min.toFixed(2)} – ${rangeSummary.max.toFixed(2)}
-          </Typography>
         </Box>
       )}
 

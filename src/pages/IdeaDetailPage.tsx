@@ -281,7 +281,7 @@ export default function IdeaDetailPage() {
           invalidate.actions()
           showSuccess('Decision logged')
         }}
-        onWantDetails={() => navigate(`/decisions/new?ticker=${encodeURIComponent(decodedTicker)}&from=${encodeURIComponent(`/tickers/${encodeURIComponent(decodedTicker)}`)}`)}
+        onWantDetails={() => navigate(`/decisions/new?ticker=${encodeURIComponent(decodedTicker)}`)}
       />
       {actions.length > 0 && (() => {
         const sortedAsc = [...actions].sort((a, b) => (a.action_date || '').localeCompare(b.action_date || ''))
@@ -508,7 +508,7 @@ export default function IdeaDetailPage() {
                         {/* Edit pencil — opens ActionFormDialog in edit mode. */}
                         <IconButton
                           size="small"
-                          onClick={() => navigate(`/decisions/${a.id}/edit?from=${encodeURIComponent(`/tickers/${encodeURIComponent(decodedTicker)}`)}`)}
+                          onClick={() => navigate(`/decisions/${a.id}/edit`)}
                           aria-label="Edit decision"
                           sx={{ p: 0.25, color: 'text.secondary', ml: 'auto' }}
                         >
@@ -633,7 +633,7 @@ export default function IdeaDetailPage() {
                             <TableCell sx={{ p: 0.5 }}>
                               <IconButton
                                 size="small"
-                                onClick={() => navigate(`/decisions/${a.id}/edit?from=${encodeURIComponent(`/tickers/${encodeURIComponent(decodedTicker)}`)}`)}
+                                onClick={() => navigate(`/decisions/${a.id}/edit`)}
                                 aria-label="Edit decision"
                                 sx={{ color: 'text.secondary' }}
                               >

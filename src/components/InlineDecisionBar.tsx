@@ -63,7 +63,10 @@ export interface InlineDecisionBarProps {
 }
 
 export default function InlineDecisionBar({
-  ticker,
+  // ticker is still received from the parent (consumers pass it from
+  // the route), but the bar no longer displays it — the page header
+  // immediately above already shows the ticker prominently.
+  ticker: _ticker,
   companyName: _companyName,
   currentPrice,
   currency = '',
@@ -78,7 +81,6 @@ export default function InlineDecisionBar({
   const [submitting, setSubmitting] = useState(false)
 
   const priceStr = currentPrice != null ? currentPrice.toFixed(2) : ''
-  const tickerLabel = ticker?.toUpperCase() ?? ''
 
   async function handleLog() {
     if (submitting) return
@@ -142,18 +144,15 @@ export default function InlineDecisionBar({
         </Select>
       </FormControl>
 
-      {/* Ticker (pinned) + current price hint */}
-      <Typography
-        component="span"
-        sx={{ fontFamily: '"JetBrains Mono", monospace', fontWeight: 700, fontSize: '0.95rem', mx: 0.25 }}
-      >
-        ${tickerLabel}
-      </Typography>
+      {/* Current price hint — the ticker symbol used to live here too,
+          but the page header right above this bar already shows the
+          ticker in a big sticky title, so the second copy was just
+          visual noise. Just the price stays as a useful inline cue. */}
       {priceStr && (
         <Typography
           component="span"
           variant="caption"
-          sx={{ color: 'text.secondary', fontFamily: '"JetBrains Mono", monospace', mr: 0.5 }}
+          sx={{ color: 'text.secondary', fontFamily: '"JetBrains Mono", monospace', mx: 0.5 }}
         >
           {priceStr}
         </Typography>

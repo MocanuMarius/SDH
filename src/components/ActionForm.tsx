@@ -315,51 +315,93 @@ export default function ActionForm({
               )}
             </Box>
 
-            {/* Date — defaults to "today" checkbox. Uncheck to reveal the date
-                picker + quick-pick buttons. Mirrors the entry form dialog. */}
+            {/* Date — single compact chip row with a "Custom" expander for
+                anything not in the presets. The earlier "Decision taken
+                today" checkbox + 4-button quick-pick row was eating two
+                rows of vertical space; one row of small chips replaces
+                both. The selected chip is filled; if the date doesn't
+                match any preset, the Custom chip lights up. */}
             <Box>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={decisionTakenToday}
-                    onChange={(e) => setDecisionTakenToday(e.target.checked)}
-                  />
-                }
-                label={<Typography variant="body2">Decision taken today</Typography>}
-                sx={{ ml: -0.75 }}
-              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
+                Decision date
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+                {([
+                  { label: 'Today', days: 0 },
+                  { label: 'Yesterday', days: 1 },
+                  { label: '1 week ago', days: 7 },
+                  { label: '2 weeks ago', days: 14 },
+                  { label: '1 month ago', days: 30 },
+                ] as const).map(({ label, days }) => {
+                  const value = days === 0 ? getToday() : daysAgo(days)
+                  const selected = action_date === value && decisionTakenToday === (days === 0)
+                  return (
+                    <Button
+                      key={label}
+                      size="small"
+                      variant={selected ? 'contained' : 'outlined'}
+                      onClick={() => {
+                        setActionDate(value)
+                        setDecisionTakenToday(days === 0)
+                      }}
+                      sx={{
+                        textTransform: 'none',
+                        minWidth: 0,
+                        px: 1,
+                        py: 0.25,
+                        fontSize: '0.72rem',
+                        fontWeight: selected ? 700 : 500,
+                      }}
+                    >
+                      {label}
+                    </Button>
+                  )
+                })}
+                {(() => {
+                  const presets = new Set([
+                    getToday(),
+                    daysAgo(1), daysAgo(7), daysAgo(14), daysAgo(30),
+                  ])
+                  const isCustom = !presets.has(action_date) || (action_date === getToday() && !decisionTakenToday)
+                  return (
+                    <Button
+                      size="small"
+                      variant={isCustom ? 'contained' : 'outlined'}
+                      onClick={() => setDecisionTakenToday(false)}
+                      sx={{
+                        textTransform: 'none',
+                        minWidth: 0,
+                        px: 1,
+                        py: 0.25,
+                        fontSize: '0.72rem',
+                        fontWeight: isCustom ? 700 : 500,
+                      }}
+                    >
+                      Custom…
+                    </Button>
+                  )
+                })()}
+              </Box>
+              {/* Reveal a date input only when the user actually wants a
+                  bespoke date (Custom selected, or the existing value
+                  doesn't match any preset). */}
               <Collapse in={!decisionTakenToday} unmountOnExit>
-                <Box sx={{ mt: 0.5 }}>
-                  <TextField
-                    size="small"
-                    label="Decision date"
-                    type="date"
-                    value={action_date}
-                    onChange={(e) => setActionDate(e.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    fullWidth
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start" sx={{ mr: 0, '& .MuiSvgIcon-root': { fontSize: 18 } }}>
-                          <CalendarTodayIcon color="action" />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                  <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
-                    {[
-                      { label: 'Yesterday', fn: () => daysAgo(1) },
-                      { label: '1 week ago', fn: () => daysAgo(7) },
-                      { label: '2 weeks ago', fn: () => daysAgo(14) },
-                      { label: '1 month ago', fn: () => daysAgo(30) },
-                    ].map(({ label, fn }) => (
-                      <Button key={label} size="small" variant="outlined" onClick={() => setActionDate(fn())} sx={{ textTransform: 'none' }}>
-                        {label}
-                      </Button>
-                    ))}
-                  </Box>
-                </Box>
+                <TextField
+                  size="small"
+                  type="date"
+                  value={action_date}
+                  onChange={(e) => setActionDate(e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                  sx={{ mt: 0.75 }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start" sx={{ mr: 0, '& .MuiSvgIcon-root': { fontSize: 18 } }}>
+                        <CalendarTodayIcon color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
               </Collapse>
             </Box>
 

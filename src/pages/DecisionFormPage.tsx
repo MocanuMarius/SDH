@@ -73,13 +73,15 @@ export default function DecisionFormPage() {
     return () => { cancelled = true }
   }, [id, isEdit, searchParams])
 
-  /** Where does the user go after Cancel / Save? Prefer the optional
-   *  `from` query param; fall back to the entry's detail page if the
-   *  decision is attached to one; otherwise /actions. */
+  /** Where does the user go after Cancel / Save? Use browser-native
+   *  `navigate(-1)` so the previous URL appears unchanged — cleaner
+   *  than an ugly `?from=%2Ftickers%2FCRC` round-trip parameter.
+   *  Fall back to the entry's detail page if the decision is attached
+   *  to one (and we'd otherwise navigate(-1) into the void on a
+   *  hard-loaded edit URL); ultimately /actions. */
   const goBack = () => {
-    const from = searchParams.get('from')
-    if (from) {
-      navigate(from)
+    if (window.history.length > 1) {
+      navigate(-1)
       return
     }
     if (initial?.entry_id) {

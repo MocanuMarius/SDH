@@ -367,35 +367,51 @@ export default function EntryDetailPage() {
         if (!hasAny) return null
         const sentimentLabel = (v: number) =>
           v <= -7 ? 'Extreme Fear' : v <= -3 ? 'Fear' : v <= -1 ? 'Mild Fear' : v === 0 ? 'Neutral' : v <= 2 ? 'Mild Optimism' : v <= 6 ? 'Optimistic' : 'Extreme Greed'
+        const hasContext = entry.market_feeling != null || entry.market_context || entry.decision_horizon
         return (
           <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {entry.market_feeling != null && (
-              <ListCard title="Market Sentiment" hasValue>
-                <Typography
-                  variant="body2"
-                  fontWeight={600}
-                  sx={{ color: entry.market_feeling > 0 ? 'success.main' : entry.market_feeling < 0 ? 'error.main' : 'text.secondary' }}
-                >
-                  {entry.market_feeling > 0 ? '+' : ''}{entry.market_feeling}
-                  <Typography component="span" variant="body2" color="text.secondary" fontWeight={500} sx={{ ml: 0.75 }}>
-                    · {sentimentLabel(entry.market_feeling)}
-                  </Typography>
-                </Typography>
-              </ListCard>
-            )}
-            {entry.market_context && (
-              <ListCard title="Market Conditions" hasValue>
-                <Box display="flex" gap={0.5} flexWrap="wrap">
-                  {entry.market_context.split(',').map((cond) => {
-                    const trimmed = cond.trim()
-                    return trimmed ? <Chip key={trimmed} label={trimmed} size="small" variant="outlined" /> : null
-                  })}
-                </Box>
-              </ListCard>
-            )}
-            {entry.decision_horizon && (
-              <ListCard title="Expected Resolution" hasValue>
-                <Typography variant="body2">{entry.decision_horizon}</Typography>
+            {/* Context card — merged Market Sentiment + Market
+                Conditions + Expected Resolution into one card with
+                tight rows. The three used to be three separate
+                ListCards each eating its own row of chrome for one
+                tiny piece of data; one card with a hairline divider
+                between rows fits all three in a third of the height. */}
+            {hasContext && (
+              <ListCard title="Context" hasValue>
+                <Stack divider={<Box sx={{ borderTop: 1, borderColor: 'divider' }} />} spacing={0}>
+                  {entry.market_feeling != null && (
+                    <Box sx={{ py: 0.75, display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                      <Typography variant="caption" sx={{ minWidth: 90, color: 'text.secondary' }}>Sentiment</Typography>
+                      <Typography
+                        variant="body2"
+                        fontWeight={600}
+                        sx={{ color: entry.market_feeling > 0 ? 'success.main' : entry.market_feeling < 0 ? 'error.main' : 'text.secondary' }}
+                      >
+                        {entry.market_feeling > 0 ? '+' : ''}{entry.market_feeling}
+                        <Typography component="span" variant="body2" color="text.secondary" fontWeight={500} sx={{ ml: 0.75 }}>
+                          · {sentimentLabel(entry.market_feeling)}
+                        </Typography>
+                      </Typography>
+                    </Box>
+                  )}
+                  {entry.market_context && (
+                    <Box sx={{ py: 0.75, display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
+                      <Typography variant="caption" sx={{ minWidth: 90, color: 'text.secondary' }}>Conditions</Typography>
+                      <Box display="flex" gap={0.5} flexWrap="wrap">
+                        {entry.market_context.split(',').map((cond) => {
+                          const trimmed = cond.trim()
+                          return trimmed ? <Chip key={trimmed} label={trimmed} size="small" variant="outlined" /> : null
+                        })}
+                      </Box>
+                    </Box>
+                  )}
+                  {entry.decision_horizon && (
+                    <Box sx={{ py: 0.75, display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                      <Typography variant="caption" sx={{ minWidth: 90, color: 'text.secondary' }}>Resolves by</Typography>
+                      <Typography variant="body2">{entry.decision_horizon}</Typography>
+                    </Box>
+                  )}
+                </Stack>
               </ListCard>
             )}
             {entryRulesDisp.length > 0 && (
@@ -504,7 +520,7 @@ export default function EntryDetailPage() {
             <Tab label="Valuation" />
           </Tabs>
           {detailTab === 0 && (
-            <Button size="small" startIcon={<AddIcon />} onClick={() => navigate(`/decisions/new?entry_id=${id}&from=${encodeURIComponent(`/entries/${id}`)}`)} sx={{ flexShrink: 0, mr: 0.5, fontSize: '0.75rem' }}>
+            <Button size="small" startIcon={<AddIcon />} onClick={() => navigate(`/decisions/new?entry_id=${id}`)} sx={{ flexShrink: 0, mr: 0.5, fontSize: '0.75rem' }}>
               Add
             </Button>
           )}
@@ -524,7 +540,7 @@ export default function EntryDetailPage() {
                 icon={<TimelineIcon />}
                 title="No decisions on this entry yet"
                 action={
-                  <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => navigate(`/decisions/new?entry_id=${id}&from=${encodeURIComponent(`/entries/${id}`)}`)} sx={{ textTransform: 'none' }}>
+                  <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => navigate(`/decisions/new?entry_id=${id}`)} sx={{ textTransform: 'none' }}>
                     Add decision
                   </Button>
                 }
@@ -539,7 +555,7 @@ export default function EntryDetailPage() {
                     currentPrice={a.ticker ? currentPriceByTicker[(a.ticker || '').trim().toUpperCase()] : undefined}
                     onAddOrEditOutcome={() => setOutcomeDialogActionId(a.id)}
                     onDelete={() => setConfirmDelete({ type: 'action', id: a.id })}
-                    onEdit={() => navigate(`/decisions/${a.id}/edit?from=${encodeURIComponent(`/entries/${id}`)}`)}
+                    onEdit={() => navigate(`/decisions/${a.id}/edit`)}
                   />
                 ))}
               </Stack>
