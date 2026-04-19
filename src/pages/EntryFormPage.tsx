@@ -352,10 +352,12 @@ export default function EntryFormPage() {
         formRef.current?.requestSubmit()
       }
 
-      // Ctrl/Cmd+B: Insert Buy decision block
+      // Ctrl/Cmd+B: open the "Add decision" dialog. Used to set a
+      // body-tab state to 'decision' but that tab UI got refactored
+      // out long ago; the decision picker is now its own dialog.
       if (modifier && e.key === 'b') {
         e.preventDefault()
-        setBodyTab('decision')
+        setDecisionDialogOpen(true)
       }
 
     }

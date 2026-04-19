@@ -2,6 +2,11 @@ import { supabase } from './supabaseClient'
 import type { Outcome, OutcomeInsert, OutcomeUpdate } from '../types/database'
 import type { Action } from '../types/database'
 
+// Re-export so `ResolveStaleIdeaDialog` (and any future caller that
+// only knows about the service module) can grab the type without
+// reaching into `../types/database`.
+export type { OutcomeInsert }
+
 const TABLE = 'outcomes'
 
 /** Get ticker for an outcome via its action (outcomes have no ticker column). */

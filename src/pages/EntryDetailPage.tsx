@@ -438,7 +438,12 @@ export default function EntryDetailPage() {
         >
           {entryReminders.map((r) => {
             const when = r.reminder_date
-            const typeLabel = r.type === 'idea_refresh' ? 'Refresh idea' : r.type === 'decision_horizon' ? 'Decision horizon' : 'Review'
+            // The 'decision_horizon' branch was dead code — that string
+            // was never in the REMINDER_TYPES enum so the comparison
+            // always returned false. Reduced to the two real types
+            // ('idea_refresh' and 'prediction_ended', the latter
+            // labelled simply as 'Review').
+            const typeLabel = r.type === 'idea_refresh' ? 'Refresh idea' : 'Review'
             return (
               <ItemRow
                 key={r.id}
