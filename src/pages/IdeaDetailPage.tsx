@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, Fragment } from 'react'
-import { useParams, Link as RouterLink } from 'react-router-dom'
+import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import {
@@ -27,9 +27,8 @@ import { fetchChartData } from '../services/chartApiService'
 import { useActions, useInvalidate } from '../hooks/queries'
 import { useAuth } from '../contexts/AuthContext'
 import { useSnackbar } from '../contexts/SnackbarContext'
-import { createAction, updateAction } from '../services/actionsService'
+import { createAction } from '../services/actionsService'
 import { ensurePassedForUser } from '../services/passedService'
-import ActionFormDialog from '../components/ActionFormDialog'
 import InlineDecisionBar from '../components/InlineDecisionBar'
 import TickerLinks from '../components/TickerLinks'
 import TickerTimelineChart from '../components/TickerTimelineChart'
@@ -83,6 +82,7 @@ function bestRangeForActions(actions: ActionWithEntry[]): ChartRange {
 
 export default function IdeaDetailPage() {
   const { ticker } = useParams<{ ticker: string }>()
+  const navigate = useNavigate()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const chartHeight = isMobile ? 240 : 320
@@ -90,11 +90,9 @@ export default function IdeaDetailPage() {
   const [chartLoading, setChartLoading] = useState(false)
   const [chartError, setChartError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [logDecisionOpen, setLogDecisionOpen] = useState(false)
-  // ✏️ on a decision row → opens the same ActionFormDialog in edit mode.
-  // When non-null we route the dialog's onSubmit to updateAction(id, ...)
-  // instead of createAction(...).
-  const [editingAction, setEditingAction] = useState<ActionWithEntry | null>(null)
+  // The old logDecisionOpen / editingAction modal state is gone — both
+  // flows now navigate to /decisions/new (with ?ticker= prefill) or
+  // /decisions/:id/edit instead of opening an ActionFormDialog.
   const [counterfactual, setCounterfactual] = useState<{
     totalReturnPct: number | null
     hypotheticalEnd: number | null
@@ -283,7 +281,7 @@ export default function IdeaDetailPage() {
           invalidate.actions()
           showSuccess('Decision logged')
         }}
-        onWantDetails={() => setLogDecisionOpen(true)}
+        onWantDetails={() => navigate(`/decisions/new?ticker=${encodeURIComponent(decodedTicker)}&from=${encodeURIComponent(`/tickers/${encodeURIComponent(decodedTicker)}`)}`)}
       />
       {actions.length > 0 && (() => {
         const sortedAsc = [...actions].sort((a, b) => (a.action_date || '').localeCompare(b.action_date || ''))
@@ -510,7 +508,7 @@ export default function IdeaDetailPage() {
                         {/* Edit pencil — opens ActionFormDialog in edit mode. */}
                         <IconButton
                           size="small"
-                          onClick={() => setEditingAction(a)}
+                          onClick={() => navigate(`/decisions/${a.id}/edit?from=${encodeURIComponent(`/tickers/${encodeURIComponent(decodedTicker)}`)}`)}
                           aria-label="Edit decision"
                           sx={{ p: 0.25, color: 'text.secondary', ml: 'auto' }}
                         >
@@ -635,7 +633,7 @@ export default function IdeaDetailPage() {
                             <TableCell sx={{ p: 0.5 }}>
                               <IconButton
                                 size="small"
-                                onClick={() => setEditingAction(a)}
+                                onClick={() => navigate(`/decisions/${a.id}/edit?from=${encodeURIComponent(`/tickers/${encodeURIComponent(decodedTicker)}`)}`)}
                                 aria-label="Edit decision"
                                 sx={{ color: 'text.secondary' }}
                               >
@@ -661,73 +659,13 @@ export default function IdeaDetailPage() {
         )
       })()}
 
-      {/* ActionFormDialog — used for two distinct flows on this page:
-          1. Log a new decision with the full set of fields (date, notes,
-             kill criteria, pre-mortem). Triggered by the "+ details" icon
-             on the inline bar. Initial values are seeded from the ticker.
-          2. Edit an existing decision (the ✏️ on each row). When
-             `editingAction` is set we pre-fill ALL of its current values
-             and route onSubmit through `updateAction(id, ...)` instead of
-             `createAction(...)`. Same dialog, two intents — keeps the form
-             schema in one place. */}
-      <ActionFormDialog
-        open={logDecisionOpen || editingAction !== null}
-        onClose={() => { setLogDecisionOpen(false); setEditingAction(null) }}
-        initial={editingAction ?? { ticker: decodedTicker, company_name: company }}
-        onSubmit={async (data) => {
-          if (!user?.id || !data.ticker?.trim()) return
-          if (editingAction) {
-            // ── Edit path ──────────────────────────────────────────────
-            await updateAction(editingAction.id, {
-              type: data.type,
-              ticker: data.ticker.trim().toUpperCase(),
-              company_name: data.company_name || null,
-              action_date: data.action_date,
-              price: data.price,
-              currency: data.currency || null,
-              shares: data.shares,
-              reason: data.reason,
-              notes: data.notes,
-              kill_criteria: data.kill_criteria || null,
-              pre_mortem_text: data.pre_mortem_text || null,
-              size: data.size,
-            })
-            invalidate.actions()
-            setEditingAction(null)
-            showSuccess('Decision updated')
-            return
-          }
-          // ── Create path ────────────────────────────────────────────
-          await createAction({
-            user_id: user.id,
-            entry_id: null,
-            type: data.type,
-            ticker: data.ticker.trim().toUpperCase(),
-            company_name: data.company_name || null,
-            action_date: data.action_date,
-            price: data.price,
-            currency: data.currency || null,
-            shares: data.shares,
-            reason: data.reason,
-            notes: data.notes,
-            kill_criteria: data.kill_criteria || null,
-            pre_mortem_text: data.pre_mortem_text || null,
-            size: data.size,
-            raw_snippet: null,
-          })
-          if (data.type === 'pass') {
-            await ensurePassedForUser(user.id, data.ticker.trim(), {
-              passed_date: data.action_date,
-              reason: data.reason ?? '',
-              notes: data.notes ?? '',
-            })
-            invalidate.passed()
-          }
-          invalidate.actions()
-          setLogDecisionOpen(false)
-          showSuccess('Decision logged')
-        }}
-      />
+      {/* The bottom-of-page ActionFormDialog mount is gone. Both the
+          "log decision with details" flow (from InlineDecisionBar's
+          gear) and the "edit decision" flow (✏️ icons on rows) now
+          navigate to DecisionFormPage routes — see the navigate()
+          calls above. The page-level form handles createAction /
+          updateAction itself, so all the wiring that used to live
+          here is gone too. */}
     </Box>
   )
 }

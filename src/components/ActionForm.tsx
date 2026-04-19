@@ -1,11 +1,24 @@
-import { useState, useRef, useEffect } from 'react'
-// useTheme/useMediaQuery removed — BottomSheet handles mobile detection
+/**
+ * ActionForm — the full "log a decision" form, refactored from a modal
+ * (BottomSheet-wrapped Dialog) into a plain in-page component. Used by
+ * `DecisionFormPage` at routes `/decisions/new` and
+ * `/decisions/:id/edit`. The route-level page handles navigation, data
+ * fetch (for edit), and createAction / updateAction calls — this
+ * component just renders the form and emits an `onSubmit` payload.
+ *
+ * Why no longer a dialog: the form is substantial (10+ fields,
+ * collapses, option-symbol composer, ready-to-commit checklist) and
+ * deserves its own context. Routing it also gives the user a real
+ * URL they can bookmark / share / hit Back on.
+ *
+ * Cancel calls `onCancel` so the host page can navigate away
+ * appropriately (back to the previous route, or to /actions as a
+ * sensible default).
+ */
+import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Box,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Button,
   TextField,
   FormControl,
@@ -31,12 +44,9 @@ import type { Action, ActionSize } from '../types/database'
 import TickerAutocomplete from './TickerAutocomplete'
 import DecisionChip from './DecisionChip'
 import ReasonField from './ReasonField'
-import BottomSheet from './BottomSheet'
 import { getCustomDecisionTypes } from '../utils/customDecisionTypes'
 
-interface ActionFormDialogProps {
-  open: boolean
-  onClose: () => void
+interface ActionFormProps {
   onSubmit: (data: {
     type: Action['type']
     ticker: string
@@ -51,6 +61,10 @@ interface ActionFormDialogProps {
     pre_mortem_text: string
     size: ActionSize | null
   }) => Promise<void>
+  /** Called when the user clicks Cancel. Page-level host navigates back. */
+  onCancel: () => void
+  /** When set, form pre-fills + submit button reads "Save". When null,
+   *  empty form + "Add". */
   initial?: Partial<Action> | null
 }
 
@@ -72,12 +86,16 @@ const daysAgo = (n: number) => {
   return d.toISOString().slice(0, 10)
 }
 
-export default function ActionFormDialog({
-  open,
-  onClose,
+export default function ActionForm({
   onSubmit,
+  onCancel,
   initial,
-}: ActionFormDialogProps) {
+}: ActionFormProps) {
+  // `open` no longer exists (no modal). Effects that previously fired
+  // on open are now driven by `initial` changing — they only run once
+  // on mount in practice since the host page re-mounts the component
+  // between routes.
+  const open = true
   const [type, setType] = useState<Action['type']>(initial?.type ?? 'buy')
   const [ticker, setTicker] = useState(initial?.ticker ?? '')
   const [company_name, setCompanyName] = useState(initial?.company_name ?? '')
@@ -202,7 +220,8 @@ export default function ActionFormDialog({
         pre_mortem_text: pre_mortem_text || '',
         size: isDirectionalAction(type) ? size : null,
       })
-      onClose()
+      // Host page navigates after a successful submit. Nothing to do
+      // here — the form stays mounted briefly while the route changes.
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save action')
     } finally {
@@ -211,10 +230,9 @@ export default function ActionFormDialog({
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose} maxWidth="sm">
-      <DialogTitle>{initial?.id ? 'Edit action' : 'Add action'}</DialogTitle>
+    <Box>
       <form onSubmit={handleSubmit}>
-        <DialogContent>
+        <Box>
           <Stack spacing={2.5} sx={{ pt: 0.5 }}>
             {error && (
               <Alert severity="error" onClose={() => setError(null)}>
@@ -571,14 +589,33 @@ export default function ActionFormDialog({
               </Collapse>
             </Box>
           </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} variant="outlined">Cancel</Button>
+        </Box>
+        {/* Sticky save bar — same pattern as EntryFormPage so the
+            primary action stays reachable even after a long form. */}
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 1,
+            justifyContent: 'flex-end',
+            mt: 2,
+            position: { xs: 'sticky', sm: 'static' },
+            bottom: { xs: 56, sm: 'auto' },
+            bgcolor: { xs: 'background.default', sm: 'transparent' },
+            pt: { xs: 1, sm: 0 },
+            pb: { xs: 1, sm: 0 },
+            borderTop: { xs: '1px solid', sm: 'none' },
+            borderColor: 'divider',
+            mx: { xs: -1.5, sm: 0 },
+            px: { xs: 1.5, sm: 0 },
+            zIndex: 4,
+          }}
+        >
+          <Button onClick={onCancel} variant="outlined">Cancel</Button>
           <Button type="submit" variant="contained" disabled={saving} startIcon={!saving ? <CheckIcon /> : null}>
             {saving ? 'Saving…' : initial?.id ? 'Save' : 'Add'}
           </Button>
-        </DialogActions>
+        </Box>
       </form>
-    </BottomSheet>
+    </Box>
   )
 }

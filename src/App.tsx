@@ -47,11 +47,6 @@ import { SnackbarProvider } from './contexts/SnackbarContext'
 import { TickerChartProvider } from './contexts/TickerChartContext'
 import ActivityDrawer, { useActivityBadge } from './components/ActivityDrawer'
 import NavDrawer from './components/NavDrawer'
-import ActionFormDialog from './components/ActionFormDialog'
-import { createAction } from './services/actionsService'
-import { ensurePassedForUser } from './services/passedService'
-import { useInvalidate } from './hooks/queries'
-import { useSnackbar } from './contexts/SnackbarContext'
 import theme from './theme'
 import LoginPage from './pages/LoginPage'
 import EntryListPage from './pages/EntryListPage'
@@ -65,6 +60,7 @@ const IdeaDetailPage = lazy(() => import('./pages/IdeaDetailPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
+const DecisionFormPage = lazy(() => import('./pages/DecisionFormPage'))
 
 /** Thin LinearProgress bar shown while a lazy page chunk loads */
 function PageFallback() {
@@ -142,13 +138,9 @@ function AppBarNav({
   const muiTheme = useTheme()
   const isMobile = !useMediaQuery(muiTheme.breakpoints.up('md'))
   const { user, signOut } = useAuth()
-  const invalidate = useInvalidate()
-  const { showSuccess } = useSnackbar()
   const [localActivityOpen, setLocalActivityOpen] = useState(false)
   const [localNavOpen, setLocalNavOpen] = useState(false)
   const [moreAnchor, setMoreAnchor] = useState<null | HTMLElement>(null)
-  /** Standalone "log a decision" modal — creates an `actions` row with no entry. */
-  const [logDecisionOpen, setLogDecisionOpen] = useState(false)
   const navOpenVal = setNavOpen != null ? (navOpen ?? false) : localNavOpen
   const setNavOpenVal = setNavOpen ?? setLocalNavOpen
   const activityOpen = setActivityOpenProp != null ? (activityOpenProp ?? false) : localActivityOpen
@@ -222,7 +214,7 @@ function AppBarNav({
           {/* Right: log decision + activity + more menu (desktop) + sign out */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
             <Tooltip title="Log a decision">
-              <IconButton color="inherit" onClick={() => setLogDecisionOpen(true)} aria-label="Log a decision">
+              <IconButton color="inherit" component={RouterLink} to="/decisions/new" aria-label="Log a decision">
                 <AddCircleOutlineIcon />
               </IconButton>
             </Tooltip>
@@ -283,42 +275,8 @@ function AppBarNav({
         onSignOut={signOut}
       />
       <ActivityDrawer open={activityOpen} onClose={() => setActivityOpen(false)} onRefresh={refreshActivity} />
-      {/* Global standalone-decision logger: creates an `actions` row with no entry. */}
-      <ActionFormDialog
-        open={logDecisionOpen}
-        onClose={() => setLogDecisionOpen(false)}
-        onSubmit={async (data) => {
-          if (!user?.id) return
-          if (!data.ticker?.trim()) return
-          await createAction({
-            user_id: user.id,
-            entry_id: null,
-            type: data.type,
-            ticker: data.ticker.trim().toUpperCase(),
-            company_name: data.company_name || null,
-            action_date: data.action_date,
-            price: data.price,
-            currency: data.currency || null,
-            shares: data.shares,
-            reason: data.reason,
-            notes: data.notes,
-            kill_criteria: data.kill_criteria || null,
-            pre_mortem_text: data.pre_mortem_text || null,
-            size: data.size,
-            raw_snippet: null,
-          })
-          if (data.type === 'pass') {
-            await ensurePassedForUser(user.id, data.ticker.trim(), {
-              passed_date: data.action_date,
-              reason: data.reason ?? '',
-              notes: data.notes ?? '',
-            })
-            invalidate.passed()
-          }
-          invalidate.actions()
-          showSuccess('Decision logged')
-        }}
-      />
+      {/* Global ActionFormDialog mount retired — the "Log a decision"
+          AppBar button now navigates to /decisions/new (DecisionFormPage). */}
     </>
   )
 }
@@ -428,6 +386,12 @@ function AppRoutes() {
       <Route path="/entries/:id" element={<ProtectedLayout><Page><EntryDetailPage /></Page></ProtectedLayout>} />
       <Route path="/entries/:id/edit" element={<ProtectedLayout><Page><EntryFormPage /></Page></ProtectedLayout>} />
       <Route path="/actions" element={<ProtectedLayout><Page><ActionsPage /></Page></ProtectedLayout>} />
+      {/* Decision form pages — replace the old global ActionFormDialog
+          modal with real routes the user can bookmark / share / hit
+          Back on. /decisions/new accepts ?ticker=, ?entry_id=, ?type=
+          query params for pre-fill. */}
+      <Route path="/decisions/new" element={<ProtectedLayout><Page><DecisionFormPage /></Page></ProtectedLayout>} />
+      <Route path="/decisions/:id/edit" element={<ProtectedLayout><Page><DecisionFormPage /></Page></ProtectedLayout>} />
       <Route path="/passed" element={<Navigate to="/tickers" replace />} />
       <Route path="/analytics" element={<ProtectedLayout><Page><AnalyticsPage /></Page></ProtectedLayout>} />
       <Route path="/analytics/calibration" element={<ProtectedLayout><Page><AnalyticsPage /></Page></ProtectedLayout>} />
@@ -435,9 +399,11 @@ function AppRoutes() {
       <Route path="/analytics/performance" element={<Navigate to="/analytics" replace />} />
       <Route path="/insights" element={<Navigate to="/analytics" replace />} />
       <Route path="/calibration" element={<Navigate to="/analytics/calibration" replace />} />
-      {/* /decisions (Long-term horizons) was removed — redirect any old
-          bookmarks to the journal so they don't 404. */}
-      <Route path="/decisions" element={<Navigate to="/" replace />} />
+      {/* /decisions used to be Long-term horizons (since removed); the
+          base path now redirects to the actions list since that's the
+          natural "view decisions" surface. The /new + /:id/edit
+          children are real DecisionFormPage routes (above). */}
+      <Route path="/decisions" element={<Navigate to="/actions" replace />} />
       <Route path="/tickers" element={<ProtectedLayout><Page><IdeasPage /></Page></ProtectedLayout>} />
       <Route path="/tickers/:ticker" element={<ProtectedLayout><Page><IdeaDetailPage /></Page></ProtectedLayout>} />
       <Route path="/ideas" element={<Navigate to="/tickers" replace />} />

@@ -12,12 +12,7 @@ import { deleteEntry, updateEntry } from '../services/entriesService'
 import { createReminder, deleteReminder } from '../services/remindersService'
 import { fetchChartData } from '../services/chartApiService'
 import { useAuth } from '../contexts/AuthContext'
-import {
-  createAction,
-  deleteAction,
-  updateAction,
-} from '../services/actionsService'
-import { ensurePassedForUser } from '../services/passedService'
+import { deleteAction } from '../services/actionsService'
 import {
   createOutcome,
   updateOutcome,
@@ -39,7 +34,6 @@ import { ListCard, ItemRow, EmptyState, AddPlusButton, PageHeader } from '../com
 import TickerDollarField from '../components/TickerDollarField'
 import TimelineIcon from '@mui/icons-material/Timeline'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
-import ActionFormDialog from '../components/ActionFormDialog'
 import OutcomeFormDialog from '../components/OutcomeFormDialog'
 import PredictionInlineForm from '../components/PredictionInlineForm'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -52,7 +46,7 @@ import TagChip from '../components/TagChip'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
 import { getTickerDisplayLabel } from '../utils/tickerCompany'
-import type { Outcome, Action } from '../types/database'
+import type { Outcome } from '../types/database'
 import type { EntryPrediction } from '../types/database'
 
 export default function EntryDetailPage() {
@@ -89,9 +83,7 @@ export default function EntryDetailPage() {
   const [detailTab, setDetailTab] = useState(0)
   const [quickNote, setQuickNote] = useState('')
   const [savingNote, setSavingNote] = useState(false)
-  const [actionDialogOpen, setActionDialogOpen] = useState(false)
   // Holds the action being edited; null means the dialog is in "add new" mode.
-  const [editingAction, setEditingAction] = useState<Action | null>(null)
   const [overflowAnchor, setOverflowAnchor] = useState<null | HTMLElement>(null)
   const [outcomeDialogActionId, setOutcomeDialogActionId] = useState<string | null>(null)
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false)
@@ -512,7 +504,7 @@ export default function EntryDetailPage() {
             <Tab label="Valuation" />
           </Tabs>
           {detailTab === 0 && (
-            <Button size="small" startIcon={<AddIcon />} onClick={() => setActionDialogOpen(true)} sx={{ flexShrink: 0, mr: 0.5, fontSize: '0.75rem' }}>
+            <Button size="small" startIcon={<AddIcon />} onClick={() => navigate(`/decisions/new?entry_id=${id}&from=${encodeURIComponent(`/entries/${id}`)}`)} sx={{ flexShrink: 0, mr: 0.5, fontSize: '0.75rem' }}>
               Add
             </Button>
           )}
@@ -532,7 +524,7 @@ export default function EntryDetailPage() {
                 icon={<TimelineIcon />}
                 title="No decisions on this entry yet"
                 action={
-                  <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setActionDialogOpen(true)} sx={{ textTransform: 'none' }}>
+                  <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => navigate(`/decisions/new?entry_id=${id}&from=${encodeURIComponent(`/entries/${id}`)}`)} sx={{ textTransform: 'none' }}>
                     Add decision
                   </Button>
                 }
@@ -547,7 +539,7 @@ export default function EntryDetailPage() {
                     currentPrice={a.ticker ? currentPriceByTicker[(a.ticker || '').trim().toUpperCase()] : undefined}
                     onAddOrEditOutcome={() => setOutcomeDialogActionId(a.id)}
                     onDelete={() => setConfirmDelete({ type: 'action', id: a.id })}
-                    onEdit={() => setEditingAction(a)}
+                    onEdit={() => navigate(`/decisions/${a.id}/edit?from=${encodeURIComponent(`/entries/${id}`)}`)}
                   />
                 ))}
               </Stack>
@@ -643,71 +635,11 @@ export default function EntryDetailPage() {
         )}
       </Box>
 
-      <ActionFormDialog
-        open={actionDialogOpen || editingAction != null}
-        onClose={() => { setActionDialogOpen(false); setEditingAction(null) }}
-        initial={editingAction ?? undefined}
-        onSubmit={async (data) => {
-          if (!user?.id) return
-          if (editingAction) {
-            // Edit existing decision in place — keep entry_id, update everything else.
-            await updateAction(editingAction.id, {
-              type: data.type,
-              ticker: data.ticker,
-              company_name: data.company_name || null,
-              action_date: data.action_date,
-              price: data.price,
-              currency: data.currency || null,
-              shares: data.shares,
-              reason: data.reason,
-              notes: data.notes,
-              kill_criteria: data.kill_criteria || null,
-              pre_mortem_text: data.pre_mortem_text || null,
-              size: data.size,
-            })
-            if (data.type === 'pass' && data.ticker?.trim()) {
-              await ensurePassedForUser(user.id, data.ticker.trim(), {
-                passed_date: data.action_date,
-                reason: data.reason ?? '',
-                notes: data.notes ?? '',
-              })
-              invalidate.passed()
-            }
-            invalidate.actions()
-            showSuccess('Decision updated')
-            setEditingAction(null)
-            return
-          }
-          if (!id) return
-          await createAction({
-            user_id: user.id,
-            entry_id: id,
-            type: data.type,
-            ticker: data.ticker,
-            company_name: data.company_name || null,
-            action_date: data.action_date,
-            price: data.price,
-            currency: data.currency || null,
-            shares: data.shares,
-            reason: data.reason,
-            notes: data.notes,
-            kill_criteria: data.kill_criteria || null,
-            pre_mortem_text: data.pre_mortem_text || null,
-            size: data.size,
-            raw_snippet: null,
-          })
-          if (data.type === 'pass' && user?.id && data.ticker?.trim()) {
-            await ensurePassedForUser(user.id, data.ticker.trim(), {
-              passed_date: data.action_date,
-              reason: data.reason ?? '',
-              notes: data.notes ?? '',
-            })
-            invalidate.passed()
-          }
-          invalidate.actions()
-          showSuccess(`${data.type.charAt(0).toUpperCase() + data.type.slice(1)} action added`)
-        }}
-      />
+      {/* The bottom-of-page ActionFormDialog mount that used to handle
+          add+edit decision flows for this entry is gone. Both flows
+          now navigate to /decisions/new?entry_id=… and
+          /decisions/:id/edit?from=/entries/… — DecisionFormPage owns
+          the createAction / updateAction calls + the navigation back. */}
 
       <ConfirmDialog
         open={!!confirmDelete}
