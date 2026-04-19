@@ -51,7 +51,6 @@ import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/ticker
 import { normalizeTicker } from '../utils/tickerNormalization'
 import { fetchChartData } from '../services/chartApiService'
 import { stripMarkdown } from '../utils/text'
-import { isAutomatedEntry } from '../utils/entryTitle'
 import { parseOptionSymbol } from '../utils/optionSymbol'
 import { ERROR_TYPE_LABELS } from '../utils/errorTypeLabels'
 import { computeCounterfactualFromChart, computeCagrFromChart, formatCagrPercent, formatDurationSince } from '../utils/cagr'
@@ -84,21 +83,15 @@ export default function InsightsPage() {
   const entries = useMemo(() => entriesQ.data ?? [], [entriesQ.data])
   const rawActions = useMemo(() => actionsQ.data ?? [], [actionsQ.data])
   const passedList = useMemo(() => passedQ.data ?? [], [passedQ.data])
-  // Stats exclude:
-  //   - actions on automated/IBKR-imported entries (tags "Automated" / "IBKR"
-  //     or author "IBKR") — kept for raw data preservation, not analysis
-  //   - option tickers — IBKR option rows are absurdly noisy ($0.10 premiums
-  //     generating 500,000% returns) and the app treats them as a side book
-  const autoEntryIdSet = useMemo(
-    () => new Set(entries.filter(isAutomatedEntry).map((e) => e.id)),
-    [entries]
-  )
+  // Stats exclude option tickers — broker-imported option rows used to
+  // dominate (a $0.10 premium generating 500,000 % returns is signal
+  // noise on every chart). With the broker-import surface gone, new
+  // option rows can only land via manual entry; the filter stays as a
+  // belt-and-braces guard for the historical IBKR option rows still
+  // in the DB.
   const actions = useMemo(
-    () => rawActions.filter((a) =>
-      (a.entry_id == null || !autoEntryIdSet.has(a.entry_id))
-      && parseOptionSymbol(a.ticker) == null
-    ),
-    [rawActions, autoEntryIdSet]
+    () => rawActions.filter((a) => parseOptionSymbol(a.ticker) == null),
+    [rawActions]
   )
   const outcomes = useMemo(() => outcomesQ.data ?? [], [outcomesQ.data])
   const passedTickers = useMemo(
@@ -176,9 +169,9 @@ export default function InsightsPage() {
   const hasWriteupContent = (e: Entry) =>
     (stripMarkdown((e.title_markdown || '').trim()) + ' ' + stripMarkdown((e.body_markdown || '').trim())).trim().length >= 20
 
-  // `actions` above is already manual + non-option filtered. Derive the
-  // manual-entries and corresponding outcomes from it.
-  const manualEntries = entries.filter((e) => !autoEntryIdSet.has(e.id))
+  // `actions` above is already non-option filtered. With broker imports
+  // gone, every entry is treated the same — no per-entry source filter.
+  const manualEntries = entries
   const manualActions = actions
   const actionIds = new Set(manualActions.map((a) => a.id))
   const manualOutcomes = outcomes.filter((o) => actionIds.has(o.action_id))

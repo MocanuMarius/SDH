@@ -42,7 +42,6 @@ import { computeRangeStats, type RangeStats } from '../utils/chartRangeStats'
 import RelativeDate from '../components/RelativeDate'
 import DecisionChip from '../components/DecisionChip'
 import { getChartCategory, getDecisionTypeColor } from '../theme/decisionTypes'
-import { isAutomatedEntry } from '../utils/entryTitle'
 import { relativeBucket, formatDayHeader } from '../utils/relativeBucket'
 
 /** Assign each action to the chart point whose date is closest to the action date (no spreading by capacity). */
@@ -228,8 +227,9 @@ export default function TimelinePage() {
     const types = (['buy', 'sell', 'other'] as const).filter((t) => v[t])
     setUrlState({ types })
   }, [setUrlState])
-  const hideAutomated = urlState.noauto
-  const setHideAutomated = useCallback((v: boolean) => setUrlState({ noauto: v }), [setUrlState])
+  // urlState.noauto is still parsed for backwards-compat with old shared
+  // links but ignored — the broker-import surface is gone, so there's
+  // no automated source to filter out.
 
   // ── Legacy URL-param migration ──────────────────────────────────────
   // Old shape used separate `?symbol=`, `?types=`, `?hideAutomated=`
@@ -367,10 +367,11 @@ export default function TimelinePage() {
     })
   }, [actionsInRange, typeFilter])
 
-  const chartFilteredActions = useMemo(() => {
-    if (!hideAutomated) return filteredActionsInRange
-    return filteredActionsInRange.filter((a) => !a.entry || !isAutomatedEntry(a.entry))
-  }, [filteredActionsInRange, hideAutomated])
+  // The `hideAutomated` toggle in the chart settings used to drop
+  // broker-imported actions from the chart; with that surface gone,
+  // every action shows. The `noauto` field in `?s=` urlState stays
+  // so old shared links still parse, but it's now ignored.
+  const chartFilteredActions = filteredActionsInRange
 
   const downsampledChartData = useMemo(() => {
     if (chartData.length <= MAX_CHART_POINTS) return chartData
@@ -1274,17 +1275,9 @@ export default function TimelinePage() {
             </Select>
           </FormControl>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="body2" sx={{ flex: 1 }}>Broker imports</Typography>
-            <Chip
-              size="small"
-              label={hideAutomated ? 'Hidden' : 'Shown'}
-              onClick={() => setHideAutomated(!hideAutomated)}
-              variant={hideAutomated ? 'filled' : 'outlined'}
-              color={hideAutomated ? 'primary' : 'default'}
-              sx={{ height: 28, fontSize: '0.75rem', borderRadius: 1, fontWeight: 600 }}
-            />
-          </Box>
+          {/* "Broker imports: Hidden / Shown" toggle removed alongside
+              the broker-import surface — every decision is shown the
+              same way now since the user keeps decisions manually. */}
 
           <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>

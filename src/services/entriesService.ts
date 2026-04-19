@@ -59,24 +59,19 @@ export async function listEntriesWithActions(opts?: {
   search?: string
   limit?: number
   offset?: number
-  hideAutomated?: boolean
 }): Promise<EntryWithActions[]> {
   // The embedded outcomes relationship lets us render process/outcome badges
   // on the Journal list without a second query. When an action has no outcome
   // yet the embedded array will be empty and the badge is hidden.
+  // The `hideAutomated` server-side filter and the `countAutomatedEntries`
+  // helper used to live here; both retired with the broker-import surface
+  // (the user keeps decisions manually now and there's no automated source
+  // to filter out anymore).
   let q = supabase
     .from(TABLE)
     .select('*, actions(ticker, type, outcomes(process_score, outcome_score))')
     .order('date', { ascending: false })
     .order('updated_at', { ascending: false })
-
-  // Filter out automated/broker-imported entries at the server level
-  if (opts?.hideAutomated) {
-    q = q
-      .not('tags', 'cs', '{"Automated"}')
-      .not('tags', 'cs', '{"IBKR"}')
-      .neq('author', 'IBKR')
-  }
 
   if (opts?.from) q = q.gte('date', opts.from)
   if (opts?.to) q = q.lte('date', opts.to)
@@ -92,22 +87,6 @@ export async function listEntriesWithActions(opts?: {
   const { data, error } = await q
   if (error) throw error
   return (data ?? []) as EntryWithActions[]
-}
-
-/**
- * Count how many entries the `hideAutomated` filter would hide. Used on the Journal
- * page to surface "N automated entries hidden" so the user knows the data is there.
- */
-export async function countAutomatedEntries(): Promise<number> {
-  const { count, error } = await supabase
-    .from(TABLE)
-    .select('*', { count: 'exact', head: true })
-    .or('tags.cs.{"Automated"},tags.cs.{"IBKR"},author.eq.IBKR')
-  if (error) {
-    console.warn('countAutomatedEntries failed:', error.message)
-    return 0
-  }
-  return count ?? 0
 }
 
 export async function getEntry(id: string): Promise<Entry | null> {

@@ -9,7 +9,6 @@ import { listEntries } from './entriesService'
 import { fetchWeeklySentimentBands } from './sentimentService'
 import { normalizeTicker } from '../utils/tickerNormalization'
 import { parseOptionSymbol } from '../utils/optionSymbol'
-import { isAutomatedEntry } from '../utils/entryTitle'
 
 import type {
   OutcomeAnalytics,
@@ -70,15 +69,10 @@ export async function fetchOutcomesWithContext(): Promise<OutcomeAnalytics[]> {
 
     if (!action || !entry) continue
 
-    // Never include automated IBKR entries in analytics. Those exist for raw
-    // data preservation but should not pollute metrics, charts, or Brier scores.
-    // Only real Journalytic decisions count.
-    if (isAutomatedEntry(entry)) continue
-
-    // Exclude option trades from stats. IBKR-imported option rows report
-    // absurd % returns (e.g. 500,000% on a $0.10 premium) and the user
-    // treats them as noise — analytics should be about the underlying
-    // investment theses, not the option book.
+    // Exclude option trades from stats. Historical IBKR-imported option
+    // rows report absurd % returns (e.g. 500,000 % on a $0.10 premium)
+    // and the user treats them as noise — analytics is about the
+    // underlying investment theses, not the option book.
     if (parseOptionSymbol(action.ticker) != null) continue
 
     const decisionDate = new Date(action.action_date)
@@ -623,23 +617,19 @@ export interface PredictionCalibrationSnapshot {
  */
 export async function calculatePredictionCalibration(): Promise<PredictionCalibrationSnapshot> {
   const { listAllPredictions } = await import('./predictionsService')
-  const [allPredictions, outcomes, actions, entries] = await Promise.all([
+  const [allPredictions, outcomes, actions] = await Promise.all([
     listAllPredictions(),
     listOutcomes(),
     listActions(),
-    listEntries(),
   ])
 
-  // Build a set of automated entry IDs so we can exclude them from calibration.
-  const automatedEntryIds = new Set(
-    entries.filter(isAutomatedEntry).map((e) => e.id),
-  )
-
-  // Build lookup maps — only include actions tied to real (non-automated) entries.
+  // The "exclude automated entries" filter that lived here is gone —
+  // every action tied to an entry is fair game for calibration now
+  // that the broker-import surface is retired.
   const outcomeByActionId = new Map(outcomes.map((o) => [o.action_id, o]))
   const actionByEntryId = new Map(
     actions
-      .filter((a): a is typeof a & { entry_id: string } => a.entry_id != null && !automatedEntryIds.has(a.entry_id))
+      .filter((a): a is typeof a & { entry_id: string } => a.entry_id != null)
       .map((a) => [a.entry_id, a]),
   )
 
@@ -815,22 +805,17 @@ export interface PerSubSkillBrierSnapshot {
  */
 export async function calculatePerSubSkillBrier(minSampleSize = 3): Promise<PerSubSkillBrierSnapshot> {
   const { listAllPredictions } = await import('./predictionsService')
-  const [allPredictions, outcomes, actions, entries] = await Promise.all([
+  const [allPredictions, outcomes, actions] = await Promise.all([
     listAllPredictions(),
     listOutcomes(),
     listActions(),
-    listEntries(),
   ])
 
-  // Exclude automated IBKR entries from Brier calculations.
-  const automatedEntryIds = new Set(
-    entries.filter(isAutomatedEntry).map((e) => e.id),
-  )
-
+  // Same story as above — the broker-import filter is gone.
   const outcomeByActionId = new Map(outcomes.map((o) => [o.action_id, o]))
   const actionByEntryId = new Map(
     actions
-      .filter((a): a is typeof a & { entry_id: string } => a.entry_id != null && !automatedEntryIds.has(a.entry_id))
+      .filter((a): a is typeof a & { entry_id: string } => a.entry_id != null)
       .map((a) => [a.entry_id, a]),
   )
 

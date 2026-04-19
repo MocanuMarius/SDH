@@ -25,14 +25,12 @@ export interface Entry {
   trading_plan?: string | null
   /** Expected resolution date for long-term decisions (e.g., "2026-06-30") */
   decision_horizon?: string | null
-  /** Broker import tracking: UUID of broker_imports record this entry was created from */
-  broker_import_id?: string | null
-  /** Unique trade ID from broker (e.g., IBKR tradeID) for deduplication */
-  broker_trade_id?: string | null
-  /** Broker name: 'IBKR', 'XTB', etc. */
-  broker_name?: string | null
-  /** true if entry was auto-created from broker import, false if manually entered */
-  is_auto_imported?: boolean
+  // The four broker-tracking columns (`broker_import_id`,
+  // `broker_trade_id`, `broker_name`, `is_auto_imported`) still exist
+  // on the `entries` table for any historical rows the broker import
+  // wrote, but the TypeScript type no longer surfaces them — nothing
+  // in the codebase reads or writes them now that the import flow is
+  // retired.
   /** Speculation<->Investment continuous score 0..100. Auto-computed from signal stack. */
   investment_score?: number | null
   /** User manual override for investment_score. When null, UI uses investment_score. */
@@ -45,10 +43,6 @@ export type EntryInsert = Omit<Entry, 'id' | 'created_at' | 'updated_at'> & {
   id?: string
   created_at?: string
   updated_at?: string
-  broker_import_id?: string | null
-  broker_trade_id?: string | null
-  broker_name?: string | null
-  is_auto_imported?: boolean
 }
 
 export type EntryUpdate = Partial<Omit<Entry, 'id' | 'user_id' | 'created_at'>>
@@ -153,7 +147,8 @@ export interface Outcome {
   error_type?: ErrorType[] | null
   /** F29: "What I remember now" — compare to pre-decision record to surface hindsight bias */
   what_i_remember_now?: string | null
-  /** Broker import tracking: UUID of broker_imports record for dividend/income tracking */
+  /** Vestigial — used to link an outcome to a dividend row written by
+   *  the broker importer. Importer is gone; column stays harmless. */
   linked_dividend_id?: string | null
   created_at: string
   updated_at: string
@@ -273,50 +268,8 @@ export type EntryValuationInsert = Omit<EntryValuation, 'id' | 'created_at' | 'u
 
 export type EntryValuationUpdate = Partial<Omit<EntryValuation, 'id' | 'entry_id' | 'created_at'>>
 
-// ============================================================================
-// Broker Statement Imports
-// ============================================================================
-
-/**
- * BrokerImport: Tracks statement imports from brokers (IBKR, XTB, etc.)
- *
- * Enables:
- * - Audit trail (who imported what, when)
- * - Deduplication (file_hash prevents re-import)
- * - Entry linkage (entries created from this import)
- * - Reproducibility (full parsed_data cached for re-analysis)
- */
-export interface BrokerImport {
-  id: string
-  user_id: string
-
-  // Broker identification
-  broker_name: string // 'IBKR', 'XTB', etc.
-  statement_type: string // 'FlexReport', 'ActivityStatement', 'CsvDividends', etc.
-
-  // File tracking
-  file_name: string
-  file_hash: string // SHA256(file) for deduplication
-
-  imported_at: string // ISO timestamp
-  trade_count: number
-  dividend_count: number
-
-  // Import result
-  status: 'pending' | 'success' | 'partial' | 'failed'
-  error_message: string | null
-
-  // Full parsed statement data (JSON, immutable for audit trail)
-  parsed_data: Record<string, unknown> // ParsedBrokerStatement as JSON
-
-  created_at: string
-  updated_at: string
-}
-
-export type BrokerImportInsert = Omit<BrokerImport, 'id' | 'created_at' | 'updated_at'> & {
-  id?: string
-  created_at?: string
-  updated_at?: string
-}
-
-export type BrokerImportUpdate = Partial<Omit<BrokerImport, 'id' | 'user_id' | 'created_at' | 'file_hash'>>
+// The `BrokerImport` interface + Insert/Update aliases used to live
+// here, mirroring the `broker_imports` table that tracked statement
+// uploads. Removed alongside the broker-import surface — the table
+// itself stays in the DB so existing rows aren't lost, but no
+// application code references it anymore.

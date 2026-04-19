@@ -10,8 +10,9 @@
  * Hides itself entirely when there are zero closed outcomes — nothing to
  * say yet.
  *
- * Draws from `generateAnalyticsSnapshot()` which already filters out
- * automated (IBKR) entries and option tickers.
+ * Draws from `generateAnalyticsSnapshot()` which still filters out
+ * option tickers (broker-import filtering retired alongside the
+ * import surface).
  */
 import { useQuery } from '@tanstack/react-query'
 import { Box, Paper, Typography, Table, TableBody, TableCell, TableHead, TableRow, Skeleton } from '@mui/material'

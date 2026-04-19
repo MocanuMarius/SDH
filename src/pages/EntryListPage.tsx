@@ -25,7 +25,6 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import RemoveIcon from '@mui/icons-material/Remove'
 import LoopIcon from '@mui/icons-material/Loop'
-import { countAutomatedEntries } from '../services/entriesService'
 import type { EntryWithActions } from '../services/entriesService'
 import { stripLegacyMarkdown } from '../utils/stripLegacyMarkdown'
 import { useDebounce } from '../hooks/useDebounce'
@@ -384,15 +383,13 @@ export default function EntryListPage() {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [tagFilter, setTagFilter] = useState<string[]>([])
-  const [hideAutomated, setHideAutomated] = useState(true)
-  const [_automatedHiddenCount, setAutomatedHiddenCount] = useState<number | null>(null)
   const [investmentFilter, setInvestmentFilter] = useState<InvestmentFilter>('all')
   const [pageSize, setPageSize] = useState(INITIAL_PAGE_SIZE)
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // ─── react-query: shared cache, auto-refetches when entries change anywhere ──
-  const entriesQ = useEntriesWithActions({ search: debouncedSearch || undefined, limit: pageSize, hideAutomated })
+  const entriesQ = useEntriesWithActions({ search: debouncedSearch || undefined, limit: pageSize })
   // Stable reference for downstream useMemos.
   const entries: EntryWithActions[] = useMemo(() => entriesQ.data ?? [], [entriesQ.data])
   const loading = entriesQ.isLoading
@@ -407,16 +404,6 @@ export default function EntryListPage() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  // Fetch the count of auto-imported entries once so we can surface
-  // "N automated entries hidden" next to the Hide automated checkbox.
-  useEffect(() => {
-    let cancelled = false
-    countAutomatedEntries()
-      .then((n) => { if (!cancelled) setAutomatedHiddenCount(n) })
-      .catch(() => { if (!cancelled) setAutomatedHiddenCount(null) })
-    return () => { cancelled = true }
-  }, [])
-
   const handlePullRefresh = async () => {
     await entriesQ.refetch()
   }
@@ -426,7 +413,8 @@ export default function EntryListPage() {
     [entries]
   )
 
-  // Automated entries are filtered server-side. Client filters: tag + investment bucket.
+  // Client filters: tag + investment bucket. The old "Hide automated"
+  // toggle was retired alongside the broker-import surface.
   const filteredEntries = useMemo(
     () =>
       entries.filter((e) => {
@@ -550,15 +538,9 @@ export default function EntryListPage() {
               </ToggleButton>
             </Tooltip>
           </ToggleButtonGroup>
-          <Tooltip title={hideAutomated ? 'Currently hiding broker-imported entries — click to show them' : 'Currently showing broker-imported entries — click to hide them'}>
-            <Chip
-              size="small"
-              label={hideAutomated ? 'Hide automated' : 'Show automated'}
-              onClick={() => setHideAutomated((v) => !v)}
-              variant={hideAutomated ? 'filled' : 'outlined'}
-              sx={{ height: 26, fontSize: '0.65rem' }}
-            />
-          </Tooltip>
+          {/* "Hide automated / Show automated" toggle removed alongside
+              the broker-import surface — every entry is shown the same
+              way now since the user keeps decisions manually. */}
           {allTags.length > 0 && (
             <Autocomplete
               multiple

@@ -1,6 +1,12 @@
 /**
- * Decision reason field: autocomplete with presets + past reasons, optional "Manage presets".
- * Filters out automated/broker-imported noise from past reasons.
+ * Decision reason field: autocomplete with presets + past reasons,
+ * optional "Manage presets".
+ *
+ * The noise filter below originally hid broker-import-generated reason
+ * strings (UUIDs, IBKR codes, etc.) so they didn't pollute the
+ * autocomplete. Broker imports are retired now, but the filter stays —
+ * historical IBKR rows are still in the DB and would otherwise spam
+ * the suggestions list with garbage.
  */
 
 import { useState, useEffect, useMemo } from 'react'

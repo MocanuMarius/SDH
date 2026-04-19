@@ -41,8 +41,6 @@ import SettingsIcon from '@mui/icons-material/Settings'
 import LogoutIcon from '@mui/icons-material/Logout'
 import TouchAppIcon from '@mui/icons-material/TouchApp'
 import WatchlistIcon from '@mui/icons-material/Bookmarks'
-import ImportIcon from '@mui/icons-material/FileDownload'
-import PsychologyIcon from '@mui/icons-material/Psychology'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { useRealtimeSync } from './hooks/useRealtimeSync'
 import { SnackbarProvider } from './contexts/SnackbarContext'
@@ -66,7 +64,6 @@ const IdeasPage = lazy(() => import('./pages/IdeasPage'))
 const IdeaDetailPage = lazy(() => import('./pages/IdeaDetailPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
-const ImportHub = lazy(() => import('./pages/ImportHub'))
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
 
 /** Thin LinearProgress bar shown while a lazy page chunk loads */
@@ -95,9 +92,7 @@ const PRIMARY_NAV = [
 // Secondary items in "More" dropdown
 const SECONDARY_NAV = [
   { to: '/actions', label: 'Trades', icon: TouchAppIcon },
-  { to: '/skill-engineering', label: 'Practice', icon: PsychologyIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
-  { to: '/import', label: 'Import', icon: ImportIcon },
 ]
 
 function NavButton({ to, label, icon: Icon }: { to: string; label: string; icon: React.ElementType }) {
@@ -448,9 +443,12 @@ function AppRoutes() {
       <Route path="/ideas" element={<Navigate to="/tickers" replace />} />
       <Route path="/ideas/:ticker" element={<LegacyIdeaRedirect />} />
       <Route path="/timeline" element={<ProtectedLayout><Page><TimelinePage /></Page></ProtectedLayout>} />
-      <Route path="/import" element={<ProtectedLayout><Page><ImportHub /></Page></ProtectedLayout>} />
-      <Route path="/ibkr" element={<Navigate to="/import" replace />} />
-      <Route path="/broker-import" element={<Navigate to="/import" replace />} />
+      {/* Import surface (broker + CSV) was retired — user keeps decisions
+          manually now. Old URLs redirect to home so any bookmark just
+          lands somewhere sane instead of 404'ing. */}
+      <Route path="/import" element={<Navigate to="/" replace />} />
+      <Route path="/ibkr" element={<Navigate to="/" replace />} />
+      <Route path="/broker-import" element={<Navigate to="/" replace />} />
       <Route path="/settings" element={<ProtectedLayout><Page><SettingsPage /></Page></ProtectedLayout>} />
       {/* Practice / Skill engineering page retired — the per-sub-skill
           Brier loop never got a working data feed; its stats can show

@@ -14,11 +14,10 @@ import SearchIcon from '@mui/icons-material/Search'
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridColumnVisibilityModel, GridRenderCellParams, GridRowParams } from '@mui/x-data-grid'
 import { normalizeTickerToCompany } from '../utils/tickerCompany'
-import { isAutomatedEntry } from '../utils/entryTitle'
 import RelativeDate from '../components/RelativeDate'
 import DecisionChip from '../components/DecisionChip'
 import { useTickerChart } from '../contexts/TickerChartContext'
-import { useActions, useEntries, usePassed } from '../hooks/queries'
+import { useActions, usePassed } from '../hooks/queries'
 import { PageHeader, EmptyState } from '../components/system'
 
 interface IdeaRow {
@@ -41,22 +40,16 @@ export default function IdeasPage() {
   const isMobile = !useMediaQuery(theme.breakpoints.up('md'))
   const [error, setError] = useState<string | null>(null)
 
-  // ─── react-query: actions/passed/entries are shared across pages ──
+  // ─── react-query: actions + passed are shared across pages ──
   const actionsQ = useActions({ limit: 5000 })
   const passedQ = usePassed()
-  const entriesQ = useEntries({ limit: 10000 })
-  const loading = actionsQ.isLoading || passedQ.isLoading || entriesQ.isLoading
-  const queryError = actionsQ.error || passedQ.error || entriesQ.error
+  const loading = actionsQ.isLoading || passedQ.isLoading
+  const queryError = actionsQ.error || passedQ.error
   const errorMessage = error ?? (queryError ? (queryError as Error).message : null)
 
-  // Filter out actions from auto-imported entries — same logic as before.
-  const actions = useMemo(() => {
-    const all = actionsQ.data ?? []
-    const entries = entriesQ.data ?? []
-    const autoIds = new Set(entries.filter(isAutomatedEntry).map((e) => e.id))
-    // Standalone actions (entry_id null) can never be from an automated entry — keep them.
-    return all.filter((act) => act.entry_id == null || !autoIds.has(act.entry_id))
-  }, [actionsQ.data, entriesQ.data])
+  // Used to filter out actions from broker-imported entries; no longer
+  // needed — the user keeps decisions manually now.
+  const actions = useMemo(() => actionsQ.data ?? [], [actionsQ.data])
   // Stable reference for downstream useMemos.
   const passedList = useMemo(() => passedQ.data ?? [], [passedQ.data])
 

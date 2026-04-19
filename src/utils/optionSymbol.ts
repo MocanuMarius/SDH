@@ -1,9 +1,15 @@
 /**
- * Parse IBKR / OCC option symbol formats into structured fields.
+ * Parse standard option symbol formats into structured fields.
  *
- * IBKR uses two formats interchangeably:
+ * Two formats handled:
  *   1. Human readable: "APP 15JAN27 200 P"  —  TICKER DDMMMYY STRIKE C|P
  *   2. OCC 21-char:    "CVNA  260306C00365000"  —  TICKER(padded 6) YYMMDD C|P STRIKE(8, x1000)
+ *
+ * Used by the chart + analytics filters to recognise option tickers
+ * (so they're excluded from per-stock analytics and routed to the
+ * underlying for chart lookup). The broker-import surface that
+ * historically flooded the DB with option rows is gone, but the
+ * parser stays so any manually-logged option decision still works.
  *
  * Returns null if the string isn't parseable as an option symbol.
  * All fields are pure client-side, no network required.
@@ -56,7 +62,7 @@ function parseHumanFormat(symbol: string): ParsedOption | null {
 
 /**
  * OCC 21-character format: padded ticker (6) + YYMMDD (6) + C|P (1) + strike (8, x1000).
- * Real IBKR strings often collapse whitespace so the underlying may be less than 6 chars.
+ * Real-world strings often collapse whitespace so the underlying may be less than 6 chars.
  */
 function parseOccFormat(symbol: string): ParsedOption | null {
   // Try to find the YYMMDD-C/P-strike anchor anywhere in the trailing 15 chars.

@@ -43,7 +43,8 @@ export interface ActionForScoring {
   pre_mortem_text?: string | null
   raw_snippet?: string | null
   notes?: string | null
-  /** IBKR parser asset class — when provided we can branch option-specific logic */
+  /** Asset class — when provided we can branch option-specific logic.
+   *  Used to be set by the broker importer; now only manual input. */
   assetClass?: string | null
   /** Parsed option data — callers compute via optionSymbol.ts when type is option */
   optionData?: {

@@ -14,7 +14,6 @@ import {
   TextField,
   Link,
   Skeleton,
-  Chip,
   Button,
 } from '@mui/material'
 import { DataGrid } from '@mui/x-data-grid'
@@ -26,7 +25,7 @@ import { fetchChartData } from '../services/chartApiService'
 import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import TickerLinks from '../components/TickerLinks'
 import RelativeDate from '../components/RelativeDate'
-import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
+import { getEntryDisplayTitle } from '../utils/entryTitle'
 import { getTickerDisplayLabel, isOptionSymbol } from '../utils/tickerCompany'
 import { normalizeTicker } from '../utils/tickerNormalization'
 import { PageHeader, EmptyState } from '../components/system'
@@ -49,7 +48,6 @@ export default function ActionsPage() {
   const { openChart } = useTickerChart()
   const [currentPriceByTicker, setCurrentPriceByTicker] = useState<Record<string, number>>({})
   const [error, setError] = useState<string | null>(null)
-  const [hideAutomated, setHideAutomated] = useState(true)
   const [searchParams, setSearchParams] = useSearchParams()
   const typeFilter = searchParams.get('type') || ''
   const tickerFilter = searchParams.get('ticker') || ''
@@ -129,11 +127,9 @@ export default function ActionsPage() {
     [actions]
   )
 
-  // Filter automated entries, then enrich with computed fields
-  const filteredActions = useMemo(
-    () => hideAutomated ? actions.filter((a) => !a.entry || !isAutomatedEntry(a.entry as { tags: string[]; author: string })) : actions,
-    [actions, hideAutomated]
-  )
+  // The "Auto off / Auto on" filter that used to live here was retired
+  // alongside the broker-import surface; show every trade now.
+  const filteredActions = actions
 
   const rows = useMemo(
     () =>
@@ -323,13 +319,8 @@ export default function ActionsPage() {
           renderInput={(params) => <TextField {...params} label="Ticker" sx={{ minWidth: 130 }} />}
           clearOnEscape
         />
-        <Chip
-          size="small"
-          label={hideAutomated ? 'Auto off' : 'Auto on'}
-          onClick={() => setHideAutomated((v) => !v)}
-          variant={hideAutomated ? 'filled' : 'outlined'}
-          sx={{ height: 32, fontSize: '0.7rem' }}
-        />
+        {/* "Auto off / Auto on" chip retired with the broker-import
+            surface — every trade is shown the same way now. */}
       </Box>
 
       {error && (

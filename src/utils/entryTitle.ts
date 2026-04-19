@@ -4,13 +4,12 @@
 
 const UNTITLED_PATTERNS = /^(\(Untitled\)|Untitled|\s*)$/i
 
-/** Entry created by IBKR sync script (tags include "Automated" or author is "IBKR") */
-export function isAutomatedEntry(entry: { tags?: string[]; author?: string | null }): boolean {
-  if (entry.tags?.includes('Automated')) return true
-  if (entry.tags?.includes('IBKR')) return true
-  if (entry.author === 'IBKR') return true
-  return false
-}
+// `isAutomatedEntry` retired alongside the broker-import surface (the
+// user keeps decisions manually now). Historical IBKR-tagged rows
+// stay in the DB but are no longer treated specially in the UI —
+// every entry is just an entry. If callers somewhere still want to
+// know "did this row come from a broker sync at some point", the
+// `Automated` / `IBKR` tag values are still on those rows.
 
 export function isUntitled(title: string | null | undefined): boolean {
   if (title == null) return true

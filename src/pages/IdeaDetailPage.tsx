@@ -35,7 +35,7 @@ import TickerLinks from '../components/TickerLinks'
 import TickerTimelineChart from '../components/TickerTimelineChart'
 import RelativeDate from '../components/RelativeDate'
 import DecisionChip from '../components/DecisionChip'
-import { getEntryDisplayTitle, isAutomatedEntry } from '../utils/entryTitle'
+import { getEntryDisplayTitle } from '../utils/entryTitle'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import OptionTypeChip from '../components/OptionTypeChip'
 import { PageHeader, StatusChip, statusFromLatestActionType, EmptyState } from '../components/system'
@@ -113,9 +113,8 @@ export default function IdeaDetailPage() {
     if (!ticker) return []
     const companyKey = normalizeTickerToCompany(decodeURIComponent(ticker))
     if (!companyKey) return []
-    return (allActionsQ.data ?? []).filter((a) =>
-      normalizeTickerToCompany(a.ticker) === companyKey &&
-      !(a.entry && isAutomatedEntry(a.entry as { tags: string[]; author: string }))
+    return (allActionsQ.data ?? []).filter(
+      (a) => normalizeTickerToCompany(a.ticker) === companyKey,
     )
   }, [allActionsQ.data, ticker])
   const errorMessage = error ?? queryError ?? (ticker && !loading && !normalizeTickerToCompany(decodeURIComponent(ticker)) ? `Invalid ticker: ${ticker}` : null)
