@@ -13,12 +13,8 @@
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 10",
     "dev:api": "node scripts/serve-chart-api.js",
-    "import:data": "node scripts/import-journalytic-ibkr.js",
     "backfill:titles": "node scripts/backfill-untitled-entry-titles.js",
     "strip:legacy-markdown": "node scripts/strip-legacy-markdown.js",
-    "parse:ibkr": "node scripts/parse-ibkr-activity-html.js",
-    "seed:outcomes-from-ibkr": "node scripts/seed-outcomes-from-ibkr.js",
-    "sync:ibkr": "node scripts/sync-ibkr.js",
     "watchlist:monitor": "node scripts/watchlist-monitor.js"
   },
   "dependencies": {
@@ -53,7 +49,6 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "babel-plugin-react-compiler": "^1.0.0",
-    "csv-parse": "^6.1.0",
     "dotenv": "^17.3.1",
     "eslint": "^9.15.0",
     "eslint-plugin-react-hooks": "^5.0.0",

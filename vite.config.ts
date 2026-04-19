@@ -27,17 +27,13 @@ export default defineConfig(({ mode }) => {
       apiPlugin(),
     ],
     resolve: {
-      // Force all packages (including @mui/x-data-grid) to resolve to this project's
-      // React 19 copy rather than the workspace-root React 18 (from goat-fin).
+      // De-dupe so any dep that pulls its own React doesn't shadow ours.
       dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
-      alias: [
-        // goat-fin's taxCalculator pulls in Node-only modules at the top of the
-        // file (`import { Readable } from 'stream'`, `import csv from 'csv-parser'`).
-        // We only use goat-fin's parsers via dynamic imports in the browser, and
-        // the real work happens server-side, so point those at lightweight stubs.
-        { find: 'stream', replacement: path.resolve(__dirname, 'src/lib/stream-stub.ts') },
-        { find: 'csv-parser', replacement: path.resolve(__dirname, 'src/lib/csv-parser-stub.ts') },
-      ],
+      // The previous `stream` and `csv-parser` aliases were workarounds
+      // for goat-fin's taxCalculator pulling Node-only modules into the
+      // browser bundle. With the broker-import surface retired, no
+      // browser code needs goat-fin anymore — aliases removed along
+      // with the stub files.
     },
     define: {
       'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(url),
