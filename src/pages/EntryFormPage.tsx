@@ -463,7 +463,15 @@ export default function EntryFormPage() {
       // Auto-promote any decision blocks inserted via the "Decision" tab into
       // structured `actions` rows so they show up in the Ticker page, Timeline,
       // and analytics — not just as markdown in the body.
+      //
+      // Important: if a decision fails to insert (e.g. a missing-column 400
+      // from PostgREST), keep the failed blocks in `pendingDecisions` so the
+      // user can retry without re-typing, surface a real error message, and
+      // SKIP the navigate() below — silently dropping decisions led to the
+      // "I added it and it evaporated" bug we hit on 2026-04-19.
+      const failedDecisions: Array<{ block: DecisionBlockFields; err: unknown }> = []
       if (entryId && pendingDecisions.length > 0) {
+        const succeeded: DecisionBlockFields[] = []
         for (const block of pendingDecisions) {
           if (!block.ticker.trim()) continue
           try {
@@ -475,18 +483,37 @@ export default function EntryFormPage() {
                 notes: block.notes,
               })
             }
+            succeeded.push(block)
           } catch (actionErr) {
             console.warn('Failed to auto-promote decision block:', actionErr)
+            failedDecisions.push({ block, err: actionErr })
           }
         }
         invalidate.actions()
         invalidate.passed()
-        setPendingDecisions([])
+        // Only drop the rows that actually saved — keep failures so the user
+        // can fix and retry without re-entering ticker/reason/notes.
+        if (failedDecisions.length > 0) {
+          const stillPending = pendingDecisions.filter((p) => !succeeded.includes(p))
+          setPendingDecisions(stillPending)
+        } else {
+          setPendingDecisions([])
+        }
       }
 
       invalidate.entries()
-      showSuccess(isNew ? 'Entry created' : 'Entry saved')
-      if (entryId) navigate(`/entries/${entryId}`)
+      if (failedDecisions.length > 0) {
+        const detail = failedDecisions[0].err instanceof Error ? failedDecisions[0].err.message : 'Unknown error'
+        const noun = failedDecisions.length === 1 ? 'decision' : 'decisions'
+        const msg = `Entry saved, but ${failedDecisions.length} ${noun} failed to attach: ${detail}`
+        setError(msg)
+        showError(msg)
+        // Stay on the form — the user can fix the problem (or screenshot the
+        // error) and retry. Navigating away would silently lose the work.
+      } else {
+        showSuccess(isNew ? 'Entry created' : 'Entry saved')
+        if (entryId) navigate(`/entries/${entryId}`)
+      }
 
       // Save predictions — delete any the user removed, create any new ones.
       if (entryId) {
@@ -512,8 +539,12 @@ export default function EntryFormPage() {
             setDeletedPredictionIds([])
           }
         } catch (predErr) {
+          // Surface the failure (not silent) so a schema or validation issue
+          // doesn't drop predictions invisibly. Same lesson as the decision-
+          // block silent-warn that hid the missing `actions.size` column.
           console.warn('Failed to save predictions:', predErr)
-          // Don't fail the entire save if prediction upsert fails
+          const msg = predErr instanceof Error ? predErr.message : 'Unknown error'
+          showError(`Predictions failed to save: ${msg}`)
         }
       }
     } catch (err: unknown) {
