@@ -67,7 +67,6 @@ const IdeaDetailPage = lazy(() => import('./pages/IdeaDetailPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
 const ImportHub = lazy(() => import('./pages/ImportHub'))
-const SkillEngineeringDashboard = lazy(() => import('./pages/SkillEngineeringDashboard'))
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
 
 /** Thin LinearProgress bar shown while a lazy page chunk loads */
@@ -453,7 +452,10 @@ function AppRoutes() {
       <Route path="/ibkr" element={<Navigate to="/import" replace />} />
       <Route path="/broker-import" element={<Navigate to="/import" replace />} />
       <Route path="/settings" element={<ProtectedLayout><Page><SettingsPage /></Page></ProtectedLayout>} />
-      <Route path="/skill-engineering" element={<ProtectedLayout><Page><SkillEngineeringDashboard /></Page></ProtectedLayout>} />
+      {/* Practice / Skill engineering page retired — the per-sub-skill
+          Brier loop never got a working data feed; its stats can show
+          inside the Calibration tab once predictions earn outcomes. */}
+      <Route path="/skill-engineering" element={<Navigate to="/analytics/calibration" replace />} />
       <Route path="/watchlist" element={<ProtectedLayout><Page><WatchlistPage /></Page></ProtectedLayout>} />
       <Route path="/share-target" element={<ShareTargetRedirect />} />
       <Route path="*" element={<Navigate to="/" replace />} />
