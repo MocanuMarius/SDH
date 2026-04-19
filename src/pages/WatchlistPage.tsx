@@ -436,6 +436,7 @@ export default function WatchlistPage() {
               <EmptyState
                 icon={<BookmarksIcon />}
                 title="No alerts yet"
+                description="Add a ticker + price level (e.g. $UBER ≤ $60) and you'll see the alert here. When the price crosses it, the alert moves to the Triggered tab."
               />
             ) : filteredItems.length === 0 ? (
               <EmptyState dense title="No alerts match your search" />

@@ -621,10 +621,11 @@ export default function EntryListPage() {
         entries.length === 0 ? (
           <EmptyState
             icon={<ArticleOutlinedIcon />}
-            title="No journal entries yet"
+            title="Your journal is empty"
+            description="Each entry captures one investment thought — a thesis, a watchlist add, a 'why I passed.' Decisions you log against an entry get tracked over time on the Timeline so you can see whether you were right."
             action={
               <Button component={RouterLink} to="/entries/new" variant="contained" size="small" sx={{ textTransform: 'none' }}>
-                New entry
+                Write your first entry
               </Button>
             }
           />

@@ -200,6 +200,9 @@ export default function IdeasPage() {
       ) : ideas.length === 0 ? (
         <EmptyState
           title={search.trim() ? 'No tickers match your search' : 'No tickers yet'}
+          description={search.trim()
+            ? undefined
+            : 'Tickers show up here once you log a decision against them — buy / sell / pass / research. From the journal, mention a $TICKER in an entry and add a decision; the ticker will land here automatically.'}
         />
       ) : (
         <DataGrid
