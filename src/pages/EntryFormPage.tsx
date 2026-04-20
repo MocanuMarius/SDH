@@ -13,10 +13,13 @@ import {
   IconButton,
   Slider,
   Chip,
+  Tooltip,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import CloseIcon from '@mui/icons-material/Close'
+import VisibilityIcon from '@mui/icons-material/Visibility'
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import { AnimatePresence, motion } from 'motion/react'
 import { useAuth } from '../contexts/AuthContext'
 import { createEntry, updateEntry } from '../services/entriesService'
@@ -37,6 +40,7 @@ import DecisionChip from '../components/DecisionChip'
 import { getTagPresets } from '../utils/tagPresets'
 import TagChip from '../components/TagChip'
 import BodyWritingFooter from '../components/BodyWritingFooter'
+import AutoSavedKicker from '../components/AutoSavedKicker'
 import { todayISO } from '../utils/dates'
 
 const getToday = todayISO
@@ -229,9 +233,18 @@ export default function EntryFormPage() {
     [tagsStr]
   )
 
-  // Auto-save draft to localStorage every 30s (new entries only)
+  // Auto-save draft to localStorage every 30s (new entries only).
+  // `lastSavedAt` is exposed to the UI so we can render an italic
+  // "Saved · just now" indicator that gives the writer quiet
+  // confidence the page is keeping their words safe.
   const DRAFT_KEY = 'sdh_entry_draft'
   const lastSaveRef = useRef(0)
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
+
+  // Focus mode — hides every optional structured-card so the writer
+  // sees nothing but headline + body + save bar. Default off; the
+  // toggle (eye icon) lives next to the save bar.
+  const [focusMode, setFocusMode] = useState(false)
 
   useEffect(() => {
     if (!isNew) return
@@ -294,6 +307,7 @@ export default function EntryFormPage() {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
         title_markdown, body_markdown, tagsStr,
       }))
+      setLastSavedAt(now)
     }, 30000)
     return () => clearInterval(timer)
   }, [isNew, title_markdown, body_markdown, tagsStr])
@@ -729,8 +743,44 @@ export default function EntryFormPage() {
           multiline
           minRows={8}
           value={body_markdown}
-          onChange={setBodyMarkdown}
-          placeholder="Start writing your thesis…"
+          // @-mention shortcut — typing `@` anywhere in the body
+          // strips the character back out and opens the decision
+          // dialog. Keeps the body plain text (no inline tokens to
+          // parse later) while giving the writer a one-keystroke way
+          // to attach a structured decision without leaving the flow.
+          // Smart-typography shortcuts also live here:
+          //   --   → —   (em-dash)
+          //   ...  → …   (ellipsis)
+          //   "x"  → "x" (curly quotes, after-space-or-start)
+          //   'x'  → 'x' (curly single, contraction-friendly)
+          onChange={(next) => {
+            // @-mention: only fire on a freshly-typed @ (string grew by
+            // one char and the new char is @). Avoids re-firing on
+            // every keystroke when the user pastes content with @ in it.
+            const grew = next.length === body_markdown.length + 1
+            const lastChar = grew ? next[next.length - 1] : null
+            // Find @ that isn't already part of an email — require a
+            // space or start-of-string before it.
+            if (grew && lastChar === '@') {
+              const before = next[next.length - 2] ?? ''
+              const looksLikeEmail = /\w/.test(before)
+              if (!looksLikeEmail) {
+                setBodyMarkdown(next.slice(0, -1))
+                setDecisionDialogOpen(true)
+                return
+              }
+            }
+            // Smart typography: only run on growth so paste / delete
+            // doesn't get reformatted.
+            let polished = next
+            if (grew) {
+              polished = polished
+                .replace(/--$/, '—')
+                .replace(/\.\.\.$/, '…')
+            }
+            setBodyMarkdown(polished)
+          }}
+          placeholder="Start writing your thesis… (type @ to attach a decision)"
           sx={{
             '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
             '& .MuiInputBase-root': { borderRadius: 0, px: { xs: 2, sm: 4 }, py: 2.5 },
@@ -764,8 +814,47 @@ export default function EntryFormPage() {
         <BodyWritingFooter text={body_markdown} />
       </Paper>
 
-      {/* Optional context — each row is a mini card that expands on + click. */}
-      <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {/* Writing toolbar strip — autosave indicator on the left, focus
+          toggle on the right. Sits between the body and the optional
+          cards as a one-line "you're writing" header for the structural
+          fields below. */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+          mb: 1,
+          color: 'text.secondary',
+        }}
+      >
+        <AutoSavedKicker isNew={isNew} lastSavedAt={lastSavedAt} hasContent={Boolean(title_markdown.trim() || body_markdown.trim())} />
+        <Tooltip title={focusMode ? 'Show structured fields' : 'Focus on writing — hide structured fields'}>
+          <Button
+            size="small"
+            variant="text"
+            color="inherit"
+            onClick={() => setFocusMode((v) => !v)}
+            startIcon={focusMode ? <VisibilityIcon sx={{ fontSize: 16 }} /> : <VisibilityOffIcon sx={{ fontSize: 16 }} />}
+            sx={{
+              textTransform: 'none',
+              fontSize: '0.75rem',
+              fontStyle: 'italic',
+              fontFamily: "'Source Serif 4', 'Iowan Old Style', 'Charter', 'Georgia', serif",
+              minHeight: 0,
+              py: 0.25,
+            }}
+          >
+            {focusMode ? 'Show fields' : 'Focus mode'}
+          </Button>
+        </Tooltip>
+      </Box>
+
+      {/* Optional context — each row is a mini card that expands on + click.
+          Hidden in focus mode so the writer sees only the headline + body
+          + save bar. The state is reversible via the eye-toggle in the
+          header strip below the body. */}
+      <Box sx={{ mb: 2, display: focusMode ? 'none' : 'flex', flexDirection: 'column', gap: 1 }}>
         {/* Decisions — first-class card. Same pattern as all the ListCards below;
             the + button on the header opens the InsertDecisionBlockDialog modal. */}
         <ListCard
