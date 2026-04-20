@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient'
 import { sameCompany } from '../utils/tickerCompany'
 import type { Passed, PassReviewStatus } from '../types/database'
+import { todayISO } from '../utils/dates'
 
 const TABLE = 'passed'
 const DEFAULT_FOLLOW_UP_DAYS = 90
@@ -23,7 +24,7 @@ export async function createPassed(
     .insert({
       user_id: userId,
       ticker: row.ticker,
-      passed_date: row.passed_date ?? new Date().toISOString().slice(0, 10),
+      passed_date: row.passed_date ?? todayISO(),
       reason: row.reason ?? '',
       notes: row.notes ?? '',
     })
@@ -86,7 +87,7 @@ export async function deletePassed(id: string): Promise<void> {
  * card per row returned.
  */
 export async function listPassedDueForReview(): Promise<Passed[]> {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayISO()
   const { data, error } = await supabase
     .from(TABLE)
     .select('*')

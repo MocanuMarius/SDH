@@ -43,6 +43,7 @@ import RelativeDate from '../components/RelativeDate'
 import DecisionChip from '../components/DecisionChip'
 import { getChartCategory, getDecisionTypeColor } from '../theme/decisionTypes'
 import { relativeBucket, formatDayHeader } from '../utils/relativeBucket'
+import { todayISO } from '../utils/dates'
 
 /** Assign each action to the chart point whose date is closest to the action date (no spreading by capacity). */
 function getClosestChartPointByDate(
@@ -345,7 +346,7 @@ export default function TimelinePage() {
 
   const minDate = chartData.length > 0 ? chartData[0].date : ''
   // Include today's actions even if chart data only goes to yesterday's close
-  const maxDate = chartData.length > 0 ? new Date().toISOString().slice(0, 10) : ''
+  const maxDate = chartData.length > 0 ? todayISO() : ''
 
   const actionsInRange = useMemo(
     () =>

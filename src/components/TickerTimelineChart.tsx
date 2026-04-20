@@ -41,6 +41,7 @@ import RangeSelectorButtons from './charts/RangeSelectorButtons'
 import MeasureStatsPill from './charts/MeasureStatsPill'
 import ChartHoverOverlays from './charts/ChartHoverOverlays'
 import { computeMeasureSelection } from './charts/measureDragGeometry'
+import { todayISO } from '../utils/dates'
 
 // Cap the number of points sent to the chart. SVG renders thousands fine,
 // but downsampling speeds up clustering & marker layout for long ranges.
@@ -172,7 +173,7 @@ export default function TickerTimelineChart({ symbol, actions, companyName, heig
 
   // Filter actions to the currently-fetched range and the right ticker.
   const minDate = chartData[0]?.date ?? ''
-  const maxDate = chartData.length > 0 ? new Date().toISOString().slice(0, 10) : ''
+  const maxDate = chartData.length > 0 ? todayISO() : ''
   const actionsInRange = useMemo(
     () =>
       companyKey

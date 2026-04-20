@@ -40,6 +40,7 @@ import {
 } from '@mui/material'
 import BottomSheet from './BottomSheet'
 import type { OutcomeInsert } from '../services/outcomesService'
+import { todayISO } from '../utils/dates'
 
 export type StaleIdeaVerdict = 'right' | 'wrong' | 'inconclusive'
 
@@ -92,7 +93,7 @@ export default function ResolveStaleIdeaDialog({
     try {
       await onSubmit({
         action_id: actionId,
-        outcome_date: new Date().toISOString().slice(0, 10),
+        outcome_date: todayISO(),
         notes: note.trim(),
         outcome_score: VERDICT_SCORE[verdict],
         // Keep the legacy binary column in sync for old consumers.

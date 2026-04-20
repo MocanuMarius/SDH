@@ -47,6 +47,7 @@ import {
   formatDeltaPercent,
 } from '../utils/cagr'
 import type { ChartRange } from '../services/chartApiService'
+import { todayISO } from '../utils/dates'
 
 /** Whole calendar days between two ISO dates (rounded). */
 function daysBetween(fromIso: string, toIso: string): number {
@@ -259,7 +260,7 @@ export default function IdeaDetailPage() {
             type,
             ticker: decodedTicker.toUpperCase(),
             company_name: company || null,
-            action_date: new Date().toISOString().slice(0, 10),
+            action_date: todayISO(),
             price,
             currency: currency || null,
             shares: null,
@@ -272,7 +273,7 @@ export default function IdeaDetailPage() {
           })
           if (type === 'pass') {
             await ensurePassedForUser(user.id, decodedTicker, {
-              passed_date: new Date().toISOString().slice(0, 10),
+              passed_date: todayISO(),
               reason,
               notes: '',
             })
@@ -408,7 +409,7 @@ export default function IdeaDetailPage() {
           const delta = actionDeltas[sourceId]
           if (delta == null || !Number.isFinite(delta)) return null
           const days = older === 'now'
-            ? daysBetween(newer.action_date || '', new Date().toISOString().slice(0, 10))
+            ? daysBetween(newer.action_date || '', todayISO())
             : daysBetween(older.action_date || '', newer.action_date || '')
           if (!Number.isFinite(days) || days < 0) return null
           const arrow = delta >= 0 ? '▲' : '▼'

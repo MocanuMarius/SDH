@@ -59,14 +59,12 @@ import type { Reminder, ActionType } from '../types/database'
 import { SectionTitle, EmptyState } from './system'
 import { useSnackbar } from '../contexts/SnackbarContext'
 
-function addDaysToToday(days: number): string {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
+import { todayISO, daysFromTodayISO } from '../utils/dates'
+
+const addDaysToToday = daysFromTodayISO
 
 const IDEA_REFRESH_DAYS = 90
-const TODAY = new Date().toISOString().slice(0, 10)
+const TODAY = todayISO()
 
 function daysAgo(dateStr: string): number {
   const d = new Date(dateStr)
@@ -795,7 +793,7 @@ export function useActivityBadge(): { count: number; refresh: () => void } {
   // Reads from the shared react-query cache, so any invalidate.reminders()
   // call anywhere in the app re-counts the badge automatically.
   const remindersQ = useReminders(true)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayISO()
   const count = (remindersQ.data ?? []).filter((r) => r.reminder_date <= today).length
   const refresh = () => { void remindersQ.refetch() }
   return { count, refresh }

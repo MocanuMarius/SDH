@@ -181,20 +181,42 @@ export default function IdeasPage() {
     <Box>
       <PageHeader title="Tickers" dense />
 
-      <TextField
-        size="small"
-        placeholder="Search ticker or company…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        sx={{ mb: 2, maxWidth: 320 }}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon fontSize="small" />
-            </InputAdornment>
-          ),
+      {/* Sticky on mobile under the PageHeader (which sticks at 56px
+          under the AppBar and is ~46px tall dense ⇒ search stick at
+          102px). Matches PageHeader's edge-bleed bg + hairline border
+          so it reads as a second "you are here" strip while scrolling
+          a long tickers list. On desktop it's just a normal inline
+          input. */}
+      <Box
+        sx={{
+          position: { xs: 'sticky', sm: 'static' },
+          top: { xs: 102, sm: 'auto' },
+          zIndex: { xs: 4, sm: 'auto' },
+          bgcolor: { xs: 'background.default', sm: 'transparent' },
+          borderBottom: { xs: '1px solid', sm: 'none' },
+          borderColor: { xs: 'divider', sm: 'transparent' },
+          mx: { xs: -1.5, sm: 0 },
+          px: { xs: 1.5, sm: 0 },
+          py: { xs: 0.75, sm: 0 },
+          mb: 2,
         }}
-      />
+      >
+        <TextField
+          size="small"
+          placeholder="Search ticker or company…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          fullWidth
+          sx={{ maxWidth: { xs: '100%', sm: 320 } }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+        />
+      </Box>
 
       {errorMessage && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>

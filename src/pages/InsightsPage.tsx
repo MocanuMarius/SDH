@@ -53,6 +53,7 @@ import { fetchChartData } from '../services/chartApiService'
 import { stripMarkdown } from '../utils/text'
 import { parseOptionSymbol } from '../utils/optionSymbol'
 import { ERROR_TYPE_LABELS } from '../utils/errorTypeLabels'
+import { todayISO } from '../utils/dates'
 import { computeCounterfactualFromChart, computeCagrFromChart, formatCagrPercent, formatDurationSince } from '../utils/cagr'
 import type { Entry } from '../types/database'
 import type { Action } from '../types/database'
@@ -576,7 +577,7 @@ export default function InsightsPage() {
   const decisionsLast365 = actions.filter((a) => a.action_date >= oneYearAgoStr).length
   const sortedEntryDates = Array.from(entryDatesLast365).sort()
   let currentStreak = 0
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayISO()
   for (let d = today; d >= oneYearAgoStr; d = new Date(new Date(d).getTime() - 86400000).toISOString().slice(0, 10)) {
     if (entryDatesLast365.has(d)) currentStreak++
     else break

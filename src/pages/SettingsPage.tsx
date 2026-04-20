@@ -30,6 +30,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { listEntries } from '../services/entriesService'
 import { listActions } from '../services/actionsService'
 import { listOutcomes } from '../services/outcomesService'
+import { todayISO } from '../utils/dates'
 
 const DEFAULT_COLOR = '#6366f1'
 
@@ -100,7 +101,7 @@ export default function SettingsPage() {
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      const ymd = new Date().toISOString().slice(0, 10)
+      const ymd = todayISO()
       a.href = url
       a.download = `deecide-export-${ymd}.json`
       document.body.appendChild(a)

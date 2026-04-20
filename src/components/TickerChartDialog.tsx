@@ -21,6 +21,7 @@ import { fetchChartData, type ChartData } from '../services/chartApiService'
 import { getChartCategory } from '../theme/decisionTypes'
 import DecisionChip from './DecisionChip'
 import TimelineChartVisx, { type TimelineChartPoint } from './TimelineChartVisx'
+import { todayISO } from '../utils/dates'
 
 interface Props {
   ticker: string | null
@@ -87,7 +88,7 @@ export default function TickerChartDialog({ ticker, onClose }: Props) {
         setActions(acts)
 
         // Compute date range: 60 days before first decision → today, or default 1Y if no decisions
-        const today = new Date().toISOString().slice(0, 10)
+        const today = todayISO()
         let startDate: string
         let range: 'max' | '1y' = 'max'
         if (acts.length > 0) {
