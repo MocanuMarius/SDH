@@ -17,12 +17,18 @@ const PROJECT_ROOT = path.resolve(__dirname, '..')
 loadDotenv({ path: path.join(PROJECT_ROOT, '.env.local') })
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+// Prefer service-role so we can touch every user's rows; fall back to anon
+// only if service-role isn't set (in which case RLS will restrict writes).
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SECRET_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase URL or anon key in .env.local')
-  console.error('Add one of: VITE_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_URL, or SUPABASE_URL')
-  console.error('And one of: VITE_SUPABASE_ANON_KEY, NEXT_PUBLIC_SUPABASE_ANON_KEY, or SUPABASE_ANON_KEY')
+  console.error('Missing Supabase URL or key in .env.local')
+  console.error('Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (preferred) or an anon key.')
   process.exit(1)
 }
 

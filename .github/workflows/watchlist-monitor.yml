@@ -4,10 +4,12 @@
 # sends Telegram alerts when conditions are met, and auto-rearms targets.
 #
 # Requires these GitHub repo secrets:
-#   SUPABASE_URL          — your Supabase project URL
-#   SUPABASE_ANON_KEY     — your Supabase anon/public key
-#   TELEGRAM_BOT_TOKEN    — Telegram bot token from @BotFather
-#   TELEGRAM_CHAT_ID      — your Telegram chat ID
+#   SUPABASE_URL                 — your Supabase project URL
+#   SUPABASE_SERVICE_ROLE_KEY    — service-role key (NOT the anon key;
+#                                  watchlist tables are RLS-scoped per user
+#                                  since 2026-04-20, anon returns zero rows)
+#   TELEGRAM_BOT_TOKEN           — Telegram bot token from @BotFather
+#   TELEGRAM_CHAT_ID             — your Telegram chat ID
 #
 # The script exits after one pass (no setInterval). GitHub runs a fresh
 # instance every 5 minutes. Free tier supports this.
@@ -43,8 +45,8 @@ jobs:
       - name: Run watchlist check (single pass)
 
         env:
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |

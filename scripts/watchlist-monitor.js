@@ -23,12 +23,18 @@ if (fs.existsSync(envPath)) {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+// Service-role key is REQUIRED now that watchlist_items has user-scoped RLS
+// (migration 20260420130000). Anon requests have auth.uid() = null and see
+// zero rows — the monitor would silently never fire any alerts. The old
+// anon-only config pre-dates RLS tightening.
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('❌ Missing Supabase URL or key'); process.exit(1);
+  console.error('❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.');
+  console.error('   Watchlist tables are user-scoped (RLS) so the monitor needs the service-role key to see all users\' rows.');
+  process.exit(1);
 }
 if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
   console.error('❌ Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID'); process.exit(1);

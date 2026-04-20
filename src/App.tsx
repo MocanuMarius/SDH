@@ -12,12 +12,35 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
     this.state = { error: null }
   }
   static getDerivedStateFromError(error: Error) { return { error } }
+  componentDidCatch(error: Error, info: { componentStack?: string | null }) {
+    // Log to the browser console so errors caught by this boundary
+    // surface in devtools + in any attached browser-use harness (the
+    // same instrumentation the 2026-04-20 audits used to find schema
+    // drift). Without this, a crash silently rendered a fallback and
+    // nothing showed up in `console.error` output.
+    console.error('[ErrorBoundary] route render crashed:', error, info.componentStack)
+  }
   render() {
     if (this.state.error) {
       return (
         <Box sx={{ p: 3 }}>
           <Typography color="error" variant="h6">Page crashed</Typography>
-          <Typography variant="body2" sx={{ mt: 1, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+          <Typography variant="body2" sx={{ mt: 1, mb: 2 }}>
+            Something went wrong rendering this screen. Reload to try again, or
+            open your browser devtools to see the error below.
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => window.location.reload()}
+            sx={{ mb: 2, textTransform: 'none' }}
+          >
+            Reload page
+          </Button>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            Error details (for debugging):
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 0.5, fontFamily: 'monospace', whiteSpace: 'pre-wrap', fontSize: '0.72rem', color: 'text.secondary' }}>
             {this.state.error.message}
             {'\n\n'}
             {this.state.error.stack}

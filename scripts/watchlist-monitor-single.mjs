@@ -25,7 +25,10 @@ if (fs.existsSync(envPath)) {
 }
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+// Service-role key required — see scripts/watchlist-monitor.js for why.
+// GitHub Actions deployments must expose SUPABASE_SERVICE_ROLE_KEY as a
+// secret, not the anon key.
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID
 
@@ -132,7 +135,7 @@ function sendTelegramAlert(message) {
  */
 export default async function checkAlerts() {
   if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.error('Missing SUPABASE_URL or SUPABASE_ANON_KEY')
+    console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY — watchlist RLS is user-scoped so anon key cannot read rows.')
     return 0
   }
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
