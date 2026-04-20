@@ -194,7 +194,11 @@ export default function PlainTextWithTickers({
         // plain text on disk; this is pure render-time styling.
         const trimmed = para.trim()
         const isBlockQuote = /^>\s/.test(trimmed)
-        const isEmDashQuote = /^—\s[\s\S]+\s—$/.test(trimmed)
+        // Em-dash wrap — accept `— text —`, `—text—`, or anything
+        // in between. Requires em-dashes (not hyphens) on both ends
+        // so a normal paragraph ending in "—" doesn't accidentally
+        // trigger pull-quote styling.
+        const isEmDashQuote = /^—\s*[\s\S]+?\s*—$/.test(trimmed) && trimmed.length >= 3
         const isPullQuote = isBlockQuote || isEmDashQuote
         // Strip the markers before rendering so the prose reads
         // cleanly. Em-dash wrappers stay visible (they're part of

@@ -477,28 +477,48 @@ export default function EntryFormPage() {
         setDecisionDialogOpen(true)
       }
 
-      // Ctrl/Cmd+Shift+Q: wrap the current body-textarea selection
-      // in em-dashes to mark it as a pull quote. Purely a typing
-      // affordance — the render-time path picks up em-dash-wrapped
-      // prose and italicises it with a left rule. Body stays plain
-      // text on disk.
+      // Ctrl/Cmd+Shift+Q: mark the current paragraph or selection
+      // as a pull quote. Render-time picks up `> ` prefixed
+      // paragraphs and italicises them with a left rule (body
+      // stays plain text on disk).
+      //   - With a selection: prefix each line of the selection
+      //     with `> ` so multi-line quotes just work.
+      //   - Without a selection: insert a `> ` stub on a new
+      //     paragraph at the caret so the writer starts typing
+      //     inside the quote immediately.
       if (modifier && e.shiftKey && (e.key === 'Q' || e.key === 'q')) {
         const active = document.activeElement as HTMLTextAreaElement | null
         if (active && active.tagName === 'TEXTAREA' && active.value === body_markdown) {
           e.preventDefault()
           const start = active.selectionStart ?? 0
           const end = active.selectionEnd ?? 0
-          if (end > start) {
+          const hasSelection = end > start
+          if (hasSelection) {
             const before = body_markdown.slice(0, start)
             const selected = body_markdown.slice(start, end)
             const after = body_markdown.slice(end)
-            const wrapped = `— ${selected.trim()} —`
-            setBodyMarkdown(before + wrapped + after)
-            // Move caret to the end of the wrapped chunk on next tick.
+            // Prefix every line in the selection with "> ".
+            const quoted = selected
+              .split('\n')
+              .map((l) => (l.startsWith('> ') ? l : `> ${l}`))
+              .join('\n')
+            setBodyMarkdown(before + quoted + after)
             setTimeout(() => {
-              const newEnd = before.length + wrapped.length
+              const newEnd = before.length + quoted.length
               active.focus()
               active.setSelectionRange(newEnd, newEnd)
+            }, 0)
+          } else {
+            // No selection — insert a new blockquote paragraph.
+            const before = body_markdown.slice(0, start)
+            const after = body_markdown.slice(start)
+            const sep = before === '' ? '' : before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n'
+            const insert = `${sep}> `
+            setBodyMarkdown(before + insert + after)
+            setTimeout(() => {
+              const newCaret = before.length + insert.length
+              active.focus()
+              active.setSelectionRange(newCaret, newCaret)
             }, 0)
           }
         }
@@ -1485,9 +1505,25 @@ export default function EntryFormPage() {
           setBodyMarkdown((prev) => (prev + (prev.endsWith('\n') || prev === '' ? '' : ' ') + d))
         }}
         onInsertQuote={() => {
-          // Seed a pull-quote stub at the caret. User types the quote
-          // between the em-dashes and the render path italicises it.
-          setBodyMarkdown((prev) => (prev + (prev.endsWith('\n') || prev === '' ? '' : '\n\n') + '— — '))
+          // Insert a blockquote stub on its own paragraph. The `> `
+          // prefix is the universal convention and renders as an
+          // italic pull quote (serif + left rule) via the render
+          // path. Cursor lands after the "> " so the writer just
+          // keeps typing — no em-dash puzzle to solve.
+          setBodyMarkdown((prev) => {
+            const sep = prev === '' ? '' : prev.endsWith('\n\n') ? '' : prev.endsWith('\n') ? '\n' : '\n\n'
+            return prev + sep + '> '
+          })
+          // Focus the body textarea so the writer can start typing
+          // immediately.
+          setTimeout(() => {
+            const ta = document.querySelector('textarea[placeholder*="thesis"]') as HTMLTextAreaElement | null
+            if (ta) {
+              ta.focus()
+              const end = ta.value.length
+              ta.setSelectionRange(end, end)
+            }
+          }, 40)
         }}
         onFocusPrediction={() => {
           // Turn focus mode off so the Predictions card is visible,
