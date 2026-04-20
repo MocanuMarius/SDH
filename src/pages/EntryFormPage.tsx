@@ -36,6 +36,7 @@ import TickerDollarField from '../components/TickerDollarField'
 import DecisionChip from '../components/DecisionChip'
 import { getTagPresets } from '../utils/tagPresets'
 import TagChip from '../components/TagChip'
+import BodyWritingFooter from '../components/BodyWritingFooter'
 import { todayISO } from '../utils/dates'
 
 const getToday = todayISO
@@ -60,6 +61,7 @@ function RowCard({
   hasValue,
   summary,
   onClear,
+  count,
   children,
 }: {
   title: string
@@ -67,23 +69,39 @@ function RowCard({
   hasValue: boolean
   /** Optional one-line preview shown when collapsed AND a value is present (rare since hasValue=true keeps it open). */
   summary?: React.ReactNode
-  onClear: () => void
+  /** When defined AND the card is open, the `×` toggle clears the
+   *  underlying state in addition to collapsing (used by Sentiment /
+   *  Conditions where the card IS the value). When undefined, the
+   *  `×` toggle just collapses — used for list-style cards like
+   *  Predictions / Entry Rules / Exit Rules where collapsing must
+   *  not delete the user's list. */
+  onClear?: () => void
+  /** Optional count badge — shows in the header like "Predictions (2)"
+   *  so the user knows there's content even while collapsed. */
+  count?: number
   children: React.ReactNode
 }) {
-  const [manuallyOpen, setManuallyOpen] = useState(false)
-  const open = manuallyOpen || hasValue
+  // Start expanded if there's already content (hasValue === true).
+  // The user's previous state overrides this once they interact.
+  const [manuallyOpen, setManuallyOpen] = useState<boolean | null>(null)
+  const open = manuallyOpen ?? hasValue
   const handleHeaderClick = () => {
     if (!open) setManuallyOpen(true)
   }
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (open) {
-      onClear()
+      // With onClear: clear-then-collapse (Sentiment/Conditions).
+      // Without: collapse only, preserve list.
+      if (onClear) onClear()
       setManuallyOpen(false)
     } else {
       setManuallyOpen(true)
     }
   }
+  const toggleLabel = open
+    ? (onClear ? `Remove ${title}` : `Collapse ${title}`)
+    : `Add ${title}`
   return (
     <Paper
       variant="outlined"
@@ -110,7 +128,12 @@ function RowCard({
         }}
       >
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="body2" fontWeight={700} color="text.primary">{title}</Typography>
+          <Box display="flex" alignItems="baseline" gap={0.75}>
+            <Typography variant="body2" fontWeight={700} color="text.primary">{title}</Typography>
+            {count != null && count > 0 && (
+              <Typography variant="caption" color="text.secondary" fontWeight={600}>({count})</Typography>
+            )}
+          </Box>
           {!open && description && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontSize: '0.72rem', mt: 0.25 }}>
               {description}
@@ -125,7 +148,7 @@ function RowCard({
         <IconButton
           size="small"
           onClick={handleToggle}
-          aria-label={open ? `Remove ${title}` : `Add ${title}`}
+          aria-label={toggleLabel}
           sx={{
             color: open ? 'text.secondary' : 'primary.contrastText',
             bgcolor: open ? 'transparent' : 'primary.main',
@@ -583,14 +606,42 @@ export default function EntryFormPage() {
       )}
 
       {/* Title + Date on one row */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+      <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'flex-start' }}>
+        {/* Editorial headline treatment — serif display font, bigger
+            size, tighter letter-spacing, no border chrome so it reads
+            like a newspaper headline rather than a form field. A
+            hairline underline fills in on focus (pen-stroke). */}
         <TickerDollarField
           fullWidth
           size="small"
           value={title_markdown}
           onChange={setTitleMarkdown}
-          placeholder="Title with $TICKER"
-          sx={{ flex: 1 }}
+          placeholder="Headline…"
+          sx={{
+            flex: 1,
+            '& .MuiOutlinedInput-root': {
+              bgcolor: 'transparent',
+              '& fieldset': { border: 'none' },
+            },
+            '& .MuiOutlinedInput-input': {
+              fontFamily: "'Source Serif 4', 'Iowan Old Style', 'Charter', 'Georgia', serif",
+              fontSize: { xs: '1.35rem', sm: '1.6rem' },
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+              lineHeight: 1.2,
+              padding: { xs: '8px 6px', sm: '8px 8px' },
+              color: 'text.primary',
+              // Dashed hairline under the title — gives the field
+              // something to anchor to visually without a box.
+              borderBottom: '1px dashed',
+              borderColor: 'divider',
+              transition: 'border-color 160ms ease',
+            },
+            '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-input': {
+              borderBottom: '1px solid',
+              borderColor: 'primary.main',
+            },
+          }}
         />
         <TextField
           type="date"
@@ -598,7 +649,7 @@ export default function EntryFormPage() {
           value={date}
           onChange={(e) => setDate(e.target.value)}
           InputLabelProps={{ shrink: true }}
-          sx={{ width: 140, flexShrink: 0 }}
+          sx={{ width: 140, flexShrink: 0, mt: { xs: 0.5, sm: 1 } }}
         />
       </Box>
 
@@ -636,21 +687,81 @@ export default function EntryFormPage() {
           />
       </Box>
 
-      {/* Body editor — pure thesis textarea. The decision entry lives in its own
-          Decisions card below, alongside the other structured fields. */}
-      <Paper variant="outlined" sx={{ mb: 1.5, bgcolor: 'background.paper' }}>
+      {/* Body editor — "compose in a newspaper column" feel.
+          Serif display font, generous line-height, centered max-width
+          so long theses don't run edge-to-edge and become unreadable.
+          Focus state warms the paper (white → faint cream) and blooms
+          a soft primary glow so the writer feels like the page is
+          "turning on" under them. The subtle left rule evokes a
+          print column's margin. */}
+      <Paper
+        variant="outlined"
+        sx={{
+          mb: 1.5,
+          bgcolor: 'background.paper',
+          position: 'relative',
+          overflow: 'hidden',
+          transition: 'box-shadow 260ms ease, border-color 260ms ease, background-color 260ms ease',
+          // Focus-within lifts the editor subtly, warms the paper
+          // and pulls a primary hairline along the left margin.
+          '&:focus-within': {
+            boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03), 0 8px 28px rgba(30, 64, 175, 0.08)',
+            borderColor: 'primary.light',
+          },
+          // Newspaper-column left rule — a 2px primary tint appears
+          // when the editor has focus. Invisible otherwise.
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 2,
+            bgcolor: 'primary.main',
+            opacity: 0,
+            transition: 'opacity 260ms ease',
+          },
+          '&:focus-within::before': { opacity: 0.5 },
+        }}
+      >
         <TickerDollarField
           fullWidth
           multiline
-          minRows={6}
+          minRows={8}
           value={body_markdown}
           onChange={setBodyMarkdown}
-          placeholder="Write your thesis…"
+          placeholder="Start writing your thesis…"
           sx={{
             '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-            '& .MuiInputBase-root': { borderRadius: 0 },
+            '& .MuiInputBase-root': { borderRadius: 0, px: { xs: 2, sm: 4 }, py: 2.5 },
+            '& .MuiInputBase-input': {
+              fontFamily: "'Source Serif 4', 'Iowan Old Style', 'Charter', 'Georgia', serif",
+              fontSize: { xs: '1rem', sm: '1.0625rem' },
+              lineHeight: 1.7,
+              letterSpacing: '0.005em',
+              color: 'text.primary',
+              maxWidth: '68ch',
+              marginLeft: 'auto',
+              marginRight: 'auto',
+              // Italic placeholder feels editorial; 0.6 opacity keeps
+              // it quiet enough to disappear the moment the user types.
+              '&::placeholder': {
+                fontStyle: 'italic',
+                opacity: 0.58,
+                color: 'text.disabled',
+              },
+            },
+            // Caret color — warm primary so it reads as a pen nib
+            // rather than a generic blinking cursor.
+            '& textarea': {
+              caretColor: 'var(--mui-palette-primary-dark, #1e3a8a)',
+            },
           }}
         />
+        {/* Live word + reading-time footer — shows only while writing
+            is actively happening so it doesn't clutter the empty
+            state. Matches the newspaper masthead rule style. */}
+        <BodyWritingFooter text={body_markdown} />
       </Paper>
 
       {/* Optional context — each row is a mini card that expands on + click. */}
@@ -790,8 +901,9 @@ export default function EntryFormPage() {
           </Box>
         </RowCard>
 
-        <ListCard
+        <RowCard
           title="Predictions"
+          description="Probability + by-date bets. Folds the Calibration tab on /analytics."
           count={predictions.length}
           hasValue={predictions.length > 0}
         >
@@ -848,10 +960,11 @@ export default function EntryFormPage() {
               helperText="Expected resolution for the whole idea"
             />
           </Box>
-        </ListCard>
+        </RowCard>
 
-        <ListCard
+        <RowCard
           title="Entry Rules"
+          description="Conditions that trigger a buy (e.g., break of $100 on volume)."
           count={entryRulesList.length}
           hasValue={entryRulesList.length > 0}
         >
@@ -893,10 +1006,11 @@ export default function EntryFormPage() {
               Add
             </Button>
           </Box>
-        </ListCard>
+        </RowCard>
 
-        <ListCard
+        <RowCard
           title="Exit Rules"
+          description="Conditions that trigger a sell (e.g., stop at $95 or thesis broken)."
           count={exitRulesList.length}
           hasValue={exitRulesList.length > 0}
         >
@@ -938,7 +1052,7 @@ export default function EntryFormPage() {
               Add
             </Button>
           </Box>
-        </ListCard>
+        </RowCard>
       </Box>
 
       {/* Sticky save bar — on mobile it pins above the 56-px BottomNav
