@@ -32,6 +32,7 @@ import {
 import TickerAutocomplete from '../components/TickerAutocomplete'
 import { PageHeader } from '../components/system'
 import { supabase } from '../services/supabaseClient'
+import { useAuth } from '../contexts/AuthContext'
 
 const CONDITIONS = ['<', '>', '<=', '>=', '==', '!=']
 
@@ -48,6 +49,7 @@ interface WatchlistItem {
 export default function WatchlistFormPage() {
   const { id } = useParams<{ id?: string }>()
   const isEdit = Boolean(id)
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
@@ -157,8 +159,17 @@ export default function WatchlistFormPage() {
           },
         })
       } else {
+        // user_id is required now that watchlist RLS is user-scoped
+        // (2026-04-20 migration). Inserts without it used to succeed
+        // under the old permissive `USING (true)` policy and left
+        // rows with user_id = null, which the user can no longer see
+        // post-tightening.
+        if (!user?.id) {
+          setError('You must be signed in to add alerts.')
+          return
+        }
         const { data: inserted, error: insErr } = await supabase
-          .from('watchlist_items').insert([data]).select().single()
+          .from('watchlist_items').insert([{ ...data, user_id: user.id }]).select().single()
         if (insErr) throw insErr
         await supabase.from('watchlist_audit_log').insert({
           watchlist_item_id: inserted.id,

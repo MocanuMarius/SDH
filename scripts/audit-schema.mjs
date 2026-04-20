@@ -136,6 +136,48 @@ async function main() {
     if (missing.length > 0) failures += 1
   }
 
+  // RLS audit — flag tables that have RLS disabled OR have a
+  // single permissive `USING (true)` policy (which is effectively no
+  // RLS). Caught the watchlist_* permissive-policy issue on
+  // 2026-04-20 that let rows with user_id = null pile up.
+  const rlsRows = (await client.query(`
+    SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+  `)).rows
+  const policyRows = (await client.query(`
+    SELECT tablename, policyname, cmd, qual, with_check
+    FROM pg_policies WHERE schemaname = 'public'
+  `)).rows
+  const rlsByTable = Object.fromEntries(rlsRows.map((r) => [r.table_name, r.rls_enabled]))
+  const policiesByTable = {}
+  for (const p of policyRows) {
+    (policiesByTable[p.tablename] ||= []).push(p)
+  }
+  const rlsWarnings = []
+  const TABLES_WITH_USER_DATA = TABLE_SOURCES.map((t) => t.table)
+  for (const t of TABLES_WITH_USER_DATA) {
+    const enabled = rlsByTable[t]
+    const pols = policiesByTable[t] ?? []
+    if (!enabled) {
+      rlsWarnings.push({ table: t, reason: 'RLS disabled' })
+      continue
+    }
+    if (pols.length === 0) {
+      rlsWarnings.push({ table: t, reason: 'RLS enabled but no policies — table is unreadable to end users' })
+      continue
+    }
+    // Any policy with qual = 'true' (or null qual on a non-INSERT cmd) is permissive.
+    const permissive = pols.filter((p) => p.qual === 'true' || p.with_check === 'true')
+    if (permissive.length > 0) {
+      rlsWarnings.push({
+        table: t,
+        reason: `permissive policy (qual=true) on: ${permissive.map((p) => p.policyname).join(', ')}`,
+      })
+    }
+  }
+
   // Pretty print
   console.log('')
   console.log('Schema audit report')
@@ -150,13 +192,26 @@ async function main() {
       console.log('  DB has but code ignores :', r.unusedInCode.join(', '), '(advisory)')
     }
   }
+
+  console.log('')
+  console.log('RLS audit')
+  console.log('---------')
+  if (rlsWarnings.length === 0) {
+    console.log('✓ every user-data table has RLS on and no `qual=true` policies.')
+  } else {
+    for (const w of rlsWarnings) {
+      console.log(`✗ ${w.table}: ${w.reason}`)
+    }
+    failures += rlsWarnings.length
+  }
+
   console.log('')
   if (failures > 0) {
-    console.log(`FAIL: ${failures} table(s) have columns the code writes that the live DB is missing.`)
+    console.log(`FAIL: ${failures} issue(s) found.`)
     console.log('Fix: add a migration, then run `npm run db:migrate`.')
     process.exit(1)
   } else {
-    console.log('PASS: every interface field maps to a live DB column.')
+    console.log('PASS: every interface field maps to a live DB column, every RLS policy is user-scoped.')
   }
   await client.end()
 }
