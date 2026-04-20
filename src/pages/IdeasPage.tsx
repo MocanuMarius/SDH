@@ -20,6 +20,7 @@ import { useTickerChart } from '../contexts/TickerChartContext'
 import { useActions, usePassed } from '../hooks/queries'
 import { PageHeader, EmptyState } from '../components/system'
 import { useCyclingPlaceholder } from '../hooks/useCyclingPlaceholder'
+import PullToRefresh from '../components/PullToRefresh'
 
 interface IdeaRow {
   id: string // DataGrid requires an id field
@@ -183,7 +184,13 @@ export default function IdeasPage() {
     ? { decisionCount: false, isPassed: false }
     : {}
 
+  const handleRefresh = async () => {
+    // Both queries refetch — react-query handles dedup/cache invalidation.
+    await Promise.all([actionsQ.refetch(), passedQ.refetch()])
+  }
+
   return (
+    <PullToRefresh onRefresh={handleRefresh}>
     <Box>
       <PageHeader title="Tickers" dense />
 
@@ -277,5 +284,6 @@ export default function IdeasPage() {
         />
       )}
     </Box>
+    </PullToRefresh>
   )
 }

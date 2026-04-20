@@ -42,6 +42,8 @@ import ValuationWidget from '../components/ValuationWidget'
 import PredictionCard from '../components/PredictionCard'
 import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import ScrollProgress from '../components/ScrollProgress'
+import PageFoldCorner from '../components/PageFoldCorner'
+import ContinuedFooter from '../components/ContinuedFooter'
 import AddReminderDialog from '../components/AddReminderDialog'
 import TagChip from '../components/TagChip'
 import { useSnackbar } from '../contexts/SnackbarContext'
@@ -321,6 +323,8 @@ export default function EntryDetailPage() {
             borderLeft: 4,
             borderLeftColor: 'primary.light',
             bgcolor: 'background.paper',
+            position: 'relative',
+            overflow: 'hidden',
             '& p:first-of-type': { mt: 0 },
             overflowWrap: 'break-word',
             wordBreak: 'break-word',
@@ -367,7 +371,11 @@ export default function EntryDetailPage() {
             },
           }}
         >
+          {/* Folded-corner ornament: quiet editorial signature that
+              the reader is on an "opened" article page. */}
+          <PageFoldCorner size="md" />
           <PlainTextWithTickers source={entry.body_markdown} dense />
+          <ContinuedFooter source={entry.body_markdown} />
         </Paper>
       )}
 

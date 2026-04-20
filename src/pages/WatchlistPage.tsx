@@ -41,6 +41,7 @@ import { supabase } from '../services/supabaseClient'
 import SwipeableCard from '../components/SwipeableCard'
 import { PageHeader, EmptyState } from '../components/system'
 import BookmarksIcon from '@mui/icons-material/Bookmarks'
+import MarqueeTickerStrip from '../components/MarqueeTickerStrip'
 
 interface WatchlistItem {
   id: string
@@ -297,6 +298,23 @@ export default function WatchlistPage() {
         <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
           {error}
         </Alert>
+      )}
+
+      {/* Marquee ticker strip — ambient broadsheet-style crawl of
+          active alerts with current price + delta to target. Slowly
+          scrolls right-to-left; pauses on hover. Reduced-motion users
+          see a static summary. */}
+      {items.filter((i) => i.status === 'active').length > 0 && (
+        <MarqueeTickerStrip
+          items={items
+            .filter((i) => i.status === 'active')
+            .map((i) => ({
+              ticker: i.ticker,
+              alertPrice: Number(i.alert_price),
+              condition: i.condition,
+              currentPrice: priceCache[i.ticker] ?? null,
+            }))}
+        />
       )}
 
       {/* Tab header + Add button */}
