@@ -240,7 +240,13 @@ const theme = createTheme({
           fontSize: '0.9375rem',
           minHeight: 40,
           borderRadius: radius.form,
-          transition: 'background-color 160ms ease, border-color 160ms ease, color 160ms ease',
+          // Press-down micro-interaction — a 1% scale dip on active
+          // that reads as a tactile "ack" on touch. Pairs with the
+          // theme's existing tonal hover. Short (90ms) so rapid taps
+          // still feel responsive rather than squishy.
+          transition: 'background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 90ms ease',
+          '&:active': { transform: 'scale(0.985)' },
+          '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:active': { transform: 'none' } },
           '@media (min-width: 600px)': { minHeight: 36 },
         },
         contained: {
@@ -267,7 +273,11 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: radius.form,
-          transition: 'background-color 140ms ease',
+          transition: 'background-color 140ms ease, transform 90ms ease',
+          // Same press-down as buttons — keeps icon-button taps in the
+          // same motion vocabulary as primary-button taps.
+          '&:active': { transform: 'scale(0.92)' },
+          '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:active': { transform: 'none' } },
         },
       },
     },

@@ -369,7 +369,22 @@ const EntryListRow = memo(function EntryListRow({ entry }: { entry: EntryWithAct
     >
       <Box
         onClick={() => navigate(`/entries/${entry.id}`)}
-        sx={{ cursor: 'pointer' }}
+        sx={{
+          cursor: 'pointer',
+          transition: 'transform 140ms ease, background-color 140ms ease',
+          // Tiny right-drift + soft background on hover — nods to the
+          // newspaper "open the article" gesture without adding chrome.
+          // Dropped on mobile to avoid fighting with SwipeableCard.
+          '@media (hover: hover)': {
+            '&:hover': {
+              transform: 'translateX(2px)',
+              backgroundColor: 'action.hover',
+            },
+          },
+          // Subtle press feedback on tap — same motion vocabulary as
+          // primary buttons in the theme.
+          '&:active': { transform: 'translateX(1px) scale(0.995)' },
+        }}
       >
         {content}
       </Box>

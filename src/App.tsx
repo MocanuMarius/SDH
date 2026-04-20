@@ -5,6 +5,8 @@ import CssBaseline from '@mui/material/CssBaseline'
 import { useState, useEffect, Component, lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
 import LinearProgress from '@mui/material/LinearProgress'
+import { motion } from 'motion/react'
+import { pageFade, pageFadeReduced, pickVariants } from './utils/motion'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -91,11 +93,27 @@ function PageFallback() {
   return <LinearProgress sx={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999 }} />
 }
 
-/** Wraps a route element with Suspense + ErrorBoundary */
+/** Wraps a route element with Suspense + ErrorBoundary + a subtle
+ *  opacity+drift transition on navigation. The transition is keyed
+ *  on pathname so React mounts a fresh wrapper on every route change
+ *  and the enter variant fires. `prefers-reduced-motion` collapses
+ *  the variant to a no-op via `pickVariants`. */
 function Page({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const variants = pickVariants(pageFade, pageFadeReduced)
   return (
     <ErrorBoundary>
-      <Suspense fallback={<PageFallback />}>{children}</Suspense>
+      <Suspense fallback={<PageFallback />}>
+        <motion.div
+          key={location.pathname}
+          variants={variants}
+          initial="initial"
+          animate="animate"
+          style={{ minHeight: '100%' }}
+        >
+          {children}
+        </motion.div>
+      </Suspense>
     </ErrorBoundary>
   )
 }

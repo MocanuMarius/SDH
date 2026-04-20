@@ -54,6 +54,7 @@ import { stripMarkdown } from '../utils/text'
 import { parseOptionSymbol } from '../utils/optionSymbol'
 import { ERROR_TYPE_LABELS } from '../utils/errorTypeLabels'
 import { todayISO } from '../utils/dates'
+import AnimatedNumber from '../components/AnimatedNumber'
 import { computeCounterfactualFromChart, computeCagrFromChart, formatCagrPercent, formatDurationSince } from '../utils/cagr'
 import type { Entry } from '../types/database'
 import type { Action } from '../types/database'
@@ -689,7 +690,7 @@ export default function InsightsPage() {
             <Typography variant="caption" fontWeight={500} sx={{ letterSpacing: '0.04em', color: 'text.secondary', display: 'block', mb: 0.5 }}>
               Journal entries
             </Typography>
-            <Typography variant="h4" fontWeight={700} sx={{ fontSize: { xs: '1.6rem', sm: '2.125rem' } }}>{entriesCount}</Typography>
+            <Typography variant="h4" fontWeight={700} sx={{ fontSize: { xs: '1.6rem', sm: '2.125rem' } }}><AnimatedNumber value={entriesCount} /></Typography>
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>writeups</Typography>
           </Paper>
         </Grid>
@@ -698,7 +699,7 @@ export default function InsightsPage() {
             <Typography variant="caption" fontWeight={500} sx={{ letterSpacing: '0.04em', color: 'text.secondary', display: 'block', mb: 0.5 }}>
               Trades / decisions
             </Typography>
-            <Typography variant="h4" fontWeight={700} sx={{ fontSize: { xs: '1.6rem', sm: '2.125rem' } }}>{actionsCount}</Typography>
+            <Typography variant="h4" fontWeight={700} sx={{ fontSize: { xs: '1.6rem', sm: '2.125rem' } }}><AnimatedNumber value={actionsCount} /></Typography>
           </Paper>
         </Grid>
         <Grid size={{ xs: 6, sm: 6, md: 3 }}>
@@ -706,7 +707,7 @@ export default function InsightsPage() {
             <Typography variant="caption" fontWeight={500} sx={{ letterSpacing: '0.04em', color: 'text.secondary', display: 'block', mb: 0.5 }}>
               Outcomes
             </Typography>
-            <Typography variant="h4" fontWeight={700} sx={{ fontSize: { xs: '1.6rem', sm: '2.125rem' } }}>{outcomesCount}</Typography>
+            <Typography variant="h4" fontWeight={700} sx={{ fontSize: { xs: '1.6rem', sm: '2.125rem' } }}><AnimatedNumber value={outcomesCount} /></Typography>
           </Paper>
         </Grid>
         <Grid size={{ xs: 6, sm: 6, md: 3 }}>
