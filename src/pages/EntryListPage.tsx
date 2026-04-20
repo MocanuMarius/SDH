@@ -33,6 +33,8 @@ import { getChartCategory } from '../theme/decisionTypes'
 import RelativeDate from '../components/RelativeDate'
 import { investmentScoreBadge } from '../utils/investmentScore'
 import SwipeableCard from '../components/SwipeableCard'
+import { motion } from 'motion/react'
+import { prefersReducedMotion } from '../utils/motion'
 import PullToRefresh from '../components/PullToRefresh'
 import { EmptyState } from '../components/system'
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined'
@@ -254,7 +256,7 @@ function TickerActionBadge({ categories }: { categories: Set<BadgeCategory> }) {
  * Hairline borderBottom between rows replaces the previous outlined-card
  * treatment per "hairlines, not boxes" in docs/PRINCIPLES.md.
  */
-const EntryListRow = memo(function EntryListRow({ entry }: { entry: EntryWithActions }) {
+const EntryListRow = memo(function EntryListRow({ entry, index = 0 }: { entry: EntryWithActions; index?: number }) {
   const allText = `${entry.title_markdown || ''} ${entry.body_markdown || ''}`
   const tickers = extractTickers(allText)
   const tickerActionMap = buildTickerActionMap(entry.actions)
@@ -360,7 +362,19 @@ const EntryListRow = memo(function EntryListRow({ entry }: { entry: EntryWithAct
     </Box>
   )
 
+  // First-paint stagger — rows fade + drift in 40ms apart so the list
+  // reads like a newspaper column filling rather than all-at-once.
+  // Cap the delay at ~15 rows: past that, the last items arriving half
+  // a second late just feels sluggish. Re-keyed entries (after filter
+  // changes) do re-animate; existing ones stay put because motion.div
+  // runs `initial` on mount only.
+  const motionDelay = Math.min(index, 14) * 0.04
   return (
+    <motion.div
+      initial={prefersReducedMotion() ? false : { opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: motionDelay, ease: [0.22, 1, 0.36, 1] }}
+    >
     <SwipeableCard
       actions={[
         { icon: <OpenInNewIcon sx={{ fontSize: 18 }} />, label: 'Open', onClick: () => navigate(`/entries/${entry.id}`), color: '#2563eb' },
@@ -389,6 +403,7 @@ const EntryListRow = memo(function EntryListRow({ entry }: { entry: EntryWithAct
         {content}
       </Box>
     </SwipeableCard>
+    </motion.div>
   )
 })
 
@@ -649,8 +664,8 @@ export default function EntryListPage() {
         )
       ) : (
         <Stack spacing={0}>
-          {filteredEntries.map((entry) => (
-            <EntryListRow key={entry.id} entry={entry} />
+          {filteredEntries.map((entry, i) => (
+            <EntryListRow key={entry.id} entry={entry} index={i} />
           ))}
         </Stack>
       )}

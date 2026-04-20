@@ -435,7 +435,43 @@ const theme = createTheme({
     },
     MuiLink: {
       styleOverrides: {
-        root: { color: tokens.primaryMain, fontWeight: 500, textDecorationThickness: '1px', textUnderlineOffset: 2 },
+        root: {
+          color: tokens.primaryMain,
+          fontWeight: 500,
+          textDecoration: 'none',
+          textDecorationThickness: '1px',
+          textUnderlineOffset: 2,
+          // Pen-stroke underline — draws from left to right on hover
+          // using a background-image with animated background-size.
+          // Feels like ink laid down by a pen, not a CSS toggle.
+          // Gated by `hover: hover` media so mobile doesn't get a
+          // stuck-underlined state after a tap.
+          backgroundImage: `linear-gradient(${tokens.primaryMain}, ${tokens.primaryMain})`,
+          backgroundSize: '0% 1px',
+          backgroundPosition: '0 100%',
+          backgroundRepeat: 'no-repeat',
+          transition: 'background-size 220ms cubic-bezier(0.22, 1, 0.36, 1), color 140ms ease',
+          paddingBottom: '2px',
+          '@media (hover: hover)': {
+            '&:hover': {
+              backgroundSize: '100% 1px',
+              color: tokens.primaryDark,
+              textDecoration: 'none',
+            },
+          },
+          // When the link is already underlined explicitly (e.g. the
+          // inline URL-autolinked body text that sets
+          // `textDecoration: 'underline'`), keep that underline and
+          // skip the draw effect — the paragraph context calls for a
+          // permanent underline, not a discovery gesture.
+          '&[class*="MuiLink-underlineAlways"], &[class*="underlineAlways"]': {
+            backgroundImage: 'none',
+            textDecoration: 'underline',
+          },
+          '@media (prefers-reduced-motion: reduce)': {
+            transition: 'none',
+          },
+        },
       },
     },
     MuiFab: {
@@ -537,6 +573,29 @@ const theme = createTheme({
         root: {
           minHeight: 56,
           '@media (min-width: 600px)': { minHeight: 60 },
+        },
+      },
+    },
+    // Skeleton — slow "ink settling" shimmer (2.4s sweep) instead of
+    // MUI's default 1.5s pulse. Matches the editorial cadence of the
+    // rest of the app: deliberate, not fidgety. Gradient direction
+    // mimics how an eye scans a column (left→right) and the fade is
+    // held low (0.45 max) so it reads as a subtle sheen, not a shiny
+    // loading bar. Collapses to a flat tint when reduced-motion is on.
+    MuiSkeleton: {
+      defaultProps: {
+        animation: 'wave',
+      },
+      styleOverrides: {
+        root: {
+          backgroundColor: alpha(tokens.inkBlack, 0.055),
+          '&::after': {
+            background: `linear-gradient(90deg, transparent, ${alpha('#ffffff', 0.45)}, transparent)`,
+            animationDuration: '2.4s',
+          },
+          '@media (prefers-reduced-motion: reduce)': {
+            '&::after': { animation: 'none', display: 'none' },
+          },
         },
       },
     },

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
+import Slide, { type SlideProps } from '@mui/material/Slide'
 
 type Severity = 'success' | 'error' | 'warning' | 'info'
 
@@ -18,6 +19,13 @@ interface SnackbarContextValue {
 }
 
 const SnackbarContext = createContext<SnackbarContextValue | null>(null)
+
+/** Slide-up transition for the snackbar — matches the editorial tone:
+ *  a short, soft lift from the bottom edge instead of MUI's default
+ *  Grow (scale-in), which reads as a bit "digital pop". */
+function SlideUp(props: SlideProps) {
+  return <Slide {...props} direction="up" />
+}
 
 export function SnackbarProvider({ children }: { children: React.ReactNode }) {
   const [queue, setQueue] = useState<SnackbarMessage[]>([])
@@ -63,7 +71,17 @@ export function SnackbarProvider({ children }: { children: React.ReactNode }) {
         autoHideDuration={4000}
         onClose={handleClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        sx={{ mb: { xs: 8, sm: 2 } }} // above mobile bottom nav
+        TransitionComponent={SlideUp}
+        sx={{
+          mb: { xs: 8, sm: 2 }, // above mobile bottom nav
+          // Soft drop shadow so the alert floats over the page — the
+          // default boxShadow is fine but we lift it a touch because
+          // the app's Alert styling has a border + hairline background.
+          '& .MuiAlert-filled': {
+            boxShadow: '0 10px 28px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.08)',
+            borderRadius: 1.5,
+          },
+        }}
       >
         <Alert
           onClose={handleClose}

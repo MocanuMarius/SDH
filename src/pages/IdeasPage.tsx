@@ -19,6 +19,7 @@ import DecisionChip from '../components/DecisionChip'
 import { useTickerChart } from '../contexts/TickerChartContext'
 import { useActions, usePassed } from '../hooks/queries'
 import { PageHeader, EmptyState } from '../components/system'
+import { useCyclingPlaceholder } from '../hooks/useCyclingPlaceholder'
 
 interface IdeaRow {
   id: string // DataGrid requires an id field
@@ -36,6 +37,11 @@ export default function IdeasPage() {
   const navigate = useNavigate()
   const { openChart } = useTickerChart()
   const [search, setSearch] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
+  const searchPlaceholder = useCyclingPlaceholder(
+    ['Search by ticker…', 'Search by company…', 'e.g. AAPL, Tesla, $NVDA'],
+    { paused: searchFocused || search.length > 0 },
+  )
   const theme = useTheme()
   const isMobile = !useMediaQuery(theme.breakpoints.up('md'))
   const [error, setError] = useState<string | null>(null)
@@ -203,9 +209,11 @@ export default function IdeasPage() {
       >
         <TextField
           size="small"
-          placeholder="Search ticker or company…"
+          placeholder={searchPlaceholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
           fullWidth
           sx={{ maxWidth: { xs: '100%', sm: 320 } }}
           InputProps={{

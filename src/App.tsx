@@ -323,6 +323,10 @@ function AppBarNav({
   )
 }
 
+/** Maps the BottomNav order to indices so the active underline can
+ *  slide between them. Order MUST match the JSX below. */
+const BOTTOM_NAV_ITEMS = ['/journal', '/timeline', '/tickers', '/watchlist', 'more'] as const
+
 function MobileBottomNav({ onOpenNav }: { onOpenNav: () => void }) {
   const muiTheme = useTheme()
   const isMobile = !useMediaQuery(muiTheme.breakpoints.up('md'))
@@ -330,6 +334,7 @@ function MobileBottomNav({ onOpenNav }: { onOpenNav: () => void }) {
   if (!isMobile) return null
   const path = location.pathname
   const value = path === '/' ? '/journal' : path.startsWith('/tickers') ? '/tickers' : path.startsWith('/entries') ? '/journal' : path
+  const activeIndex = BOTTOM_NAV_ITEMS.indexOf(value as typeof BOTTOM_NAV_ITEMS[number])
   return (
     <BottomNavigation
       value={value}
@@ -385,6 +390,37 @@ function MobileBottomNav({ onOpenNav }: { onOpenNav: () => void }) {
       <BottomNavigationAction label="Tickers" value="/tickers" icon={<LightbulbOutlinedIcon />} component={RouterLink} to="/tickers" />
       <BottomNavigationAction label="Watchlist" value="/watchlist" icon={<WatchlistIcon fontSize="small" />} component={RouterLink} to="/watchlist" />
       <BottomNavigationAction label="More" value="more" icon={<MoreHorizIcon />} onClick={(e) => { e.preventDefault(); onOpenNav() }} />
+      {/* Active-tab indicator — a 2px underline bar that slides between
+          tabs on route change. Evokes a newspaper section-tab header
+          selecting the current section. Width is 1/5 (5 tabs) minus a
+          small inset so it doesn't touch the edges. Snaps cleanly on
+          reduced-motion. */}
+      {activeIndex >= 0 && (
+        <Box
+          aria-hidden
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: `${(activeIndex / BOTTOM_NAV_ITEMS.length) * 100}%`,
+            width: `${100 / BOTTOM_NAV_ITEMS.length}%`,
+            height: 2,
+            pointerEvents: 'none',
+            transition: 'left 260ms cubic-bezier(0.22, 1, 0.36, 1)',
+            '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              left: '18%',
+              right: '18%',
+              top: 0,
+              bottom: 0,
+              bgcolor: '#ffffff',
+              borderRadius: 1,
+              opacity: 0.95,
+            },
+          }}
+        />
+      )}
     </BottomNavigation>
   )
 }
