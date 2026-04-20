@@ -1,0 +1,18 @@
+#!/bin/sh
+# Pre-push hook: run lint + type-check before pushing.
+#
+# Activate once per clone:  git config core.hooksPath .githooks
+#
+# Skipped automatically if no package.json or node_modules is present
+# (so it doesn't crash a fresh clone before install).
+
+if [ ! -f package.json ] || [ ! -d node_modules ]; then
+  exit 0
+fi
+
+echo "[pre-push] running npm run check…"
+if ! npm run -s check; then
+  echo ""
+  echo "[pre-push] check failed — fix the errors above, or pass --no-verify to push anyway."
+  exit 1
+fi

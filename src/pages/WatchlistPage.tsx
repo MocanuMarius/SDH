@@ -439,9 +439,9 @@ export default function WatchlistPage() {
                           </TableCell>
                           <TableCell align="right">
                             <Stack direction="row" spacing={0.25}>
-                              <IconButton size="small" onClick={() => handleOpenLog(item)}><HistoryIcon fontSize="small" /></IconButton>
-                              <IconButton size="small" onClick={() => navigate(`/watchlist/${item.id}/edit`)}><EditIcon fontSize="small" /></IconButton>
-                              <IconButton size="small" color="error" onClick={() => handleDelete(item.id)}><DeleteIcon fontSize="small" /></IconButton>
+                              <IconButton size="small" aria-label={`${item.ticker} history`} onClick={() => handleOpenLog(item)}><HistoryIcon fontSize="small" /></IconButton>
+                              <IconButton size="small" aria-label={`Edit ${item.ticker} alert`} onClick={() => navigate(`/watchlist/${item.id}/edit`)}><EditIcon fontSize="small" /></IconButton>
+                              <IconButton size="small" aria-label={`Delete ${item.ticker} alert`} color="error" onClick={() => handleDelete(item.id)}><DeleteIcon fontSize="small" /></IconButton>
                             </Stack>
                           </TableCell>
                         </TableRow>

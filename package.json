@@ -17,7 +17,8 @@
     "strip:legacy-markdown": "node scripts/strip-legacy-markdown.js",
     "watchlist:monitor": "node scripts/watchlist-monitor.js",
     "db:migrate": "node scripts/apply-pending-migrations.mjs",
-    "db:audit": "node scripts/audit-schema.mjs"
+    "db:audit": "node scripts/audit-schema.mjs",
+    "check": "npm run lint && npm run type-check"
   },
   "dependencies": {
     "@emotion/react": "^11.13.5",
