@@ -220,6 +220,21 @@ const theme = createTheme({
         '*::-webkit-scrollbar-corner': {
           background: 'transparent',
         },
+        // Warm "ink marker" selection — replaces the browser's default
+        // system blue with a soft tinted highlight in the app's primary
+        // palette. Reads as a newspaper reader-highlight (the kind you
+        // mark in a physical paper with a pen) rather than a generic
+        // OS selection box. Different shades per element keep the
+        // contrast readable: body text uses a paler wash, inputs use
+        // a more confident tint.
+        '::selection': {
+          backgroundColor: alpha(tokens.primaryMain, 0.18),
+          color: tokens.inkBlack,
+        },
+        'input::selection, textarea::selection': {
+          backgroundColor: alpha(tokens.primaryMain, 0.28),
+          color: tokens.inkBlack,
+        },
         // Numbers feel newspaper-y in mono — apply to anything tagged `mono`.
         '.mono, code, pre, kbd, samp': { fontFamily: fontMono },
         // Prevent the chart wrapper from showing focus outlines.

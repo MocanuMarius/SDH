@@ -41,6 +41,7 @@ import DecisionCard from '../components/DecisionCard'
 import ValuationWidget from '../components/ValuationWidget'
 import PredictionCard from '../components/PredictionCard'
 import PlainTextWithTickers from '../components/PlainTextWithTickers'
+import ScrollProgress from '../components/ScrollProgress'
 import AddReminderDialog from '../components/AddReminderDialog'
 import TagChip from '../components/TagChip'
 import { useSnackbar } from '../contexts/SnackbarContext'
@@ -249,6 +250,7 @@ export default function EntryDetailPage() {
 
   return (
     <Box>
+      <ScrollProgress />
       {/* Sticky PageHeader brings Entry detail in line with Timeline /
           Per-ticker: on mobile the title strip sticks under the AppBar
           so the user always knows which entry they're reading. The
@@ -323,6 +325,46 @@ export default function EntryDetailPage() {
             overflowWrap: 'break-word',
             wordBreak: 'break-word',
             maxWidth: '100%',
+            // Editorial first-letter drop cap on the lead paragraph.
+            // Picks the first paragraph's first span ("text") from the
+            // PlainTextWithTickers render tree and promotes its initial
+            // letter via ::first-letter. Uses the display (serif) font,
+            // drops 2 lines, and is tinted with primary ink so it reads
+            // as a deliberate editorial signature, not a CSS accident.
+            // Only fires on the very first paragraph — subsequent ones
+            // are plain. Skipped on xs-sm widths where the drop cap
+            // would crowd the narrow column.
+            '& p:first-of-type > span:first-of-type > span:first-of-type::first-letter': {
+              display: { xs: 'inline', md: 'block' },
+              float: { md: 'left' },
+              fontFamily: "'Source Serif 4', 'Iowan Old Style', 'Charter', 'Georgia', serif",
+              fontSize: { xs: 'inherit', md: '3.4rem' },
+              lineHeight: { xs: 'inherit', md: 0.9 },
+              fontWeight: 700,
+              color: { xs: 'inherit', md: 'primary.dark' },
+              marginRight: { md: 1 },
+              marginTop: { md: '0.15em' },
+            },
+            // Scroll-triggered fade + rise on each paragraph as it
+            // enters the viewport — NYT long-read feel. Uses native
+            // CSS scroll-driven animations (Chrome 115+ / Firefox 140+),
+            // so it's a progressive enhancement: browsers that don't
+            // support it just render the paragraph fully visible, no
+            // fallback JS needed. Honors prefers-reduced-motion.
+            '@supports (animation-timeline: view())': {
+              '& p': {
+                animation: 'entry-body-rise linear both',
+                animationTimeline: 'view()',
+                animationRange: 'entry 0% cover 18%',
+              },
+              '@keyframes entry-body-rise': {
+                from: { opacity: 0, transform: 'translateY(6px)' },
+                to: { opacity: 1, transform: 'translateY(0)' },
+              },
+              '@media (prefers-reduced-motion: reduce)': {
+                '& p': { animation: 'none' },
+              },
+            },
           }}
         >
           <PlainTextWithTickers source={entry.body_markdown} dense />

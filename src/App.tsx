@@ -7,6 +7,7 @@ import type { ReactNode } from 'react'
 import LinearProgress from '@mui/material/LinearProgress'
 import { motion } from 'motion/react'
 import { pageFade, pageFadeReduced, pickVariants } from './utils/motion'
+import { useScrollDirection } from './hooks/useScrollDirection'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -183,6 +184,13 @@ function AppBarNav({
   const [localActivityOpen, setLocalActivityOpen] = useState(false)
   const [localNavOpen, setLocalNavOpen] = useState(false)
   const [moreAnchor, setMoreAnchor] = useState<null | HTMLElement>(null)
+  // Scroll-direction AppBar hide — mobile only. Collapses the AppBar
+  // on scroll-down so long reads (entry body, per-ticker timeline)
+  // get the full viewport; slides back in on scroll-up so the user
+  // always has a one-gesture way back to the chrome. Desktop keeps
+  // the bar pinned as usual.
+  const scrollDir = useScrollDirection()
+  const appBarHidden = isMobile && scrollDir === 'down'
   const navOpenVal = setNavOpen != null ? (navOpen ?? false) : localNavOpen
   const setNavOpenVal = setNavOpen ?? setLocalNavOpen
   const activityOpen = setActivityOpenProp != null ? (activityOpenProp ?? false) : localActivityOpen
@@ -201,6 +209,13 @@ function AppBarNav({
           // tuned for the newspaper aesthetic instead of MUI's standard one.
           boxShadow: '0 1px 3px rgba(15, 23, 42, 0.18), 0 1px 1px rgba(15, 23, 42, 0.12)',
           borderBottom: '1px solid rgba(255,255,255,0.10)',
+          // Slide off-screen on mobile when the reader scrolls down;
+          // restore on scroll-up. Transform keeps the element in flow
+          // so sticky-below-header siblings (PageHeader, Search strip)
+          // continue to stick to the same top offset.
+          transform: appBarHidden ? 'translateY(-100%)' : 'translateY(0)',
+          transition: 'transform 220ms cubic-bezier(0.22, 1, 0.36, 1)',
+          '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
         }}
       >
         <Toolbar sx={{ justifyContent: 'space-between', minHeight: { xs: 56, sm: 60 }, gap: 1 }}>
