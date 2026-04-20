@@ -69,6 +69,7 @@ function RowCard({
   summary,
   onClear,
   count,
+  forceOpenAt,
   children,
 }: {
   title: string
@@ -86,12 +87,25 @@ function RowCard({
   /** Optional count badge — shows in the header like "Predictions (2)"
    *  so the user knows there's content even while collapsed. */
   count?: number
+  /** Timestamp signal — when it changes, force the card open. Used
+   *  by the slash menu so clicking "Set entry rules" actually
+   *  expands the card instead of just scrolling to a still-collapsed
+   *  one. The writer's subsequent manual toggles override this. */
+  forceOpenAt?: number
   children: React.ReactNode
 }) {
   // Start expanded if there's already content (hasValue === true).
   // The user's previous state overrides this once they interact.
   const [manuallyOpen, setManuallyOpen] = useState<boolean | null>(null)
   const open = manuallyOpen ?? hasValue
+
+  // Respond to external "open me" signals from the slash menu etc.
+  // Each new `forceOpenAt` timestamp nudges the card open.
+  useEffect(() => {
+    if (forceOpenAt != null) {
+      setManuallyOpen(true)
+    }
+  }, [forceOpenAt])
   const handleHeaderClick = () => {
     if (!open) setManuallyOpen(true)
   }
@@ -224,6 +238,13 @@ export default function EntryFormPage() {
   const [decision_horizon, setDecisionHorizon] = useState('')
   const [decisionDialogOpen, setDecisionDialogOpen] = useState(false)
   const [slashMenuOpen, setSlashMenuOpen] = useState(false)
+  // Force-open signals for the three list-style RowCards — bumped
+  // by the slash menu when the writer picks "Set entry rules" etc.
+  // A new timestamp tells the target RowCard to expand on next
+  // render (see RowCard's useEffect on forceOpenAt).
+  const [predictionsOpenAt, setPredictionsOpenAt] = useState<number | undefined>()
+  const [entryRulesOpenAt, setEntryRulesOpenAt] = useState<number | undefined>()
+  const [exitRulesOpenAt, setExitRulesOpenAt] = useState<number | undefined>()
   const [deletedPredictionIds, setDeletedPredictionIds] = useState<string[]>([])
   const formRef = useRef<HTMLFormElement>(null)
   const initialValuesRef = useRef({ title_markdown: '', body_markdown: '', tagsStr: '' })
@@ -490,58 +511,11 @@ export default function EntryFormPage() {
         setDecisionDialogOpen(true)
       }
 
-      // Ctrl/Cmd+Shift+Q: mark the current paragraph or selection
-      // as a pull quote. Render-time picks up `> ` prefixed
-      // paragraphs and italicises them with a left rule (body
-      // stays plain text on disk).
-      //   - With a selection: prefix each line of the selection
-      //     with `> ` so multi-line quotes just work.
-      //   - Without a selection: insert a `> ` stub on a new
-      //     paragraph at the caret so the writer starts typing
-      //     inside the quote immediately.
-      if (modifier && e.shiftKey && (e.key === 'Q' || e.key === 'q')) {
-        const active = document.activeElement as HTMLTextAreaElement | null
-        if (active && active.tagName === 'TEXTAREA' && active.value === body_markdown) {
-          e.preventDefault()
-          const start = active.selectionStart ?? 0
-          const end = active.selectionEnd ?? 0
-          const hasSelection = end > start
-          if (hasSelection) {
-            const before = body_markdown.slice(0, start)
-            const selected = body_markdown.slice(start, end)
-            const after = body_markdown.slice(end)
-            // Prefix every line in the selection with "> ".
-            const quoted = selected
-              .split('\n')
-              .map((l) => (l.startsWith('> ') ? l : `> ${l}`))
-              .join('\n')
-            setBodyMarkdown(before + quoted + after)
-            setTimeout(() => {
-              const newEnd = before.length + quoted.length
-              active.focus()
-              active.setSelectionRange(newEnd, newEnd)
-            }, 0)
-          } else {
-            // No selection — insert a new blockquote paragraph.
-            const before = body_markdown.slice(0, start)
-            const after = body_markdown.slice(start)
-            const sep = before === '' ? '' : before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n'
-            const insert = `${sep}> `
-            setBodyMarkdown(before + insert + after)
-            setTimeout(() => {
-              const newCaret = before.length + insert.length
-              active.focus()
-              active.setSelectionRange(newCaret, newCaret)
-            }, 0)
-          }
-        }
-      }
-
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isNew, body_markdown])
+  }, [isNew])
 
   const tags = tagsStr
     .split(',')
@@ -582,6 +556,21 @@ export default function EntryFormPage() {
       size: block.size ?? null,
       raw_snippet: buildDecisionBlockMarkdown(block),
     }
+  }
+
+  /** Scroll a RowCard into view by matching its title. Waits ~160ms
+   *  so the MuiCollapse animation on forceOpen can start and the
+   *  target height is stable when the scroll fires. */
+  const scrollCardIntoView = (titleMatch: string) => {
+    setTimeout(() => {
+      // RowCard's title is a `body2` Typography inside a Paper.
+      const papers = Array.from(document.querySelectorAll('.MuiPaper-outlined'))
+      const target = papers.find((p) => {
+        const title = p.querySelector('.MuiTypography-body2')
+        return title?.textContent?.trim() === titleMatch
+      }) as HTMLElement | undefined
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 160)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1238,6 +1227,7 @@ export default function EntryFormPage() {
           description="Probability + by-date bets. Folds the Calibration tab on /analytics."
           count={predictions.length}
           hasValue={predictions.length > 0}
+          forceOpenAt={predictionsOpenAt}
         >
           {predictions.map((p, i) => (
             <ItemRow
@@ -1299,6 +1289,7 @@ export default function EntryFormPage() {
           description="Conditions that trigger a buy (e.g., break of $100 on volume)."
           count={entryRulesList.length}
           hasValue={entryRulesList.length > 0}
+          forceOpenAt={entryRulesOpenAt}
         >
           {entryRulesList.map((rule, i) => (
             <ItemRow
@@ -1345,6 +1336,7 @@ export default function EntryFormPage() {
           description="Conditions that trigger a sell (e.g., stop at $95 or thesis broken)."
           count={exitRulesList.length}
           hasValue={exitRulesList.length > 0}
+          forceOpenAt={exitRulesOpenAt}
         >
           {exitRulesList.map((rule, i) => (
             <ItemRow
@@ -1517,49 +1509,26 @@ export default function EntryFormPage() {
           })
           setBodyMarkdown((prev) => (prev + (prev.endsWith('\n') || prev === '' ? '' : ' ') + d))
         }}
-        onInsertQuote={() => {
-          // Insert a blockquote stub on its own paragraph. The `> `
-          // prefix is the universal convention and renders as an
-          // italic pull quote (serif + left rule) via the render
-          // path. Cursor lands after the "> " so the writer just
-          // keeps typing — no em-dash puzzle to solve.
-          setBodyMarkdown((prev) => {
-            const sep = prev === '' ? '' : prev.endsWith('\n\n') ? '' : prev.endsWith('\n') ? '\n' : '\n\n'
-            return prev + sep + '> '
-          })
-          // Focus the body textarea so the writer can start typing
-          // immediately.
-          setTimeout(() => {
-            const ta = document.querySelector('textarea[placeholder*="thesis"]') as HTMLTextAreaElement | null
-            if (ta) {
-              ta.focus()
-              const end = ta.value.length
-              ta.setSelectionRange(end, end)
-            }
-          }, 40)
-        }}
         onFocusPrediction={() => {
-          // Turn focus mode off so the Predictions card is visible,
-          // and scroll it into view.
+          // Turn focus mode off (so the card is in layout), expand
+          // the RowCard via its force-open signal, then scroll it
+          // into view. The two-step (expand → wait → scroll) avoids
+          // scrolling to a collapsed target the user then has to
+          // click + on.
           setFocusMode(false)
-          setTimeout(() => {
-            document.querySelectorAll('[class*="MuiPaper-root"]').forEach((el) => {
-              if (/Predictions/i.test(el.textContent || '')) {
-                (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' })
-              }
-            })
-          }, 120)
+          setPredictionsOpenAt(Date.now())
+          scrollCardIntoView('Predictions')
         }}
         onFocusWatchlist={() => navigate('/watchlist/new')}
-        onFocusRules={() => {
+        onFocusEntryRules={() => {
           setFocusMode(false)
-          setTimeout(() => {
-            document.querySelectorAll('[class*="MuiPaper-root"]').forEach((el) => {
-              if (/Entry Rules/i.test(el.textContent || '')) {
-                (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' })
-              }
-            })
-          }, 120)
+          setEntryRulesOpenAt(Date.now())
+          scrollCardIntoView('Entry Rules')
+        }}
+        onFocusExitRules={() => {
+          setFocusMode(false)
+          setExitRulesOpenAt(Date.now())
+          scrollCardIntoView('Exit Rules')
         }}
       />
     </Box>

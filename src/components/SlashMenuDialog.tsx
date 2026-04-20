@@ -13,20 +13,20 @@
 import { Box, Dialog, DialogContent, List, ListItemButton, ListItemIcon, ListItemText, Typography } from '@mui/material'
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined'
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined'
-import FormatQuoteIcon from '@mui/icons-material/FormatQuote'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
 import BookmarksIcon from '@mui/icons-material/Bookmarks'
-import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined'
+import LoginIcon from '@mui/icons-material/Login'
+import LogoutIcon from '@mui/icons-material/Logout'
 
 export interface SlashMenuDialogProps {
   open: boolean
   onClose: () => void
   onInsertDecision: () => void
   onInsertDate: () => void
-  onInsertQuote: () => void
   onFocusPrediction: () => void
   onFocusWatchlist: () => void
-  onFocusRules: () => void
+  onFocusEntryRules: () => void
+  onFocusExitRules: () => void
 }
 
 export default function SlashMenuDialog({
@@ -34,18 +34,23 @@ export default function SlashMenuDialog({
   onClose,
   onInsertDecision,
   onInsertDate,
-  onInsertQuote,
   onFocusPrediction,
   onFocusWatchlist,
-  onFocusRules,
+  onFocusEntryRules,
+  onFocusExitRules,
 }: SlashMenuDialogProps) {
+  // Quote-block insertion was removed on the user's request — the
+  // principle of "plain text only in the body" ruled out baking in
+  // a markdown-like `> ` convention. Decisions stay in as an @-mention
+  // because they're structured rows stored separately, not inline
+  // text, which doesn't violate the principle.
   const items: { icon: React.ReactNode; label: string; hint: string; onClick: () => void }[] = [
     { icon: <ArticleOutlinedIcon fontSize="small" />, label: 'Attach a decision', hint: 'Buy / Sell / Pass for this entry', onClick: onInsertDecision },
     { icon: <EventOutlinedIcon fontSize="small" />, label: 'Insert today\'s date', hint: 'e.g. "Sunday, Apr 20"', onClick: onInsertDate },
-    { icon: <FormatQuoteIcon fontSize="small" />, label: 'Insert quote block', hint: '" wrap selection or start a new one "', onClick: onInsertQuote },
     { icon: <QueryStatsIcon fontSize="small" />, label: 'Add a prediction', hint: 'Probability + by-date bet', onClick: onFocusPrediction },
     { icon: <BookmarksIcon fontSize="small" />, label: 'Add a watchlist entry', hint: 'Ticker + alert target', onClick: onFocusWatchlist },
-    { icon: <LightbulbOutlinedIcon fontSize="small" />, label: 'Set entry / exit rules', hint: 'If [X], I buy / sell', onClick: onFocusRules },
+    { icon: <LoginIcon fontSize="small" />, label: 'Set entry rules', hint: 'Conditions that trigger a buy', onClick: onFocusEntryRules },
+    { icon: <LogoutIcon fontSize="small" />, label: 'Set exit rules', hint: 'Conditions that trigger a sell', onClick: onFocusExitRules },
   ]
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>

@@ -85,34 +85,6 @@ interface PlainTextWithTickersProps {
 function renderSegments(line: string, tickerAsLink: boolean) {
   return splitRich(line).map((seg, si) => {
     if (seg.type === 'text') return <span key={si}>{seg.value}</span>
-    if (seg.type === 'watch') {
-      // `#WATCH AAPL` in prose → a small bookmark-styled chip that
-      // links to /watchlist. Keeps the reference visible without
-      // fetching live alert state inline (which would balloon this
-      // component into a data-fetching beast). Click-through goes
-      // to the watchlist page where the reader can see + edit.
-      return (
-        <Chip
-          key={si}
-          component={RouterLink}
-          to="/watchlist"
-          label={`Watchlist · $${seg.symbol}`}
-          size="small"
-          clickable
-          sx={{
-            mx: 0.25,
-            fontSize: '0.78rem',
-            fontWeight: 600,
-            height: 22,
-            color: 'primary.dark',
-            bgcolor: 'primary.50',
-            border: '1px solid',
-            borderColor: 'primary.200',
-            '&:hover': { bgcolor: 'primary.100', borderColor: 'primary.main' },
-          }}
-        />
-      )
-    }
     if (seg.type === 'url') {
       // External link — open in a new tab, scrub the referrer so the
       // user's session isn't leaked, and stop click propagation so
@@ -188,24 +160,10 @@ export default function PlainTextWithTickers({
     <Box>
       {paragraphs.map((para, pi) => {
         const lines = para.split('\n')
-        // Newspaper-style pull quote — paragraph that starts with
-        // `> ` (blockquote convention) or is wrapped `— … —` in
-        // em-dashes. Render italic + serif + left rule. Body stays
-        // plain text on disk; this is pure render-time styling.
-        const trimmed = para.trim()
-        const isBlockQuote = /^>\s/.test(trimmed)
-        // Em-dash wrap — accept `— text —`, `—text—`, or anything
-        // in between. Requires em-dashes (not hyphens) on both ends
-        // so a normal paragraph ending in "—" doesn't accidentally
-        // trigger pull-quote styling.
-        const isEmDashQuote = /^—\s*[\s\S]+?\s*—$/.test(trimmed) && trimmed.length >= 3
-        const isPullQuote = isBlockQuote || isEmDashQuote
-        // Strip the markers before rendering so the prose reads
-        // cleanly. Em-dash wrappers stay visible (they're part of
-        // the editorial feel); > blockquote marker is removed.
-        const renderable = isBlockQuote
-          ? lines.map((l) => l.replace(/^>\s?/, ''))
-          : lines
+        // Plain text only — no special handling for `> ` blockquote
+        // or em-dash wrap. Those were experimental "smart markdown"
+        // render rules that violated the "body is plain text on
+        // disk" principle, so they were removed on 2026-04-20.
         return (
           <Typography
             key={pi}
@@ -216,22 +174,9 @@ export default function PlainTextWithTickers({
               whiteSpace: 'normal',
               overflowWrap: 'break-word',
               wordBreak: 'break-word',
-              ...(isPullQuote
-                ? {
-                    fontFamily: "'Source Serif 4', 'Iowan Old Style', 'Charter', 'Georgia', serif",
-                    fontStyle: 'italic',
-                    borderLeft: '3px solid',
-                    borderColor: 'primary.light',
-                    pl: 1.5,
-                    color: 'text.primary',
-                    fontSize: dense ? '1rem' : '1.1rem',
-                    lineHeight: 1.55,
-                    my: 1.25,
-                  }
-                : {}),
             }}
           >
-            {renderable.map((line, li) => (
+            {lines.map((line, li) => (
               <span key={li}>
                 {li > 0 && <br />}
                 {renderSegments(line, tickerAsLink)}

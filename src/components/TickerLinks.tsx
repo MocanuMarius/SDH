@@ -72,16 +72,6 @@ export default function TickerLinks({
         if (seg.type === 'text') {
           return <span key={i}>{seg.value}</span>
         }
-        if (seg.type === 'watch') {
-          // `#WATCH AAPL` inline in short prose (decision reasons,
-          // notes) — render as compact tag rather than the full
-          // Watchlist chip; the surrounding context is already tight.
-          return (
-            <Box component="span" key={i} sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
-              {`(watchlist: $${seg.symbol})`}
-            </Box>
-          )
-        }
         if (seg.type === 'url') {
           // External link — same styling shape as the ticker "link"
           // variant so they read as one family. target="_blank" with
