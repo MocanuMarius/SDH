@@ -30,6 +30,38 @@ export interface AutoSavedKickerProps {
   lastSavedAt: number | null
   /** Has the user typed anything yet? Hides the kicker entirely if not. */
   hasContent: boolean
+  /** Recent auto-save timestamps (newest last). Used to render a
+   *  tiny sparkline showing how long the writer has been at this. */
+  saveHistory?: number[]
+  /** Words added since the page mounted. Shown as a quiet badge so
+   *  the writer can see prolific sessions ("420 words this session"). */
+  sessionWordsWritten?: number
+}
+
+/** Sparkline of save events along the last 60 minutes. Each tick is
+ *  an autosave; their horizontal placement maps to time-since-save.
+ *  Pure SVG, no lib. */
+function SaveSparkline({ saves }: { saves: number[] }) {
+  if (!saves || saves.length < 2) return null
+  const now = Date.now()
+  const span = 60 * 60 * 1000 // 60 min window
+  const oldest = Math.min(...saves)
+  const start = Math.min(now - span, oldest)
+  const points = saves.map((t) => ({
+    x: ((t - start) / (now - start)) * 100,
+  }))
+  return (
+    <Box
+      aria-hidden
+      sx={{ display: 'inline-flex', alignItems: 'center', height: 12, ml: 0.5 }}
+    >
+      <svg width={48} height={12} viewBox="0 0 100 12" preserveAspectRatio="none">
+        {points.map((p, i) => (
+          <circle key={i} cx={p.x} cy={6} r={1.4} fill="currentColor" opacity={0.55} />
+        ))}
+      </svg>
+    </Box>
+  )
 }
 
 function formatRelative(now: number, then: number): string {
@@ -42,7 +74,7 @@ function formatRelative(now: number, then: number): string {
   return 'a while ago'
 }
 
-export default function AutoSavedKicker({ isNew, lastSavedAt, hasContent }: AutoSavedKickerProps) {
+export default function AutoSavedKicker({ isNew, lastSavedAt, hasContent, saveHistory = [], sessionWordsWritten = 0 }: AutoSavedKickerProps) {
   const [tick, setTick] = useState(0)
   const [pulse, setPulse] = useState(false)
   const lastShownRef = useRef<number | null>(null)
@@ -114,6 +146,21 @@ export default function AutoSavedKicker({ isNew, lastSavedAt, hasContent }: Auto
       >
         Draft saved {formatRelative(Date.now(), lastSavedAt)}
       </Typography>
+      <SaveSparkline saves={saveHistory} />
+      {sessionWordsWritten > 50 && (
+        <Typography
+          variant="caption"
+          sx={{
+            fontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+            fontSize: '0.68rem',
+            color: 'text.disabled',
+            ml: 0.75,
+            letterSpacing: '0.04em',
+          }}
+        >
+          · +{sessionWordsWritten} words this session
+        </Typography>
+      )}
     </Box>
   )
 }

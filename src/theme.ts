@@ -220,6 +220,14 @@ const theme = createTheme({
         '*::-webkit-scrollbar-corner': {
           background: 'transparent',
         },
+        // Typewriter-scroll anchor — when the writing surface is in
+        // focus mode the page sets `body[data-focus-writing="true"]`,
+        // and this rule tells the browser to keep the caret 45vh
+        // above the bottom edge. Native caret-into-view scrolling
+        // then effectively centers the composing line vertically.
+        'body[data-focus-writing="true"]': {
+          scrollPaddingBottom: '45vh',
+        },
         // Warm "ink marker" selection — replaces the browser's default
         // system blue with a soft tinted highlight in the app's primary
         // palette. Reads as a newspaper reader-highlight (the kind you

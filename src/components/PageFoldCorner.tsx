@@ -22,6 +22,10 @@ export interface PageFoldCornerProps {
   /** Absolute-position overlay placement. Parent must have a
    *  `position: relative` (or similar) for this to latch on. */
   corner?: 'top-right' | 'top-left'
+  /** When true, the fold animates in from size 0 with a short
+   *  rotate flourish. Used once on "entry just saved" so it reads
+   *  as the dog-ear being turned by the reader. */
+  animate?: boolean
 }
 
 const SIZES = { sm: 20, md: 28, lg: 36 }
@@ -31,6 +35,7 @@ export default function PageFoldCorner({
   underside,
   shadow,
   corner = 'top-right',
+  animate = false,
 }: PageFoldCornerProps) {
   const s = SIZES[size]
   const side = corner === 'top-right' ? 'right' : 'left'
@@ -44,6 +49,18 @@ export default function PageFoldCorner({
         width: s,
         height: s,
         pointerEvents: 'none',
+        ...(animate ? {
+          transformOrigin: corner === 'top-right' ? '100% 0%' : '0% 0%',
+          animation: 'fold-dog-ear 560ms cubic-bezier(0.22, 1, 0.36, 1) forwards',
+          '@keyframes fold-dog-ear': {
+            '0%':   { transform: 'scale(0) rotate(-12deg)', opacity: 0 },
+            '60%':  { transform: 'scale(1.08) rotate(3deg)', opacity: 1 },
+            '100%': { transform: 'scale(1) rotate(0deg)', opacity: 1 },
+          },
+          '@media (prefers-reduced-motion: reduce)': {
+            animation: 'none',
+          },
+        } : {}),
         // Two stacked triangles: the first is the visible folded-down
         // "underside" triangle, the second is a thin soft shadow
         // extending to suggest the fold's volume. Border-only trick —

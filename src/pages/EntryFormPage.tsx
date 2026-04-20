@@ -41,6 +41,9 @@ import { getTagPresets } from '../utils/tagPresets'
 import TagChip from '../components/TagChip'
 import BodyWritingFooter from '../components/BodyWritingFooter'
 import AutoSavedKicker from '../components/AutoSavedKicker'
+import PendingDraftBanner from '../components/PendingDraftBanner'
+import ComparableEntries from '../components/ComparableEntries'
+import SlashMenuDialog from '../components/SlashMenuDialog'
 import { todayISO } from '../utils/dates'
 
 const getToday = todayISO
@@ -220,6 +223,7 @@ export default function EntryFormPage() {
   const [newPredDate, setNewPredDate] = useState('')
   const [decision_horizon, setDecisionHorizon] = useState('')
   const [decisionDialogOpen, setDecisionDialogOpen] = useState(false)
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false)
   const [deletedPredictionIds, setDeletedPredictionIds] = useState<string[]>([])
   const formRef = useRef<HTMLFormElement>(null)
   const initialValuesRef = useRef({ title_markdown: '', body_markdown: '', tagsStr: '' })
@@ -240,23 +244,73 @@ export default function EntryFormPage() {
   const DRAFT_KEY = 'sdh_entry_draft'
   const lastSaveRef = useRef(0)
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
+  /** Pick-up-where-you-left banner — when a draft > 24h old exists
+   *  in localStorage, we don't silently merge it into the form.
+   *  We hold it here and render a gentle prompt that lets the user
+   *  choose to continue or discard. */
+  const [pendingDraft, setPendingDraft] = useState<null | {
+    title_markdown?: string
+    body_markdown?: string
+    tagsStr?: string
+    savedAt: number
+  }>(null)
+  /** Cumulative session-delta word count — words added since the
+   *  page mounted. Silent badge ("You've written 420 words this
+   *  session"). Doesn't decrement on deletes because what you
+   *  wrote, you wrote. */
+  const startWordCountRef = useRef<number | null>(null)
+  const [sessionWordsWritten, setSessionWordsWritten] = useState(0)
+  /** Ring-buffer of the last 12 auto-save timestamps, for the
+   *  save-sparkline visualisation in the kicker. Ephemeral —
+   *  doesn't persist, just shows "you've been at this today". */
+  const [saveHistory, setSaveHistory] = useState<number[]>([])
 
   // Focus mode — hides every optional structured-card so the writer
   // sees nothing but headline + body + save bar. Default off; the
   // toggle (eye icon) lives next to the save bar.
   const [focusMode, setFocusMode] = useState(false)
 
+  // Typewriter scroll — when focus mode is on, tag the <body> so
+  // global CSS applies scroll-padding-bottom: 45vh. Native caret-
+  // into-view scrolling then keeps the caret ~55vh from the top as
+  // the user types, giving the composing line a stable vertical
+  // anchor. Clears the attribute on unmount or toggle-off so other
+  // pages don't inherit the padding.
+  useEffect(() => {
+    if (focusMode) {
+      document.body.dataset.focusWriting = 'true'
+    } else {
+      delete document.body.dataset.focusWriting
+    }
+    return () => { delete document.body.dataset.focusWriting }
+  }, [focusMode])
+
   useEffect(() => {
     if (!isNew) return
-    // Restore draft on mount (never restore date — always use today)
+    // Restore draft on mount. Fresh drafts (< 24h old) flow in
+    // silently — that's the common case where the user closed the
+    // tab mid-entry and came back. Older drafts (> 24h) surface in
+    // a gentle banner instead; silently merging a week-old draft
+    // into today's new-entry flow is surprising and a common cause
+    // of "why is this text here?" questions.
     try {
       const raw = localStorage.getItem(DRAFT_KEY)
       if (raw) {
-        const draft = JSON.parse(raw) as Record<string, string>
-        if (draft.title_markdown) setTitleMarkdown(draft.title_markdown)
-        if (draft.body_markdown) setBodyMarkdown(draft.body_markdown)
-        if (draft.tagsStr) setTagsStr(draft.tagsStr)
-        // Date intentionally not restored — always default to today
+        const draft = JSON.parse(raw) as { title_markdown?: string; body_markdown?: string; tagsStr?: string; savedAt?: number }
+        const age = draft.savedAt ? Date.now() - draft.savedAt : 0
+        if (draft.savedAt && age > 24 * 60 * 60 * 1000) {
+          // Stale — show banner, let user decide.
+          setPendingDraft({
+            title_markdown: draft.title_markdown,
+            body_markdown: draft.body_markdown,
+            tagsStr: draft.tagsStr,
+            savedAt: draft.savedAt,
+          })
+        } else {
+          if (draft.title_markdown) setTitleMarkdown(draft.title_markdown)
+          if (draft.body_markdown) setBodyMarkdown(draft.body_markdown)
+          if (draft.tagsStr) setTagsStr(draft.tagsStr)
+        }
       }
     } catch { /* ignore */ }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -305,12 +359,32 @@ export default function EntryFormPage() {
       if (!title_markdown && !body_markdown) return
       lastSaveRef.current = now
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        title_markdown, body_markdown, tagsStr,
+        title_markdown, body_markdown, tagsStr, savedAt: now,
       }))
       setLastSavedAt(now)
+      // Record the save in the ring buffer for the sparkline. Keep
+      // only the last 12 entries so the SVG stays cheap to render.
+      setSaveHistory((prev) => [...prev.slice(-11), now])
     }, 30000)
     return () => clearInterval(timer)
   }, [isNew, title_markdown, body_markdown, tagsStr])
+
+  // Session-delta word count — establish a baseline on first
+  // meaningful render (so an edit flow starts at 0 added words,
+  // and a restored fresh draft starts at its current count).
+  useEffect(() => {
+    if (startWordCountRef.current != null) return
+    const baseline = (body_markdown.match(/\S+/g) || []).length
+    startWordCountRef.current = baseline
+  }, [body_markdown])
+
+  // Recompute session words-added whenever body changes.
+  useEffect(() => {
+    if (startWordCountRef.current == null) return
+    const now = (body_markdown.match(/\S+/g) || []).length
+    const added = Math.max(0, now - startWordCountRef.current)
+    setSessionWordsWritten(added)
+  }, [body_markdown])
 
   // Clear draft on successful save
   const clearDraft = useCallback(() => {
@@ -403,11 +477,38 @@ export default function EntryFormPage() {
         setDecisionDialogOpen(true)
       }
 
+      // Ctrl/Cmd+Shift+Q: wrap the current body-textarea selection
+      // in em-dashes to mark it as a pull quote. Purely a typing
+      // affordance — the render-time path picks up em-dash-wrapped
+      // prose and italicises it with a left rule. Body stays plain
+      // text on disk.
+      if (modifier && e.shiftKey && (e.key === 'Q' || e.key === 'q')) {
+        const active = document.activeElement as HTMLTextAreaElement | null
+        if (active && active.tagName === 'TEXTAREA' && active.value === body_markdown) {
+          e.preventDefault()
+          const start = active.selectionStart ?? 0
+          const end = active.selectionEnd ?? 0
+          if (end > start) {
+            const before = body_markdown.slice(0, start)
+            const selected = body_markdown.slice(start, end)
+            const after = body_markdown.slice(end)
+            const wrapped = `— ${selected.trim()} —`
+            setBodyMarkdown(before + wrapped + after)
+            // Move caret to the end of the wrapped chunk on next tick.
+            setTimeout(() => {
+              const newEnd = before.length + wrapped.length
+              active.focus()
+              active.setSelectionRange(newEnd, newEnd)
+            }, 0)
+          }
+        }
+      }
+
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isNew])
+  }, [isNew, body_markdown])
 
   const tags = tagsStr
     .split(',')
@@ -554,8 +655,15 @@ export default function EntryFormPage() {
         // Stay on the form — the user can fix the problem (or screenshot the
         // error) and retry. Navigating away would silently lose the work.
       } else {
-        showSuccess(isNew ? 'Entry created' : 'Entry saved')
-        if (entryId) navigate(`/entries/${entryId}`)
+        // Editorial signature on the success toast — ¶ (pilcrow) is
+        // the classic copy-editor's "end of thought" mark. Quiet
+        // editorial approval that pairs with the ¶-style aesthetic
+        // everywhere else in the app.
+        showSuccess(isNew ? 'Entry created  ¶' : 'Entry saved  ¶')
+        // Pass a `justCreated` flag via navigation state so the
+        // detail page can animate the fold-corner dog-ear in as a
+        // visual "saved a page" moment.
+        if (entryId) navigate(`/entries/${entryId}`, { state: { justCreated: isNew, justSaved: !isNew } })
       }
 
       // Save predictions — delete any the user removed, create any new ones.
@@ -613,6 +721,21 @@ export default function EntryFormPage() {
         title={isNew ? 'New journal entry' : 'Edit journal entry'}
         dense
       />
+      {pendingDraft && (
+        <PendingDraftBanner
+          draft={pendingDraft}
+          onContinue={() => {
+            if (pendingDraft.title_markdown) setTitleMarkdown(pendingDraft.title_markdown)
+            if (pendingDraft.body_markdown) setBodyMarkdown(pendingDraft.body_markdown)
+            if (pendingDraft.tagsStr) setTagsStr(pendingDraft.tagsStr)
+            setPendingDraft(null)
+          }}
+          onDiscard={() => {
+            localStorage.removeItem(DRAFT_KEY)
+            setPendingDraft(null)
+          }}
+        />
+      )}
       {error && (
         <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>
           {error}
@@ -667,6 +790,56 @@ export default function EntryFormPage() {
         />
       </Box>
 
+      {/* Masthead date-line — italic serif kicker between headline
+          and body, like a newspaper's "Sunday, April 20, 2026 · Your
+          desk" slug. Quietly grounds the entry in time. Fades in
+          50ms after the body so the rhythm reads: title → dateline
+          → page arrives. */}
+      <Box
+        aria-hidden
+        sx={{
+          mb: 1,
+          opacity: 0,
+          animation: 'masthead-fade 260ms ease-out 120ms forwards',
+          '@keyframes masthead-fade': {
+            from: { opacity: 0, transform: 'translateY(2px)' },
+            to: { opacity: 1, transform: 'translateY(0)' },
+          },
+          '@media (prefers-reduced-motion: reduce)': {
+            opacity: 1,
+            animation: 'none',
+          },
+        }}
+      >
+        <Typography
+          variant="caption"
+          sx={{
+            fontFamily: "'Source Serif 4', 'Iowan Old Style', 'Charter', 'Georgia', serif",
+            fontStyle: 'italic',
+            color: 'text.disabled',
+            fontSize: '0.82rem',
+            letterSpacing: '0.02em',
+          }}
+        >
+          {(() => {
+            // Format the (possibly user-edited) date field as a
+            // newspaper-style slug. Uses user-locale weekday + long
+            // month for readability.
+            try {
+              const d = new Date(date + 'T00:00:00')
+              return d.toLocaleDateString(undefined, {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+              }) + ' · Your desk'
+            } catch {
+              return ''
+            }
+          })()}
+        </Typography>
+      </Box>
+
       {/* Tags row — entry-level metadata, lives above the body editor not inside it. */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1, flexWrap: 'wrap' }}>
           <Typography variant="overline" color="text.secondary" sx={{ fontWeight: 700, letterSpacing: '0.06em', minWidth: 44 }}>
@@ -715,6 +888,19 @@ export default function EntryFormPage() {
           bgcolor: 'background.paper',
           position: 'relative',
           overflow: 'hidden',
+          // Rhythm reveal — the body arrives ~180ms after the title
+          // + dateline. Small slide-in from 4px. Skipped on
+          // reduced-motion.
+          opacity: 0,
+          animation: 'body-paper-arrive 320ms cubic-bezier(0.22, 1, 0.36, 1) 180ms forwards',
+          '@keyframes body-paper-arrive': {
+            from: { opacity: 0, transform: 'translateY(4px)' },
+            to: { opacity: 1, transform: 'translateY(0)' },
+          },
+          '@media (prefers-reduced-motion: reduce)': {
+            opacity: 1,
+            animation: 'none',
+          },
           transition: 'box-shadow 260ms ease, border-color 260ms ease, background-color 260ms ease',
           // Focus-within lifts the editor subtly, warms the paper
           // and pulls a primary hairline along the left margin.
@@ -767,6 +953,17 @@ export default function EntryFormPage() {
               if (!looksLikeEmail) {
                 setBodyMarkdown(next.slice(0, -1))
                 setDecisionDialogOpen(true)
+                return
+              }
+            }
+            // /-slash menu: same gating as @. Strips the slash and
+            // opens the insert-anything menu.
+            if (grew && lastChar === '/') {
+              const before = next[next.length - 2] ?? ''
+              const inWord = /\w/.test(before)
+              if (!inWord) {
+                setBodyMarkdown(next.slice(0, -1))
+                setSlashMenuOpen(true)
                 return
               }
             }
@@ -828,7 +1025,13 @@ export default function EntryFormPage() {
           color: 'text.secondary',
         }}
       >
-        <AutoSavedKicker isNew={isNew} lastSavedAt={lastSavedAt} hasContent={Boolean(title_markdown.trim() || body_markdown.trim())} />
+        <AutoSavedKicker
+          isNew={isNew}
+          lastSavedAt={lastSavedAt}
+          hasContent={Boolean(title_markdown.trim() || body_markdown.trim())}
+          saveHistory={saveHistory}
+          sessionWordsWritten={sessionWordsWritten}
+        />
         <Tooltip title={focusMode ? 'Show structured fields' : 'Focus on writing — hide structured fields'}>
           <Button
             size="small"
@@ -849,6 +1052,13 @@ export default function EntryFormPage() {
           </Button>
         </Tooltip>
       </Box>
+
+      <ComparableEntries
+        draftText={`${title_markdown} ${body_markdown}`}
+        draftTags={tagValues}
+        hidden={focusMode}
+        excludeEntryId={id}
+      />
 
       {/* Optional context — each row is a mini card that expands on + click.
           Hidden in focus mode so the writer sees only the headline + body
@@ -1232,9 +1442,20 @@ export default function EntryFormPage() {
               title_markdown !== initialValuesRef.current.title_markdown ||
               body_markdown !== initialValuesRef.current.body_markdown ||
               tagsStr !== initialValuesRef.current.tagsStr
-            if (isDirty && !window.confirm('Discard unsaved changes?')) {
-              e.preventDefault()
-              return
+            if (isDirty) {
+              // Stay-in-the-flow warning — instead of a terse
+              // "Discard unsaved changes?" bark, give the writer a
+              // soft reminder of what they were just doing. If they
+              // were typing within the last 60s, emphasize that.
+              const typingRecently = lastSaveRef.current === 0
+                || Date.now() - lastSaveRef.current < 60_000
+              const msg = typingRecently && sessionWordsWritten > 0
+                ? `You were writing — ${sessionWordsWritten} word${sessionWordsWritten === 1 ? '' : 's'} added in this session. Leave without saving?`
+                : 'Leave without saving?'
+              if (!window.confirm(msg)) {
+                e.preventDefault()
+                return
+              }
             }
             if (isNew) clearDraft()
           }}
@@ -1250,6 +1471,47 @@ export default function EntryFormPage() {
         onClose={() => setDecisionDialogOpen(false)}
         onInsert={handleInsertDecisionBlock}
         defaultTicker={titleTickerHint}
+      />
+      <SlashMenuDialog
+        open={slashMenuOpen}
+        onClose={() => setSlashMenuOpen(false)}
+        onInsertDecision={() => setDecisionDialogOpen(true)}
+        onInsertDate={() => {
+          // Drop a newspaper-style date line at the caret. The
+          // render path will pick it up as plain prose.
+          const d = new Date().toLocaleDateString(undefined, {
+            weekday: 'long', month: 'long', day: 'numeric',
+          })
+          setBodyMarkdown((prev) => (prev + (prev.endsWith('\n') || prev === '' ? '' : ' ') + d))
+        }}
+        onInsertQuote={() => {
+          // Seed a pull-quote stub at the caret. User types the quote
+          // between the em-dashes and the render path italicises it.
+          setBodyMarkdown((prev) => (prev + (prev.endsWith('\n') || prev === '' ? '' : '\n\n') + '— — '))
+        }}
+        onFocusPrediction={() => {
+          // Turn focus mode off so the Predictions card is visible,
+          // and scroll it into view.
+          setFocusMode(false)
+          setTimeout(() => {
+            document.querySelectorAll('[class*="MuiPaper-root"]').forEach((el) => {
+              if (/Predictions/i.test(el.textContent || '')) {
+                (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }
+            })
+          }, 120)
+        }}
+        onFocusWatchlist={() => navigate('/watchlist/new')}
+        onFocusRules={() => {
+          setFocusMode(false)
+          setTimeout(() => {
+            document.querySelectorAll('[class*="MuiPaper-root"]').forEach((el) => {
+              if (/Entry Rules/i.test(el.textContent || '')) {
+                (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }
+            })
+          }, 120)
+        }}
       />
     </Box>
   )

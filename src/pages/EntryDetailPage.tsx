@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom'
+import { useParams, useNavigate, Link as RouterLink, useLocation } from 'react-router-dom'
 import { Box, Button, Chip, Typography, Alert, Stack, Skeleton, Paper, Link, useMediaQuery, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Tabs, Tab, InputAdornment } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import { useTheme } from '@mui/material/styles'
@@ -55,6 +55,12 @@ import type { EntryPrediction } from '../types/database'
 export default function EntryDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
+  // Detail page reads the navigation state set by EntryFormPage on
+  // save. When `justCreated`/`justSaved` is true, the fold-corner
+  // animates in as a "saved a page" flourish.
+  const locationState = location.state as { justCreated?: boolean; justSaved?: boolean } | null
+  const animateFoldCorner = Boolean(locationState?.justCreated || locationState?.justSaved)
   const { user } = useAuth()
   const { showSuccess, showError } = useSnackbar()
   const muiTheme = useTheme()
@@ -373,7 +379,7 @@ export default function EntryDetailPage() {
         >
           {/* Folded-corner ornament: quiet editorial signature that
               the reader is on an "opened" article page. */}
-          <PageFoldCorner size="md" />
+          <PageFoldCorner size="md" animate={animateFoldCorner} />
           <PlainTextWithTickers source={entry.body_markdown} dense />
           <ContinuedFooter source={entry.body_markdown} />
         </Paper>
