@@ -244,6 +244,12 @@ export default function EntryFormPage() {
   const DRAFT_KEY = 'sdh_entry_draft'
   const lastSaveRef = useRef(0)
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
+  /** Snapshot of the content at the last successful autosave.
+   *  Compared against current content each tick so we don't rewrite
+   *  localStorage (and reset the "just now" kicker) when the writer
+   *  has paused. Without this, the indicator flips between "30s ago"
+   *  and "just now" every 30s forever — misleading and annoying. */
+  const lastSavedContentRef = useRef<string>('')
   /** Pick-up-where-you-left banner — when a draft > 24h old exists
    *  in localStorage, we don't silently merge it into the form.
    *  We hold it here and render a gentle prompt that lets the user
@@ -357,7 +363,14 @@ export default function EntryFormPage() {
       const now = Date.now()
       if (now - lastSaveRef.current < 25000) return
       if (!title_markdown && !body_markdown) return
+      // Skip when content hasn't changed since the last save. The
+      // earlier code wrote localStorage every 30s even on idle
+      // content, which kept `lastSavedAt = now` and made the kicker
+      // read "just now" forever — the writer sees no time passing.
+      const contentKey = `${title_markdown}\u0000${body_markdown}\u0000${tagsStr}`
+      if (contentKey === lastSavedContentRef.current) return
       lastSaveRef.current = now
+      lastSavedContentRef.current = contentKey
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
         title_markdown, body_markdown, tagsStr, savedAt: now,
       }))
