@@ -58,6 +58,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import BottomSheet from './BottomSheet'
 import type { Outcome, OutcomeDriver, ProcessOutcomeQuality, ErrorType } from '../types/database'
 import { ERROR_TYPES } from '../types/database'
+import { todayISO } from '../utils/dates'
 import { ERROR_TYPE_LABELS } from '../utils/errorTypeLabels'
 
 const SECTION_HEADING_SX = { fontWeight: 600, fontSize: '0.8rem', color: 'text.secondary', mb: 1, mt: 0.5 }
@@ -150,7 +151,7 @@ function processScoreToVerdict(score: number | null | undefined): ProcessVerdict
   return score >= 3 ? 'sound' : 'gaps'
 }
 
-const getToday = () => new Date().toISOString().slice(0, 10)
+const getToday = todayISO
 const DRIVER_OPTIONS: { value: OutcomeDriver; label: string }[] = [
   { value: null, label: 'Not set' },
   { value: 'thesis', label: 'Thesis (the writeup drove the result)' },

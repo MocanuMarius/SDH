@@ -15,7 +15,9 @@
     "dev:api": "node scripts/serve-chart-api.js",
     "backfill:titles": "node scripts/backfill-untitled-entry-titles.js",
     "strip:legacy-markdown": "node scripts/strip-legacy-markdown.js",
-    "watchlist:monitor": "node scripts/watchlist-monitor.js"
+    "watchlist:monitor": "node scripts/watchlist-monitor.js",
+    "db:migrate": "node scripts/apply-pending-migrations.mjs",
+    "db:audit": "node scripts/audit-schema.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.13.5",
@@ -54,6 +56,7 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.12.0",
+    "pg": "^8.20.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "typescript": "~5.6.2",

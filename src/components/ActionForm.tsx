@@ -45,6 +45,7 @@ import TickerAutocomplete from './TickerAutocomplete'
 import DecisionChip from './DecisionChip'
 import ReasonField from './ReasonField'
 import { getCustomDecisionTypes } from '../utils/customDecisionTypes'
+import { todayISO, daysAgoISO } from '../utils/dates'
 
 interface ActionFormProps {
   onSubmit: (data: {
@@ -68,7 +69,7 @@ interface ActionFormProps {
   initial?: Partial<Action> | null
 }
 
-const getToday = () => new Date().toISOString().slice(0, 10)
+const getToday = todayISO
 
 /** Convert YYYY-MM-DD to DDMMMYY format for option tickers (e.g., 2027-01-15 → 15JAN27) */
 function formatOptionDate(dateStr: string): string {
@@ -80,11 +81,7 @@ function formatOptionDate(dateStr: string): string {
   return `${day}${mon}${year}`
 }
 
-const daysAgo = (n: number) => {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
-}
+const daysAgo = daysAgoISO
 
 export default function ActionForm({
   onSubmit,
@@ -197,6 +194,13 @@ export default function ActionForm({
     }
     if ((type === 'buy' || type === 'add_more') && !reason.trim()) {
       setError('Reason is required for Buy decisions.')
+      return
+    }
+    // Pass decisions exist precisely to capture WHY you didn't buy —
+    // a pass with no reason is just noise. Enforce it so the Passed
+    // review loop has something to score months later.
+    if (type === 'pass' && !reason.trim()) {
+      setError('Reason is required for Pass decisions — the whole point is capturing why you skipped.')
       return
     }
     setError(null)

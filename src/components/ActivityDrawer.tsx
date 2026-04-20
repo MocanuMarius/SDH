@@ -57,6 +57,7 @@ import { getDismissedStaleIdeas, dismissStaleIdea } from '../utils/dismissedStal
 import RelativeDate from './RelativeDate'
 import type { Reminder, ActionType } from '../types/database'
 import { SectionTitle, EmptyState } from './system'
+import { useSnackbar } from '../contexts/SnackbarContext'
 
 function addDaysToToday(days: number): string {
   const d = new Date()
@@ -282,6 +283,7 @@ function renderReminderCard(
 export default function ActivityDrawer({ open, onClose, onRefresh }: RemindersDrawerProps) {
   const { user } = useAuth()
   const invalidate = useInvalidate()
+  const { showError } = useSnackbar()
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [entryTitles, setEntryTitles] = useState<Record<string, string>>({})
   const [ideaAlerts, setIdeaAlerts] = useState<IdeaAlert[]>([])
@@ -479,6 +481,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: RemindersDr
       onRefresh?.()
     } catch (err) {
       console.error('snooze reminder failed', err)
+      showError(err instanceof Error ? err.message : 'Failed to snooze reminder')
     }
   }
 
@@ -499,6 +502,7 @@ export default function ActivityDrawer({ open, onClose, onRefresh }: RemindersDr
       onRefresh?.()
     } catch (err) {
       console.error('snooze idea failed', err)
+      showError(err instanceof Error ? err.message : 'Failed to snooze idea')
     }
   }
 

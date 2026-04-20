@@ -36,14 +36,10 @@ import ReasonField from './ReasonField'
 import { ACTION_TYPES, ACTION_SIZES, isDirectionalAction } from '../types/database'
 import type { ActionSize } from '../types/database'
 import { getCustomDecisionTypes } from '../utils/customDecisionTypes'
+import { todayISO, daysAgoISO } from '../utils/dates'
 
-const getToday = () => new Date().toISOString().slice(0, 10)
-
-const daysAgo = (n: number) => {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
-}
+const getToday = todayISO
+const daysAgo = daysAgoISO
 
 interface InsertDecisionBlockDialogProps {
   open: boolean

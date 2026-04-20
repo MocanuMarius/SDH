@@ -99,8 +99,12 @@ export interface Action {
   kill_criteria?: string | null
   /** F22: If this decision fails, what is the most likely reason? */
   pre_mortem_text?: string | null
-  /** Relative trade size. null for non-directional decisions. Defaults to 'medium'. */
-  size?: ActionSize | null
+  /** Relative trade size. null for non-directional decisions. Defaults
+   *  to 'medium'. Required in the TS model so code paths that build an
+   *  Action payload can't silently forget to include it (which the 12-
+   *  flow audit on 2026-04-20 noticed was inconsistent — DB column is
+   *  NOT NULL with a default, but the TS optional `?` hid that fact). */
+  size: ActionSize | null
   raw_snippet: string | null
   created_at: string
   updated_at: string
@@ -147,9 +151,6 @@ export interface Outcome {
   error_type?: ErrorType[] | null
   /** F29: "What I remember now" — compare to pre-decision record to surface hindsight bias */
   what_i_remember_now?: string | null
-  /** Vestigial — used to link an outcome to a dividend row written by
-   *  the broker importer. Importer is gone; column stays harmless. */
-  linked_dividend_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -167,7 +168,6 @@ export type OutcomeInsert = Omit<Outcome, 'id' | 'created_at' | 'updated_at'> & 
   closing_memo?: string | null
   error_type?: ErrorType[] | null
   what_i_remember_now?: string | null
-  linked_dividend_id?: string | null
 }
 
 export type OutcomeUpdate = Partial<Omit<Outcome, 'id' | 'action_id' | 'created_at'>>

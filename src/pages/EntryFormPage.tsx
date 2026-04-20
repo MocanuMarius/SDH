@@ -36,8 +36,9 @@ import TickerDollarField from '../components/TickerDollarField'
 import DecisionChip from '../components/DecisionChip'
 import { getTagPresets } from '../utils/tagPresets'
 import TagChip from '../components/TagChip'
+import { todayISO } from '../utils/dates'
 
-const getToday = () => new Date().toISOString().slice(0, 10)
+const getToday = todayISO
 
 const EMPTY = {
   get date() { return getToday() },
@@ -243,7 +244,12 @@ export default function EntryFormPage() {
     }
 
     if (title) setTitleMarkdown(title)
-    if (url) setBodyMarkdown(`[${title || 'Shared article'}](${url})`)
+    // Plain text only — the body is the source of truth as plain text
+    // per PRINCIPLES.md, so don't write `[title](url)` markdown link
+    // syntax. The URL is still autolinked at render time by
+    // `getRichSegments`; users see it as a clickable blue link either
+    // way, but the DB keeps a clean plain-text body.
+    if (url) setBodyMarkdown(title ? `${title}\n${url}` : url)
 
     // Auto-tag based on source domain
     if (url) {

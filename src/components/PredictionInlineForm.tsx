@@ -27,6 +27,7 @@ import {
   Typography,
 } from '@mui/material'
 import type { EntryPrediction } from '../types/database'
+import { todayISO } from '../utils/dates'
 import TickerAutocomplete from './TickerAutocomplete'
 
 const PREDICTION_TYPES = ['price', 'revenue', 'margin', 'other'] as const
@@ -45,7 +46,7 @@ interface PredictionInlineFormProps {
   initial?: EntryPrediction | null
 }
 
-const getToday = () => new Date().toISOString().slice(0, 10)
+const getToday = todayISO
 
 function probabilityLabel(p: number): string {
   if (p <= 10) return 'Very unlikely'

@@ -124,6 +124,23 @@ export async function updateEntry(id: string, patch: EntryUpdate): Promise<Entry
 }
 
 export async function deleteEntry(id: string): Promise<void> {
+  // The FK `actions.entry_id → entries.id` is declared ON DELETE SET
+  // NULL (intentional: the feature permits "standalone decisions"
+  // that live outside any entry). That means a plain DELETE on
+  // entries leaves this entry's action rows in the DB with entry_id
+  // set to null — orphaned rows that still show up in the Tickers
+  // list and actions feed, and still carry any outcomes that
+  // cascaded from them. The ConfirmDialog copy promises "this will
+  // permanently delete this journal entry and all its actions and
+  // outcomes" so the user reasonably expects cleanup here. Do it
+  // explicitly before dropping the entry: actions → CASCADE → outcomes.
+  // entry_predictions, reminders, entry_valuations all cascade via
+  // their own FKs so we don't need to touch them.
+  const { error: actErr } = await supabase
+    .from('actions')
+    .delete()
+    .eq('entry_id', id)
+  if (actErr) throw actErr
   const { error } = await supabase.from(TABLE).delete().eq('id', id)
   if (error) throw error
 }

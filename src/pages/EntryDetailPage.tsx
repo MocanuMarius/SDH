@@ -160,7 +160,12 @@ export default function EntryDetailPage() {
       await deleteReminder(reminderId)
       invalidate.reminders()
     } catch (err) {
+      // Surface the failure — earlier this was a console-only silent
+      // drop, which meant a schema/RLS mismatch would leave the
+      // reminder visibly stuck in the list with no hint why.
       console.error('delete reminder failed', err)
+      const msg = err instanceof Error ? err.message : 'Failed to delete reminder'
+      showError(msg)
     }
   }
 
