@@ -65,9 +65,16 @@ export function getRichSegments(text: string | null | undefined): RichSegment[] 
     if (m.groups?.url) {
       segments.push({ type: 'url', href: m[0] })
     } else {
-      // Capture group 2 is the ticker symbol after the `$` (the
-      // ticker part of the combined alternation).
-      const symbol = m[2] ?? ''
+      // The combined regex wraps each branch in its own outer named
+      // group, shifting capture-group indices: group 2 is the ENTIRE
+      // ticker match ("$AAPL", including the dollar sign), group 3 is
+      // the inner symbol capture ("AAPL"). Use group 3, with a
+      // defensive `$`-strip on the named group as a fallback in case
+      // the alternation order ever changes. Earlier code used `m[2]`
+      // which made the renderer prepend `$` to a symbol that already
+      // had one, producing visible "$$AAPL" chips everywhere a ticker
+      // showed up in editable prose.
+      const symbol = (m[3] ?? m.groups?.ticker?.replace(/^\$/, '') ?? '')
       segments.push({ type: 'ticker', symbol: symbol.toUpperCase() })
     }
     lastIndex = m.index + m[0].length

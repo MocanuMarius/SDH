@@ -53,7 +53,7 @@ export default function EntryDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { showSuccess } = useSnackbar()
+  const { showSuccess, showError } = useSnackbar()
   const muiTheme = useTheme()
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'))
 
@@ -134,14 +134,22 @@ export default function EntryDetailPage() {
     setSavingNote(true)
     try {
       const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
-      const noteBlock = `\n\n> **Note ${date}:** ${quickNote.trim()}`
+      // Plain-text only — per docs/PRINCIPLES.md the body is the source
+      // of truth as plain text, no markdown markers. Earlier this used
+      // `> **Note Apr 20, 26:** …` which baked in a blockquote prefix
+      // and bold markers that the render-time stripLegacyMarkdown then
+      // had to scrub. Just write a plain prefix.
+      const noteBlock = `\n\nNote ${date}: ${quickNote.trim()}`
       const updated = (entry.body_markdown || '') + noteBlock
       await updateEntry(id, { body_markdown: updated })
       invalidate.entries()
       setQuickNote('')
       showSuccess('Note added')
-    } catch {
-      // silently fail
+    } catch (err) {
+      // Surface failures instead of swallowing them — same lesson as
+      // the EntryFormPage silent-warn that hid the missing-column bug.
+      const msg = err instanceof Error ? err.message : 'Failed to add note'
+      showError(`Note failed to save: ${msg}`)
     } finally {
       setSavingNote(false)
     }
