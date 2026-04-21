@@ -330,12 +330,22 @@ export default function EntryDetailPage() {
           {(() => {
             try {
               const d = new Date(entry.date + 'T00:00:00')
-              return d.toLocaleDateString(undefined, {
+              const dateStr = d.toLocaleDateString(undefined, {
                 weekday: 'long',
                 month: 'long',
                 day: 'numeric',
                 year: 'numeric',
-              }) + (entry.author ? ` · ${entry.author}` : ' · Your desk')
+              })
+              // Reading-time estimate — ~200 wpm, minimum 1 min.
+              // Only appended when the body is long enough that a
+              // time estimate actually orients the reader (short
+              // one-liners don't need "1 min read").
+              const body = entry.body_markdown || ''
+              const words = body.trim() ? body.trim().split(/\s+/).filter(Boolean).length : 0
+              const minutes = words >= 120 ? Math.max(1, Math.round(words / 200)) : 0
+              const byline = entry.author ? ` · ${entry.author}` : ' · Your desk'
+              const read = minutes > 0 ? ` · ${minutes} min read` : ''
+              return `${dateStr}${read}${byline}`
             } catch {
               return ''
             }
@@ -423,8 +433,32 @@ export default function EntryDetailPage() {
             borderTopColor: 'divider',
             borderBottomColor: 'divider',
             position: 'relative',
+            // ── Tier-1 micro-typography ──────────────────────────────
+            // Hanging punctuation: opening quotes / brackets hang
+            // slightly outside the column so the optical left edge
+            // stays straight. Safari supports it today; other browsers
+            // ignore the property — pure progressive enhancement.
+            hangingPunctuation: 'first last allow-end',
+            // Enable ligatures, kerning and old-style (text) figures
+            // in prose. Old-style digits (with descenders) sit in a
+            // sentence without shouting the way lining numerals do —
+            // newspaper convention. Tabular/lining figures are still
+            // used elsewhere (metrics, prices) via JetBrains Mono.
+            fontFeatureSettings: '"liga" 1, "kern" 1, "onum" 1',
+            // Prevent orphan lines at the end of paragraphs and
+            // hyphenate long words so the column edge doesn't go
+            // ragged. (`orphans` is historically a print-only
+            // property but Chromium honors it in paginated / column
+            // layouts; safe no-op elsewhere.)
+            hyphens: 'auto',
+            orphans: 3,
+            widows: 3,
             '& p:first-of-type': { mt: 0 },
             '& p:last-of-type': { mb: 0 },
+            // text-wrap: pretty evens out line breaks and avoids
+            // single-word dangling lines at the end of paragraphs.
+            // Browser-native, no JS, silent no-op on older browsers.
+            '& p': { textWrap: 'pretty' },
             overflowWrap: 'break-word',
             wordBreak: 'break-word',
             // Editorial first-letter drop cap on the lead paragraph.
@@ -469,7 +503,7 @@ export default function EntryDetailPage() {
             },
           }}
         >
-          <PlainTextWithTickers source={entry.body_markdown} dense />
+          <PlainTextWithTickers source={entry.body_markdown} dense endMark />
           <ContinuedFooter source={entry.body_markdown} />
         </Box>
       )}

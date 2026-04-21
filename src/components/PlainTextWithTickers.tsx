@@ -20,6 +20,7 @@ import { Box, Chip, Link, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import { normalizeTickerToCompany } from '../utils/tickerCompany'
 import { getRichSegments, type RichSegment } from '../utils/text'
+import { smartTypography } from '../utils/smartTypography'
 
 const TICKER_CHIP_SX = {
   mx: 0.25,
@@ -78,6 +79,11 @@ interface PlainTextWithTickersProps {
   tickerAsLink?: boolean
   /** Inline mode: render as a single span with no paragraph breaks. For titles. */
   inline?: boolean
+  /** Append a subtle "∎" end-mark after the last sentence of the
+   *  last paragraph — editorial "fin" convention (the newspaper
+   *  "—30—" or the New Yorker's tombstone). Off by default; only
+   *  the entry detail reading column turns this on. */
+  endMark?: boolean
 }
 
 /** Render one line's worth of segments (text + ticker chips + URL
@@ -133,6 +139,7 @@ export default function PlainTextWithTickers({
   dense = false,
   tickerAsLink = true,
   inline = false,
+  endMark = false,
 }: PlainTextWithTickersProps) {
   if (!source || !source.trim()) return null
 
@@ -145,7 +152,13 @@ export default function PlainTextWithTickers({
   // and a few list-rendering paths (e.g. EntryListPage's title prose)
   // call it as a paranoid no-op for the rare case where a row that
   // missed the migration sneaks back in.
-  const cleaned = source
+  //
+  // smartTypography is applied once up-front (before paragraph
+  // splitting) so quote-orientation heuristics can see the full
+  // prose context, not just a line at a time. Display-only — the
+  // stored body is still plain ASCII, consistent with the plain-
+  // text principle.
+  const cleaned = smartTypography(source)
 
   if (inline) {
     // Collapse all whitespace to a single line for title-style rendering.
@@ -160,6 +173,7 @@ export default function PlainTextWithTickers({
     <Box>
       {paragraphs.map((para, pi) => {
         const lines = para.split('\n')
+        const isLastPara = pi === paragraphs.length - 1
         // Plain text only — no special handling for `> ` blockquote
         // or em-dash wrap. Those were experimental "smart markdown"
         // render rules that violated the "body is plain text on
@@ -170,18 +184,41 @@ export default function PlainTextWithTickers({
             component="p"
             variant={dense ? 'body2' : 'body1'}
             sx={{
-              mb: pi === paragraphs.length - 1 ? 0 : 1.25,
+              mb: isLastPara ? 0 : 1.25,
               whiteSpace: 'normal',
               overflowWrap: 'break-word',
               wordBreak: 'break-word',
             }}
           >
-            {lines.map((line, li) => (
-              <span key={li}>
-                {li > 0 && <br />}
-                {renderSegments(line, tickerAsLink)}
-              </span>
-            ))}
+            {lines.map((line, li) => {
+              const isLastLine = li === lines.length - 1
+              return (
+                <span key={li}>
+                  {li > 0 && <br />}
+                  {renderSegments(line, tickerAsLink)}
+                  {/* End mark: a tiny "∎" glyph sitting inline
+                      after the last word of the last paragraph.
+                      Newspaper convention for "the story is done".
+                      Preceded by a six-per-em space so it reads as
+                      a deliberate typographic mark, not a period. */}
+                  {endMark && isLastPara && isLastLine && (
+                    <Box
+                      component="span"
+                      aria-hidden
+                      sx={{
+                        ml: 0.5,
+                        color: 'text.disabled',
+                        fontSize: '0.85em',
+                        verticalAlign: 'baseline',
+                        userSelect: 'none',
+                      }}
+                    >
+                      {'\u2006\u220e'}
+                    </Box>
+                  )}
+                </span>
+              )
+            })}
           </Typography>
         )
       })}

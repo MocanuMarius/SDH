@@ -72,6 +72,11 @@ export default function PageHeader({ title, eyebrow, actions, dense = false }: P
             mb: 0,
             mt: 0,
             wordBreak: 'break-word',
+            // text-wrap: balance evens out the line lengths in multi-
+            // line titles so we don't end up with a single orphaned
+            // word on a line. Browser-native, free to add — browsers
+            // that don't support it just fall back to normal wrapping.
+            textWrap: 'balance',
             // Mobile: tighter title that doesn't dominate the sticky strip.
             fontSize: { xs: '1.4rem', sm: undefined },
             lineHeight: { xs: 1.15, sm: undefined },
