@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, memo } from 'react'
+import { useEffect, useState, useMemo, useCallback, memo } from 'react'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import {
   Autocomplete,
@@ -38,6 +38,9 @@ import { prefersReducedMotion } from '../utils/motion'
 import PullToRefresh from '../components/PullToRefresh'
 import { EmptyState } from '../components/system'
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined'
+import HistoryEduIcon from '@mui/icons-material/HistoryEdu'
+import DraftsDrawer from '../components/DraftsDrawer'
+import { listDrafts } from '../utils/entryDrafts'
 
 /** Initial entries to load — dense one-line rows, so we can fit more. */
 const INITIAL_PAGE_SIZE = 50
@@ -418,6 +421,20 @@ export default function EntryListPage() {
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Drafts drawer — opens from a "Drafts (N)" button in the page
+  // header when unsaved entry drafts exist in localStorage. The
+  // count is read once on mount; we refresh it whenever the drawer
+  // closes (the user may have deleted drafts from it). The
+  // `refreshDraftsCount` helper is also handed to the drawer via
+  // `onChanged` so mid-session deletes update the header badge
+  // without waiting for drawer close.
+  const [draftsOpen, setDraftsOpen] = useState(false)
+  const [draftsCount, setDraftsCount] = useState(0)
+  const refreshDraftsCount = useCallback(() => {
+    try { setDraftsCount(listDrafts().length) } catch { /* localStorage unavailable */ }
+  }, [])
+  useEffect(() => { refreshDraftsCount() }, [refreshDraftsCount])
+
   // ─── react-query: shared cache, auto-refetches when entries change anywhere ──
   const entriesQ = useEntriesWithActions({ search: debouncedSearch || undefined, limit: pageSize })
   // Stable reference for downstream useMemos.
@@ -487,10 +504,36 @@ export default function EntryListPage() {
           boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
         }}
       >
-        {/* Row 1: title + "new" CTA on the same line. Grid-vs-list toggle
-            removed — the dense-row layout below is the only view now. */}
+        {/* Row 1: title + "drafts" + "new" CTA on the same line.
+            Grid-vs-list toggle removed — the dense-row layout below
+            is the only view now. The Drafts button only renders
+            when there's at least one unsaved draft in localStorage,
+            so the new user never sees it until it's useful. */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}>
           <Typography variant="h1" sx={{ flex: 1, mt: 0.5 }}>Journal</Typography>
+          {draftsCount > 0 && (
+            <Tooltip title="Unsaved drafts">
+              <Button
+                onClick={() => setDraftsOpen(true)}
+                variant="outlined"
+                size="small"
+                startIcon={<HistoryEduIcon sx={{ fontSize: 16 }} />}
+                sx={{
+                  textTransform: 'none',
+                  height: 32,
+                  minHeight: 32,
+                  px: 1.25,
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  color: 'text.secondary',
+                  borderColor: 'divider',
+                  '&:hover': { borderColor: 'primary.light', color: 'primary.main' },
+                }}
+              >
+                Drafts ({draftsCount})
+              </Button>
+            </Tooltip>
+          )}
           <Button
             component={RouterLink}
             to="/entries/new"
@@ -700,6 +743,15 @@ export default function EntryListPage() {
           <KeyboardArrowUpIcon />
         </Fab>
       </Zoom>
+      <DraftsDrawer
+        open={draftsOpen}
+        onClose={() => {
+          setDraftsOpen(false)
+          // Re-sync the count in case the writer deleted drafts.
+          refreshDraftsCount()
+        }}
+        onChanged={refreshDraftsCount}
+      />
     </Box>
     </PullToRefresh>
   )

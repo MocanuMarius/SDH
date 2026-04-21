@@ -42,6 +42,13 @@ import TagChip from '../components/TagChip'
 import BodyWritingFooter from '../components/BodyWritingFooter'
 import AutoSavedKicker from '../components/AutoSavedKicker'
 import PendingDraftBanner from '../components/PendingDraftBanner'
+import {
+  saveDraft as saveEntryDraft,
+  deleteDraft as deleteEntryDraft,
+  getDraft as getEntryDraft,
+  latestDraft as latestEntryDraft,
+  newDraftId as newEntryDraftId,
+} from '../utils/entryDrafts'
 import ComparableEntries from '../components/ComparableEntries'
 import SlashMenuDialog from '../components/SlashMenuDialog'
 import { todayISO } from '../utils/dates'
@@ -262,7 +269,15 @@ export default function EntryFormPage() {
   // `lastSavedAt` is exposed to the UI so we can render an italic
   // "Saved · just now" indicator that gives the writer quiet
   // confidence the page is keeping their words safe.
-  const DRAFT_KEY = 'sdh_entry_draft'
+  //
+  // Multi-slot: `draftIdRef` tracks which slot in `sdh_entry_drafts`
+  // this page's content writes to. It's established at mount from
+  // (in priority order): the `?draft=<id>` URL param (explicit
+  // resume from DraftsDrawer), the most-recent fresh draft (<24 h),
+  // or a freshly-minted id on first autosave. The `?fresh=1` param
+  // skips all auto-restore so the writer gets an empty page even
+  // when drafts exist.
+  const draftIdRef = useRef<string | null>(null)
   const lastSaveRef = useRef(0)
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
   /** Snapshot of the content at the last successful autosave.
@@ -276,6 +291,7 @@ export default function EntryFormPage() {
    *  We hold it here and render a gentle prompt that lets the user
    *  choose to continue or discard. */
   const [pendingDraft, setPendingDraft] = useState<null | {
+    id: string
     title_markdown?: string
     body_markdown?: string
     tagsStr?: string
@@ -314,30 +330,52 @@ export default function EntryFormPage() {
 
   useEffect(() => {
     if (!isNew) return
-    // Restore draft on mount. Fresh drafts (< 24h old) flow in
-    // silently — that's the common case where the user closed the
-    // tab mid-entry and came back. Older drafts (> 24h) surface in
-    // a gentle banner instead; silently merging a week-old draft
-    // into today's new-entry flow is surprising and a common cause
-    // of "why is this text here?" questions.
+    // Restore draft on mount. Three paths, resolved in order:
+    //   1. `?draft=<id>` — user clicked Resume in the DraftsDrawer;
+    //      load THAT specific draft and adopt its id (no banner).
+    //   2. `?fresh=1` — user explicitly wants an empty page even
+    //      if drafts exist (also suppresses any banner).
+    //   3. No param — fall back to "most recent draft" semantics:
+    //      < 24h old → silent restore (the "closed the tab, came
+    //      back" common case); > 24h old → banner so the writer
+    //      sees "you were writing about $X on Sunday — continue
+    //      or discard" and doesn't get surprised by stale text.
     try {
-      const raw = localStorage.getItem(DRAFT_KEY)
-      if (raw) {
-        const draft = JSON.parse(raw) as { title_markdown?: string; body_markdown?: string; tagsStr?: string; savedAt?: number }
-        const age = draft.savedAt ? Date.now() - draft.savedAt : 0
-        if (draft.savedAt && age > 24 * 60 * 60 * 1000) {
-          // Stale — show banner, let user decide.
-          setPendingDraft({
-            title_markdown: draft.title_markdown,
-            body_markdown: draft.body_markdown,
-            tagsStr: draft.tagsStr,
-            savedAt: draft.savedAt,
-          })
-        } else {
-          if (draft.title_markdown) setTitleMarkdown(draft.title_markdown)
-          if (draft.body_markdown) setBodyMarkdown(draft.body_markdown)
-          if (draft.tagsStr) setTagsStr(draft.tagsStr)
+      const wantedId = searchParams.get('draft')
+      const fresh = searchParams.get('fresh') === '1'
+
+      if (wantedId) {
+        const d = getEntryDraft(wantedId)
+        if (d) {
+          draftIdRef.current = d.id
+          if (d.title_markdown) setTitleMarkdown(d.title_markdown)
+          if (d.body_markdown) setBodyMarkdown(d.body_markdown)
+          if (d.tagsStr) setTagsStr(d.tagsStr)
         }
+        return
+      }
+
+      if (fresh) {
+        // Leave draftIdRef null — a new id is minted on first autosave.
+        return
+      }
+
+      const d = latestEntryDraft()
+      if (!d) return
+      const age = Date.now() - d.savedAt
+      if (age > 24 * 60 * 60 * 1000) {
+        setPendingDraft({
+          id: d.id,
+          title_markdown: d.title_markdown,
+          body_markdown: d.body_markdown,
+          tagsStr: d.tagsStr,
+          savedAt: d.savedAt,
+        })
+      } else {
+        draftIdRef.current = d.id
+        if (d.title_markdown) setTitleMarkdown(d.title_markdown)
+        if (d.body_markdown) setBodyMarkdown(d.body_markdown)
+        if (d.tagsStr) setTagsStr(d.tagsStr)
       }
     } catch { /* ignore */ }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -392,9 +430,15 @@ export default function EntryFormPage() {
       if (contentKey === lastSavedContentRef.current) return
       lastSaveRef.current = now
       lastSavedContentRef.current = contentKey
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      // Lazily allocate a draft id on first save so we don't write
+      // an empty slot for a writer who never actually typed. Once
+      // set, subsequent autosaves target the same slot — the writer
+      // can only edit one draft at a time on this page, and
+      // Resume-from-drawer flips draftIdRef to the resumed id.
+      if (!draftIdRef.current) draftIdRef.current = newEntryDraftId()
+      saveEntryDraft(draftIdRef.current, {
         title_markdown, body_markdown, tagsStr, savedAt: now,
-      }))
+      })
       setLastSavedAt(now)
       // Record the save in the ring buffer for the sparkline. Keep
       // only the last 12 entries so the SVG stays cheap to render.
@@ -420,9 +464,12 @@ export default function EntryFormPage() {
     setSessionWordsWritten(added)
   }, [body_markdown])
 
-  // Clear draft on successful save
+  // Clear draft on successful save — deletes only the slot this
+  // page wrote to. Other drafts in `sdh_entry_drafts` are untouched.
   const clearDraft = useCallback(() => {
-    localStorage.removeItem(DRAFT_KEY)
+    const id = draftIdRef.current
+    if (id) deleteEntryDraft(id)
+    draftIdRef.current = null
   }, [])
 
   // Load existing entry via react-query so the form auto-refreshes if the
@@ -747,13 +794,17 @@ export default function EntryFormPage() {
         <PendingDraftBanner
           draft={pendingDraft}
           onContinue={() => {
+            // Adopt the banner draft's id so further autosaves
+            // continue writing into the SAME slot (don't fork a
+            // second slot with the same content).
+            draftIdRef.current = pendingDraft.id
             if (pendingDraft.title_markdown) setTitleMarkdown(pendingDraft.title_markdown)
             if (pendingDraft.body_markdown) setBodyMarkdown(pendingDraft.body_markdown)
             if (pendingDraft.tagsStr) setTagsStr(pendingDraft.tagsStr)
             setPendingDraft(null)
           }}
           onDiscard={() => {
-            localStorage.removeItem(DRAFT_KEY)
+            deleteEntryDraft(pendingDraft.id)
             setPendingDraft(null)
           }}
         />
