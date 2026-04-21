@@ -11,7 +11,7 @@
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listEntries, listEntriesWithActions, getEntry } from '../services/entriesService'
+import { listEntries, listEntriesWithActions, getEntry, getEntryNeighbors } from '../services/entriesService'
 import { listActions, listActionsByEntryId } from '../services/actionsService'
 import { listOutcomes, getOutcomesForActionIds } from '../services/outcomesService'
 import { listPredictionsByEntryId } from '../services/predictionsService'
@@ -27,6 +27,7 @@ export const queryKeys = {
   entries: () => ['entries'] as const,
   entriesWithActions: (opts?: Record<string, unknown>) => ['entries', 'withActions', opts] as const,
   entry: (id: string | undefined) => ['entries', 'one', id] as const,
+  entryNeighbors: (id: string | undefined, date: string | undefined) => ['entries', 'neighbors', id, date] as const,
 
   actions: () => ['actions'] as const,
   actionsByEntry: (entryId: string | undefined) => ['actions', 'byEntry', entryId] as const,
@@ -66,6 +67,20 @@ export function useEntry(id: string | undefined) {
     queryKey: queryKeys.entry(id),
     queryFn: () => (id ? getEntry(id) : Promise.resolve(null)),
     enabled: !!id,
+  })
+}
+
+/**
+ * Prev/next entry by date for the detail page's "Newer ← → Older"
+ * page-turn footer. Keyed on date so moving to a neighbor or editing
+ * the current entry's date refetches — the invalidation on any
+ * ['entries'] mutation will also blow this away.
+ */
+export function useEntryNeighbors(entry: { id: string; date: string } | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.entryNeighbors(entry?.id, entry?.date),
+    queryFn: () => (entry ? getEntryNeighbors(entry) : Promise.resolve({ older: null, newer: null })),
+    enabled: !!entry,
   })
 }
 

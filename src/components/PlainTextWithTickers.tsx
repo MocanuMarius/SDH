@@ -169,15 +169,100 @@ export default function PlainTextWithTickers({
   // Split on blank lines into paragraphs; preserve a single newline as <br/> inside.
   const paragraphs = cleaned.split(/\n{2,}/).map((p) => p.replace(/\n+$/, ''))
 
+  // Marginalia detection — the Quick Note writer on EntryDetailPage
+  // appends "Note <Mon> <day>, <yy>: ..." paragraphs to the body over
+  // time. Rather than letting those look like regular prose, we
+  // style them as postscripts: italic, muted, with a small-caps
+  // date kicker. The same append pattern then reads as "updates
+  // from the editor" rather than random concatenated lines.
+  const NOTE_REGEX = /^Note\s+([A-Z][a-z]{2}\s+\d{1,2}(?:,\s*\d{2,4})?):\s*/
+  const isNote = (p: string) => NOTE_REGEX.test(p)
+
+  // End-mark goes on the last NON-note paragraph so postscripts
+  // don't steal the "fin" glyph that should close the main story.
+  // Falls back to the literal last paragraph if every paragraph is
+  // a note (degenerate — the body is all postscripts, no main prose).
+  let lastNonNoteIdx = -1
+  paragraphs.forEach((p, i) => { if (!isNote(p)) lastNonNoteIdx = i })
+  if (lastNonNoteIdx === -1) lastNonNoteIdx = paragraphs.length - 1
+
   return (
     <Box>
       {paragraphs.map((para, pi) => {
-        const lines = para.split('\n')
         const isLastPara = pi === paragraphs.length - 1
-        // Plain text only — no special handling for `> ` blockquote
-        // or em-dash wrap. Those were experimental "smart markdown"
-        // render rules that violated the "body is plain text on
-        // disk" principle, so they were removed on 2026-04-20.
+        const noteMatch = para.match(NOTE_REGEX)
+        const showEndMark = endMark && pi === lastNonNoteIdx
+
+        // ── Marginalia branch ──
+        // Paragraphs that start with "Note <Mon> <d>, <yy>:" render
+        // with a small-caps kicker + italic, muted body. The kicker
+        // is reformatted to newspaper style (NOTE · APR 21, 2026).
+        if (noteMatch) {
+          const kicker = noteMatch[1].toUpperCase()
+          const bodyText = para.slice(noteMatch[0].length)
+          const lines = bodyText.split('\n')
+          return (
+            <Typography
+              key={pi}
+              component="p"
+              variant={dense ? 'body2' : 'body1'}
+              sx={{
+                mb: isLastPara ? 0 : 1.25,
+                fontStyle: 'italic',
+                color: 'text.secondary',
+                fontSize: '0.94em',
+                whiteSpace: 'normal',
+                overflowWrap: 'break-word',
+                wordBreak: 'break-word',
+              }}
+            >
+              <Box
+                component="span"
+                aria-hidden
+                sx={{
+                  fontStyle: 'normal',
+                  fontWeight: 700,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  fontSize: '0.7em',
+                  color: 'text.disabled',
+                  mr: 0.75,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Note · {kicker}
+              </Box>
+              {lines.map((line, li) => {
+                const isLastLine = li === lines.length - 1
+                return (
+                  <span key={li}>
+                    {li > 0 && <br />}
+                    {renderSegments(line, tickerAsLink)}
+                    {showEndMark && isLastLine && (
+                      <Box
+                        component="span"
+                        aria-hidden
+                        sx={{
+                          ml: 0.5,
+                          color: 'text.disabled',
+                          fontSize: '0.85em',
+                          verticalAlign: 'baseline',
+                          userSelect: 'none',
+                          fontStyle: 'normal',
+                        }}
+                      >
+                        {'\u2006\u220e'}
+                      </Box>
+                    )}
+                  </span>
+                )
+              })}
+            </Typography>
+          )
+        }
+
+        // ── Regular prose branch ──
+        const lines = para.split('\n')
         return (
           <Typography
             key={pi}
@@ -197,11 +282,12 @@ export default function PlainTextWithTickers({
                   {li > 0 && <br />}
                   {renderSegments(line, tickerAsLink)}
                   {/* End mark: a tiny "∎" glyph sitting inline
-                      after the last word of the last paragraph.
-                      Newspaper convention for "the story is done".
-                      Preceded by a six-per-em space so it reads as
-                      a deliberate typographic mark, not a period. */}
-                  {endMark && isLastPara && isLastLine && (
+                      after the last word of the last non-note
+                      paragraph. Newspaper convention for "the
+                      story is done". Preceded by a six-per-em
+                      space so it reads as a deliberate typographic
+                      mark, not a period. */}
+                  {showEndMark && isLastLine && (
                     <Box
                       component="span"
                       aria-hidden

@@ -98,6 +98,51 @@ export async function getEntry(id: string): Promise<Entry | null> {
   return data as Entry
 }
 
+/**
+ * Neighbor lookup for "Newer entry ← → Older entry" page-turn
+ * navigation on the entry detail page. Uses strict `<` / `>` on the
+ * `date` column so same-day entries aren't returned as neighbors —
+ * same-day clustering is rare in a journaling app, and the user can
+ * still reach the other same-day entry through the Journal list.
+ *
+ * Title is projected so the footer can show the neighbor's title as
+ * hover affordance without a second fetch.
+ */
+export interface EntryNeighbor {
+  id: string
+  date: string
+  title_markdown: string | null
+}
+
+export async function getEntryNeighbors(
+  entry: { id: string; date: string }
+): Promise<{ older: EntryNeighbor | null; newer: EntryNeighbor | null }> {
+  const [olderRes, newerRes] = await Promise.all([
+    supabase
+      .from(TABLE)
+      .select('id, date, title_markdown')
+      .lt('date', entry.date)
+      .order('date', { ascending: false })
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from(TABLE)
+      .select('id, date, title_markdown')
+      .gt('date', entry.date)
+      .order('date', { ascending: true })
+      .order('updated_at', { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ])
+  if (olderRes.error) throw olderRes.error
+  if (newerRes.error) throw newerRes.error
+  return {
+    older: (olderRes.data as EntryNeighbor | null) ?? null,
+    newer: (newerRes.data as EntryNeighbor | null) ?? null,
+  }
+}
+
 export async function getEntryByEntryId(entryId: string): Promise<Entry | null> {
   const { data, error } = await supabase.from(TABLE).select('*').eq('entry_id', entryId).single()
   if (error) {

@@ -43,6 +43,7 @@ import PredictionCard from '../components/PredictionCard'
 import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import ScrollProgress from '../components/ScrollProgress'
 import ContinuedFooter from '../components/ContinuedFooter'
+import EntryNeighborsFooter from '../components/EntryNeighborsFooter'
 import AddReminderDialog from '../components/AddReminderDialog'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
@@ -507,6 +508,12 @@ export default function EntryDetailPage() {
           <ContinuedFooter source={entry.body_markdown} />
         </Box>
       )}
+
+      {/* Page-turn footer — newer / older neighbor entries. Sits
+          inside the same 68ch column as the body so it reads as
+          part of the article tail, not app chrome. Closes the
+          reading flow before the tabbed app sections begin. */}
+      <EntryNeighborsFooter entry={{ id: entry.id, date: entry.date }} />
 
       {/* Quick note — append a timestamped note without editing the full entry.
           Multi-line auto-grow; Cmd/Ctrl+Enter or Enter (no shift) submits.
