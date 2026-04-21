@@ -11,6 +11,7 @@ import LightbulbIcon from '@mui/icons-material/Lightbulb'
 import TouchAppIcon from '@mui/icons-material/TouchApp'
 import AnalyticsIcon from '@mui/icons-material/Analytics'
 import TimelineIcon from '@mui/icons-material/Timeline'
+import AutoStoriesIcon from '@mui/icons-material/AutoStories'
 import SettingsIcon from '@mui/icons-material/Settings'
 import LogoutIcon from '@mui/icons-material/Logout'
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { to: '/watchlist', label: 'Watchlist', icon: NotificationsActiveIcon },
   { to: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
   { to: '/actions', label: 'Trades', icon: TouchAppIcon },
+  { to: '/closed', label: 'Lessons', icon: AutoStoriesIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 

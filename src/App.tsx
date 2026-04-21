@@ -88,6 +88,8 @@ const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
 const WatchlistPage = lazy(() => import('./pages/WatchlistPage'))
 const DecisionFormPage = lazy(() => import('./pages/DecisionFormPage'))
 const WatchlistFormPage = lazy(() => import('./pages/WatchlistFormPage'))
+const OutcomeFormPage = lazy(() => import('./pages/OutcomeFormPage'))
+const ClosedDecisionsPage = lazy(() => import('./pages/ClosedDecisionsPage'))
 
 /** Thin LinearProgress bar shown while a lazy page chunk loads */
 function PageFallback() {
@@ -485,6 +487,16 @@ function AppRoutes() {
           query params for pre-fill. */}
       <Route path="/decisions/new" element={<ProtectedLayout><Page><DecisionFormPage /></Page></ProtectedLayout>} />
       <Route path="/decisions/:id/edit" element={<ProtectedLayout><Page><DecisionFormPage /></Page></ProtectedLayout>} />
+      {/* Outcome flow — replaces the OutcomeFormDialog modal. /new
+          takes ?action_id=<id> and auto-redirects to edit if an
+          outcome already exists on that action. /:id/edit keys on
+          action_id (one outcome per action). */}
+      <Route path="/outcomes/new" element={<ProtectedLayout><Page><OutcomeFormPage /></Page></ProtectedLayout>} />
+      <Route path="/outcomes/:id/edit" element={<ProtectedLayout><Page><OutcomeFormPage /></Page></ProtectedLayout>} />
+      {/* Closed decisions ledger — chronological "lessons journal"
+          of every decision with a recorded outcome. Complements
+          /actions (raw feed) and /analytics (aggregate numbers). */}
+      <Route path="/closed" element={<ProtectedLayout><Page><ClosedDecisionsPage /></Page></ProtectedLayout>} />
       <Route path="/passed" element={<Navigate to="/tickers" replace />} />
       <Route path="/analytics" element={<ProtectedLayout><Page><AnalyticsPage /></Page></ProtectedLayout>} />
       <Route path="/analytics/calibration" element={<ProtectedLayout><Page><AnalyticsPage /></Page></ProtectedLayout>} />

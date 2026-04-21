@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Alert, Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
@@ -26,17 +27,37 @@ interface DecisionCardProps {
   /** When no outcome (open position), optional current price for unrealized P&L */
   currentPrice?: number | null
   onAddOrEditOutcome: () => void
+  /** Quick-verdict save — when provided and no outcome exists,
+   *  three chips appear for one-click close (Right / Wrong /
+   *  Inconclusive). The host handles the actual createOutcome
+   *  call. Async so the card can disable itself during the save. */
+  onQuickVerdict?: (verdict: 'right' | 'wrong' | 'inconclusive') => Promise<void>
   onDelete: () => void
   /** Open the focused decision-edit dialog for this action. */
   onEdit?: () => void
+  /** When true, play a "filed away" flourish on this card. Used on
+   *  the post-outcome-save return from OutcomeFormPage. */
+  justClosed?: boolean
 }
 
 /** Journalytic-style decision card: blockquote layout with $TICKER, Date, Price, Reason, Expanded Reasoning */
-export default function DecisionCard({ action, outcome, currentPrice, onAddOrEditOutcome, onDelete, onEdit }: DecisionCardProps) {
+export default function DecisionCard({ action, outcome, currentPrice, onAddOrEditOutcome, onQuickVerdict, onDelete, onEdit, justClosed }: DecisionCardProps) {
   const { openChart } = useTickerChart()
   const tickerLabel = action.ticker ? getTickerDisplayLabel(action.ticker) : null
   const borderColor = getDecisionTypeColor(action.type)
 
+  // Local "saving" lock so the three quick-verdict chips disable
+  // while the parent is round-tripping the createOutcome call.
+  const [quickSaving, setQuickSaving] = useState<'right' | 'wrong' | 'inconclusive' | null>(null)
+  const handleQuick = async (verdict: 'right' | 'wrong' | 'inconclusive') => {
+    if (!onQuickVerdict || quickSaving) return
+    setQuickSaving(verdict)
+    try {
+      await onQuickVerdict(verdict)
+    } finally {
+      setQuickSaving(null)
+    }
+  }
   return (
     <Box
       sx={{
@@ -48,6 +69,15 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
         my: 1.5,
         bgcolor: 'grey.50',
         borderRadius: 1,
+        // Post-save flourish — briefly glow + lift when the card has
+        // just been closed. Caller clears `justClosed` after a moment.
+        transition: 'box-shadow 420ms cubic-bezier(0.22, 1, 0.36, 1), transform 420ms cubic-bezier(0.22, 1, 0.36, 1)',
+        ...(justClosed
+          ? {
+              boxShadow: `0 0 0 2px ${borderColor}40, 0 12px 28px rgba(15, 23, 42, 0.12)`,
+              transform: 'translateY(-1px)',
+            }
+          : {}),
       }}
     >
       {/* On mobile the main content needs the full row width — the action
@@ -225,11 +255,74 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
             alignItems: 'center',
             gap: 0.5,
             alignSelf: { xs: 'flex-end', sm: 'flex-start' },
+            flexWrap: 'wrap',
+            justifyContent: { xs: 'flex-end', sm: 'flex-start' },
           }}
         >
-          <Button size="small" variant="text" onClick={onAddOrEditOutcome}>
-            {outcome ? 'Edit outcome' : 'Add outcome'}
-          </Button>
+          {/* When no outcome + quick-verdict is wired, show three
+              one-click close chips. Covers the common case ("I just
+              sold, mark it Right") without opening the full form.
+              A small italic "Add details →" link routes to the full
+              OutcomeFormPage for writers who want to reflect. */}
+          {!outcome && onQuickVerdict && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+              <Chip
+                label="Right"
+                size="small"
+                disabled={quickSaving != null}
+                onClick={() => handleQuick('right')}
+                sx={{
+                  bgcolor: quickSaving === 'right' ? '#16a34a' : 'transparent',
+                  color: quickSaving === 'right' ? '#fff' : '#16a34a',
+                  borderColor: '#16a34a',
+                  border: '1px solid',
+                  fontWeight: 600,
+                  '&:hover': { bgcolor: '#16a34a18', borderColor: '#16a34a' },
+                }}
+              />
+              <Chip
+                label="Wrong"
+                size="small"
+                disabled={quickSaving != null}
+                onClick={() => handleQuick('wrong')}
+                sx={{
+                  bgcolor: quickSaving === 'wrong' ? '#dc2626' : 'transparent',
+                  color: quickSaving === 'wrong' ? '#fff' : '#dc2626',
+                  borderColor: '#dc2626',
+                  border: '1px solid',
+                  fontWeight: 600,
+                  '&:hover': { bgcolor: '#dc262618', borderColor: '#dc2626' },
+                }}
+              />
+              <Chip
+                label="Unclear"
+                size="small"
+                disabled={quickSaving != null}
+                onClick={() => handleQuick('inconclusive')}
+                sx={{
+                  bgcolor: quickSaving === 'inconclusive' ? '#64748b' : 'transparent',
+                  color: quickSaving === 'inconclusive' ? '#fff' : '#64748b',
+                  borderColor: '#64748b',
+                  border: '1px solid',
+                  fontWeight: 600,
+                  '&:hover': { bgcolor: '#64748b18', borderColor: '#64748b' },
+                }}
+              />
+              <Button
+                size="small"
+                variant="text"
+                onClick={onAddOrEditOutcome}
+                sx={{ textTransform: 'none', fontStyle: 'italic', fontSize: '0.78rem', minWidth: 0, px: 0.5 }}
+              >
+                Details →
+              </Button>
+            </Box>
+          )}
+          {(outcome || !onQuickVerdict) && (
+            <Button size="small" variant="text" onClick={onAddOrEditOutcome}>
+              {outcome ? 'Edit outcome' : 'Add outcome'}
+            </Button>
+          )}
           {onEdit && (
             <Tooltip title="Edit decision">
               <IconButton size="small" aria-label="Edit decision" onClick={onEdit}>

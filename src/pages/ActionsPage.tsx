@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Link as RouterLink, useSearchParams } from 'react-router-dom'
+import { Link as RouterLink, useSearchParams, useNavigate } from 'react-router-dom'
 import { useTheme } from '@mui/material/styles'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import {
@@ -19,10 +19,7 @@ import {
 import { DataGrid } from '@mui/x-data-grid'
 import type { GridColDef, GridRenderCellParams, GridColumnVisibilityModel } from '@mui/x-data-grid'
 import { type ActionWithEntry } from '../services/actionsService'
-import { createOutcome } from '../services/outcomesService'
-import { createReminder } from '../services/remindersService'
-import { useAuth } from '../contexts/AuthContext'
-import { useActions, useOutcomesByActionIds, useInvalidate } from '../hooks/queries'
+import { useActions, useOutcomesByActionIds } from '../hooks/queries'
 import { fetchChartData } from '../services/chartApiService'
 import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import TickerLinks from '../components/TickerLinks'
@@ -35,7 +32,6 @@ import InsightsIcon from '@mui/icons-material/Insights'
 import OptionTypeChip from '../components/OptionTypeChip'
 import { ACTION_TYPES } from '../types/database'
 import DecisionChip from '../components/DecisionChip'
-import OutcomeFormDialog from '../components/OutcomeFormDialog'
 import { useTickerChart } from '../contexts/TickerChartContext'
 import type { Outcome } from '../types/database'
 
@@ -47,8 +43,8 @@ function parsePrice(price: string | null | undefined): number | null {
 }
 
 export default function ActionsPage() {
-  const { user } = useAuth()
   const { openChart } = useTickerChart()
+  const navigate = useNavigate()
   const [currentPriceByTicker, setCurrentPriceByTicker] = useState<Record<string, number>>({})
   const [error, setError] = useState<string | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -64,11 +60,9 @@ export default function ActionsPage() {
     if (v) next.set('ticker', v); else next.delete('ticker')
     setSearchParams(next, { replace: true })
   }
-  const [outcomeDialogAction, setOutcomeDialogAction] = useState<ActionWithEntry | null>(null)
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 25 })
   const theme = useTheme()
   const isMobile = !useMediaQuery(theme.breakpoints.up('md'))
-  const invalidate = useInvalidate()
 
   const normalizedTickerFilter = tickerFilter.trim() ? normalizeTicker(tickerFilter.trim()) : undefined
   const actionsQ = useActions({ type: typeFilter || undefined, ticker: normalizedTickerFilter, limit: 500 })
@@ -282,7 +276,7 @@ export default function ActionsPage() {
             <Link
               component="button"
               variant="body2"
-              onClick={() => setOutcomeDialogAction(p.row)}
+              onClick={() => navigate(`/outcomes/new?action_id=${p.row.id}`)}
               sx={{ cursor: 'pointer', fontSize: isMobile ? '0.78rem' : undefined }}
             >
               Add outcome
@@ -382,57 +376,9 @@ export default function ActionsPage() {
         />
       )}
 
-      <OutcomeFormDialog
-        open={!!outcomeDialogAction}
-        onClose={() => setOutcomeDialogAction(null)}
-        initial={null}
-        actionLabel={outcomeDialogAction?.ticker ? getTickerDisplayLabel(outcomeDialogAction.ticker) : undefined}
-        onSubmit={async (data) => {
-          if (!outcomeDialogAction) return
-          try {
-            await createOutcome({
-              action_id: outcomeDialogAction.id,
-              realized_pnl: data.realized_pnl,
-              outcome_date: data.outcome_date,
-              notes: data.notes,
-              driver: data.driver,
-              post_mortem_notes: data.post_mortem_notes,
-              process_quality: data.process_quality,
-              outcome_quality: data.outcome_quality,
-              process_score: data.process_score,
-              outcome_score: data.outcome_score,
-              closing_memo: data.closing_memo || null,
-              error_type: data.error_type,
-              what_i_remember_now: data.what_i_remember_now,
-            })
-            // Follow-up reminder — closes the loop. The user picks
-            // "check back in 60 days" inside the dialog; we create
-            // the actual `reminders` row here so it surfaces in the
-            // Reminders drawer when its date comes around.
-            if (data.follow_up_in_days != null && user?.id) {
-              const date = new Date()
-              date.setDate(date.getDate() + data.follow_up_in_days)
-              const reminderDate = date.toISOString().slice(0, 10)
-              const ticker = outcomeDialogAction.ticker?.trim().toUpperCase() ?? ''
-              await createReminder(user.id, {
-                entry_id: outcomeDialogAction.entry_id ?? null,
-                type: 'entry_review',
-                reminder_date: reminderDate,
-                note: ticker
-                  ? `Check what happened with $${ticker} since this decision`
-                  : 'Check what happened since this decision',
-                ticker,
-              })
-              invalidate.reminders?.()
-            }
-            // Close immediately — react-query refreshes everything subscribed to outcomes.
-            setOutcomeDialogAction(null)
-            invalidate.outcomes()
-          } catch (e) {
-            setError(e instanceof Error ? e.message : 'Failed to save outcome')
-          }
-        }}
-      />
+      {/* OutcomeFormDialog used to mount here. The "Add outcome"
+          link in the grid now navigates to /outcomes/new which
+          hosts the form at page scope. */}
     </Box>
   )
 }

@@ -13,10 +13,11 @@ import { createReminder, deleteReminder } from '../services/remindersService'
 import { fetchChartData } from '../services/chartApiService'
 import { useAuth } from '../contexts/AuthContext'
 import { deleteAction } from '../services/actionsService'
-import {
-  createOutcome,
-  updateOutcome,
-} from '../services/outcomesService'
+// Outcome create/update now happens inside the routed
+// OutcomeFormPage — see DecisionCard's onAddOrEditOutcome below,
+// which navigates rather than opening a modal here.
+import { createOutcome } from '../services/outcomesService'
+import { todayISO } from '../utils/dates'
 import {
   createPrediction,
   updatePrediction,
@@ -34,7 +35,6 @@ import { ListCard, ItemRow, EmptyState, AddPlusButton, PageHeader } from '../com
 import TickerDollarField from '../components/TickerDollarField'
 import TimelineIcon from '@mui/icons-material/Timeline'
 import QueryStatsIcon from '@mui/icons-material/QueryStats'
-import OutcomeFormDialog from '../components/OutcomeFormDialog'
 import PredictionInlineForm from '../components/PredictionInlineForm'
 import ConfirmDialog from '../components/ConfirmDialog'
 import DecisionCard from '../components/DecisionCard'
@@ -48,7 +48,6 @@ import AddReminderDialog from '../components/AddReminderDialog'
 import TagChip from '../components/TagChip'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
-import { getTickerDisplayLabel } from '../utils/tickerCompany'
 import type { Outcome } from '../types/database'
 import type { EntryPrediction } from '../types/database'
 
@@ -59,8 +58,20 @@ export default function EntryDetailPage() {
   // Detail page reads the navigation state set by EntryFormPage on
   // save. When `justCreated`/`justSaved` is true, the fold-corner
   // animates in as a "saved a page" flourish.
-  const locationState = location.state as { justCreated?: boolean; justSaved?: boolean } | null
+  const locationState = location.state as { justCreated?: boolean; justSaved?: boolean; justClosedActionId?: string } | null
   const animateFoldCorner = Boolean(locationState?.justCreated || locationState?.justSaved)
+  // Phase-3 closure moment: when returning from OutcomeFormPage with
+  // a just-closed action id, flash the matching DecisionCard for
+  // ~1.2s and show an italic kicker below the actions tab. Cleared
+  // by a timeout so subsequent navigations don't re-trigger.
+  const [justClosedActionId, setJustClosedActionId] = useState<string | null>(
+    locationState?.justClosedActionId ?? null
+  )
+  useEffect(() => {
+    if (!justClosedActionId) return
+    const t = setTimeout(() => setJustClosedActionId(null), 1400)
+    return () => clearTimeout(t)
+  }, [justClosedActionId])
   const { user } = useAuth()
   const { showSuccess, showError } = useSnackbar()
   const muiTheme = useTheme()
@@ -92,9 +103,7 @@ export default function EntryDetailPage() {
   const [detailTab, setDetailTab] = useState(0)
   const [quickNote, setQuickNote] = useState('')
   const [savingNote, setSavingNote] = useState(false)
-  // Holds the action being edited; null means the dialog is in "add new" mode.
   const [overflowAnchor, setOverflowAnchor] = useState<null | HTMLElement>(null)
-  const [outcomeDialogActionId, setOutcomeDialogActionId] = useState<string | null>(null)
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<
     | { type: 'action'; id: string }
@@ -622,7 +631,48 @@ export default function EntryDetailPage() {
                     action={a}
                     outcome={outcomesByActionId[a.id]}
                     currentPrice={a.ticker ? currentPriceByTicker[(a.ticker || '').trim().toUpperCase()] : undefined}
-                    onAddOrEditOutcome={() => setOutcomeDialogActionId(a.id)}
+                    justClosed={justClosedActionId === a.id}
+                    onQuickVerdict={async (verdict) => {
+                      // One-click close path: save minimal outcome
+                      // (score derived from verdict, no notes, no
+                      // follow-up). Writer can enrich later via
+                      // Details → which opens the full page.
+                      const score = verdict === 'right' ? 5 : verdict === 'wrong' ? 1 : 3
+                      const quality = verdict === 'right' ? 'good' : verdict === 'wrong' ? 'bad' : null
+                      try {
+                        await createOutcome({
+                          action_id: a.id,
+                          realized_pnl: null,
+                          outcome_date: todayISO(),
+                          notes: '',
+                          driver: null,
+                          post_mortem_notes: null,
+                          process_quality: null,
+                          outcome_quality: quality,
+                          process_score: null,
+                          outcome_score: score,
+                          closing_memo: null,
+                          error_type: null,
+                          what_i_remember_now: null,
+                        })
+                        invalidate.outcomes()
+                        setJustClosedActionId(a.id)
+                        showSuccess(`Closed as ${verdict === 'right' ? 'Right call' : verdict === 'wrong' ? 'Wrong call' : 'Inconclusive'}  ¶`)
+                      } catch (err) {
+                        const msg = err instanceof Error ? err.message : 'Could not save outcome'
+                        showError(msg)
+                      }
+                    }}
+                    onAddOrEditOutcome={() => {
+                      // Navigate to the routed outcome form. If an
+                      // outcome already exists, edit mode; otherwise
+                      // create mode with the action pre-referenced.
+                      if (outcomesByActionId[a.id]) {
+                        navigate(`/outcomes/${a.id}/edit`)
+                      } else {
+                        navigate(`/outcomes/new?action_id=${a.id}`)
+                      }
+                    }}
                     onDelete={() => setConfirmDelete({ type: 'action', id: a.id })}
                     onEdit={() => navigate(`/decisions/${a.id}/edit`)}
                   />
@@ -791,84 +841,11 @@ export default function EntryDetailPage() {
           showSuccess('Reminder set')
         }}
       />
-      {/* PredictionFormDialog used to mount here as a global modal.
-          Inlined into the Predictions tab below — see the
-          PredictionInlineForm rendered inside the tab. */}
-      {outcomeDialogActionId && (
-        <OutcomeFormDialog
-          open={!!outcomeDialogActionId}
-          onClose={() => setOutcomeDialogActionId(null)}
-          initial={outcomeDialogActionId ? outcomesByActionId[outcomeDialogActionId] ?? null : null}
-          actionLabel={actions.find((a) => a.id === outcomeDialogActionId)?.ticker
-            ? getTickerDisplayLabel(actions.find((a) => a.id === outcomeDialogActionId)?.ticker ?? '')
-            : undefined}
-          onSubmit={async (data) => {
-            if (!outcomeDialogActionId) return
-            const existing = outcomesByActionId[outcomeDialogActionId]
-            if (existing) {
-              await updateOutcome(existing.id, {
-                realized_pnl: data.realized_pnl,
-                outcome_date: data.outcome_date,
-                notes: data.notes,
-                driver: data.driver,
-                post_mortem_notes: data.post_mortem_notes || null,
-                process_quality: data.process_quality ?? null,
-                outcome_quality: data.outcome_quality ?? null,
-                process_score: data.process_score,
-                outcome_score: data.outcome_score,
-                closing_memo: data.closing_memo?.trim() || null,
-                error_type: data.error_type ?? null,
-                what_i_remember_now: data.what_i_remember_now?.trim() || null,
-              })
-            } else {
-              await createOutcome({
-                action_id: outcomeDialogActionId,
-                realized_pnl: data.realized_pnl,
-                outcome_date: data.outcome_date,
-                notes: data.notes,
-                driver: data.driver,
-                post_mortem_notes: data.post_mortem_notes || null,
-                process_quality: data.process_quality ?? null,
-                outcome_quality: data.outcome_quality ?? null,
-                process_score: data.process_score,
-                outcome_score: data.outcome_score,
-                closing_memo: data.closing_memo?.trim() || null,
-                error_type: data.error_type ?? null,
-                what_i_remember_now: data.what_i_remember_now?.trim() || null,
-              })
-            }
-            const wasEdit = !!outcomesByActionId[outcomeDialogActionId]
-            // Follow-up reminder — only on NEW outcomes (editing
-            // doesn't suggest a new follow-up). Closes the
-            // "what happened next" loop the verdict starts.
-            if (!wasEdit && data.follow_up_in_days != null && user?.id) {
-              const action = actions.find((a) => a.id === outcomeDialogActionId)
-              const date = new Date()
-              date.setDate(date.getDate() + data.follow_up_in_days)
-              const reminderDate = date.toISOString().slice(0, 10)
-              const ticker = action?.ticker?.trim().toUpperCase() ?? ''
-              try {
-                await createReminder(user.id, {
-                  entry_id: id ?? null,
-                  type: 'entry_review',
-                  reminder_date: reminderDate,
-                  note: ticker
-                    ? `Check what happened with $${ticker} since this decision`
-                    : 'Check what happened since this decision',
-                  ticker,
-                })
-                invalidate.reminders()
-              } catch {
-                // Non-fatal — outcome already saved; surface a soft warning instead.
-                showSuccess('Outcome saved (reminder failed — retry from Reminders)')
-              }
-            }
-            invalidate.outcomes()
-            setOutcomeDialogActionId(null)
-            showSuccess(wasEdit ? 'Outcome updated' : 'Outcome recorded')
-          }}
-        />
-      )}
+      {/* OutcomeFormDialog used to mount here as a global modal.
+          Moved to a routed page at /outcomes/new + /outcomes/:id/edit
+          (OutcomeFormPage) so the closing-memo field gets real page
+          width. The DecisionCard's Add-outcome button now navigates
+          instead of opening a dialog. */}
     </Box>
   )
 }
