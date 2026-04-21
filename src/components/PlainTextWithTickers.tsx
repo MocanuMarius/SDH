@@ -84,6 +84,13 @@ interface PlainTextWithTickersProps {
    *  "—30—" or the New Yorker's tombstone). Off by default; only
    *  the entry detail reading column turns this on. */
   endMark?: boolean
+  /** Optional map of ticker → ReactNode rendered in a right-side
+   *  gutter next to the paragraph where that ticker is FIRST
+   *  mentioned. Enables the editorial sidenote feature on the
+   *  entry detail page without affecting any other consumer of
+   *  this component. Hidden below the md breakpoint where there
+   *  isn't room for a true margin column. */
+  gutterAnnotations?: Map<string, React.ReactNode>
 }
 
 /** Render one line's worth of segments (text + ticker chips + URL
@@ -140,6 +147,7 @@ export default function PlainTextWithTickers({
   tickerAsLink = true,
   inline = false,
   endMark = false,
+  gutterAnnotations,
 }: PlainTextWithTickersProps) {
   if (!source || !source.trim()) return null
 
@@ -186,12 +194,49 @@ export default function PlainTextWithTickers({
   paragraphs.forEach((p, i) => { if (!isNote(p)) lastNonNoteIdx = i })
   if (lastNonNoteIdx === -1) lastNonNoteIdx = paragraphs.length - 1
 
+  // Pre-compute which tickers make their FIRST appearance in each
+  // paragraph (for the gutter-annotation feature). A ticker only
+  // annotates once per article — at the paragraph where it's first
+  // introduced — so repeat mentions don't clutter the margin. Keyed
+  // on paragraph index to keep the render loop branch-free.
+  const firstMentionByPara = new Map<number, string[]>()
+  if (gutterAnnotations && gutterAnnotations.size > 0) {
+    const seen = new Set<string>()
+    paragraphs.forEach((para, pi) => {
+      const inThisPara: string[] = []
+      // getRichSegments normalises whitespace, so it handles a
+      // paragraph with internal \n fine — it reads the whole
+      // paragraph as one linear stream of segments.
+      for (const seg of getRichSegments(para)) {
+        if (seg.type !== 'ticker') continue
+        const sym = seg.symbol
+        if (gutterAnnotations.has(sym) && !seen.has(sym)) {
+          seen.add(sym)
+          inThisPara.push(sym)
+        }
+      }
+      if (inThisPara.length > 0) firstMentionByPara.set(pi, inThisPara)
+    })
+  }
+  const hasGutter = firstMentionByPara.size > 0
+
   return (
     <Box>
       {paragraphs.map((para, pi) => {
         const isLastPara = pi === paragraphs.length - 1
         const noteMatch = para.match(NOTE_REGEX)
         const showEndMark = endMark && pi === lastNonNoteIdx
+
+        // Paragraph rhythm lives on the WRAPPING Box — Typography
+        // always has mb: 0. This keeps behaviour consistent whether
+        // the gutter feature is active or not, and avoids conflicts
+        // with global `& p:last-of-type { mb: 0 }` overrides on the
+        // host container (since every wrapped p is also the
+        // first/last-of-type within its own wrapper).
+        const paragraphMb = isLastPara ? 0 : 1.25
+        const typographyMb = 0
+
+        let proseElement: React.ReactNode = null
 
         // ── Marginalia branch ──
         // Paragraphs that start with "Note <Mon> <d>, <yy>:" render
@@ -201,13 +246,13 @@ export default function PlainTextWithTickers({
           const kicker = noteMatch[1].toUpperCase()
           const bodyText = para.slice(noteMatch[0].length)
           const lines = bodyText.split('\n')
-          return (
+          proseElement = (
             <Typography
-              key={pi}
               component="p"
               variant={dense ? 'body2' : 'body1'}
+              data-first-paragraph={pi === 0 ? 'true' : undefined}
               sx={{
-                mb: isLastPara ? 0 : 1.25,
+                mb: typographyMb,
                 fontStyle: 'italic',
                 color: 'text.secondary',
                 fontSize: '0.94em',
@@ -259,53 +304,101 @@ export default function PlainTextWithTickers({
               })}
             </Typography>
           )
+        } else {
+          // ── Regular prose branch ──
+          const lines = para.split('\n')
+          proseElement = (
+            <Typography
+              component="p"
+              variant={dense ? 'body2' : 'body1'}
+              data-first-paragraph={pi === 0 ? 'true' : undefined}
+              sx={{
+                mb: typographyMb,
+                whiteSpace: 'normal',
+                overflowWrap: 'break-word',
+                wordBreak: 'break-word',
+              }}
+            >
+              {lines.map((line, li) => {
+                const isLastLine = li === lines.length - 1
+                return (
+                  <span key={li}>
+                    {li > 0 && <br />}
+                    {renderSegments(line, tickerAsLink)}
+                    {/* End mark: a tiny "∎" glyph sitting inline
+                        after the last word of the last non-note
+                        paragraph. Newspaper convention for "the
+                        story is done". Preceded by a six-per-em
+                        space so it reads as a deliberate typographic
+                        mark, not a period. */}
+                    {showEndMark && isLastLine && (
+                      <Box
+                        component="span"
+                        aria-hidden
+                        sx={{
+                          ml: 0.5,
+                          color: 'text.disabled',
+                          fontSize: '0.85em',
+                          verticalAlign: 'baseline',
+                          userSelect: 'none',
+                        }}
+                      >
+                        {'\u2006\u220e'}
+                      </Box>
+                    )}
+                  </span>
+                )
+              })}
+            </Typography>
+          )
         }
 
-        // ── Regular prose branch ──
-        const lines = para.split('\n')
+        // ── Paragraph-wrapper layer ──
+        // Always wrap the Typography in a keyed Box. When the gutter
+        // feature is active, the Box becomes a 1fr-+-140 px grid row
+        // holding prose in column 1 and any gutter annotations in
+        // column 2. Without gutter, the Box is a cheap pass-through
+        // (no styles beyond the paragraph-rhythm margin-bottom).
+        //
+        // The drop-cap selector in EntryDetailPage uses the
+        // `data-first-paragraph` attribute (set inside proseElement
+        // above) rather than `:first-of-type`, so it keeps working
+        // regardless of how many wrapping Boxes sit between the
+        // body container and the paragraph element.
+        const mentionsHere = gutterAnnotations && gutterAnnotations.size > 0
+          ? (firstMentionByPara.get(pi) ?? [])
+          : []
         return (
-          <Typography
+          <Box
             key={pi}
-            component="p"
-            variant={dense ? 'body2' : 'body1'}
-            sx={{
-              mb: isLastPara ? 0 : 1.25,
-              whiteSpace: 'normal',
-              overflowWrap: 'break-word',
-              wordBreak: 'break-word',
-            }}
+            sx={
+              hasGutter
+                ? {
+                    display: { xs: 'block', md: 'grid' },
+                    gridTemplateColumns: { md: '1fr 140px' },
+                    columnGap: { md: 3 },
+                    alignItems: 'start',
+                    mb: paragraphMb,
+                  }
+                : { mb: paragraphMb }
+            }
           >
-            {lines.map((line, li) => {
-              const isLastLine = li === lines.length - 1
-              return (
-                <span key={li}>
-                  {li > 0 && <br />}
-                  {renderSegments(line, tickerAsLink)}
-                  {/* End mark: a tiny "∎" glyph sitting inline
-                      after the last word of the last non-note
-                      paragraph. Newspaper convention for "the
-                      story is done". Preceded by a six-per-em
-                      space so it reads as a deliberate typographic
-                      mark, not a period. */}
-                  {showEndMark && isLastLine && (
-                    <Box
-                      component="span"
-                      aria-hidden
-                      sx={{
-                        ml: 0.5,
-                        color: 'text.disabled',
-                        fontSize: '0.85em',
-                        verticalAlign: 'baseline',
-                        userSelect: 'none',
-                      }}
-                    >
-                      {'\u2006\u220e'}
-                    </Box>
-                  )}
-                </span>
-              )
-            })}
-          </Typography>
+            {proseElement}
+            {mentionsHere.length > 0 && (
+              <Box
+                sx={{
+                  display: { xs: 'none', md: 'flex' },
+                  flexDirection: 'column',
+                  gap: 1,
+                  pt: 0.5,
+                }}
+              >
+                {mentionsHere.map((ticker) => (
+                  <Box key={ticker}>{gutterAnnotations!.get(ticker)}</Box>
+                ))}
+              </Box>
+            )}
+          </Box>
         )
       })}
     </Box>

@@ -44,6 +44,9 @@ import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import ScrollProgress from '../components/ScrollProgress'
 import ContinuedFooter from '../components/ContinuedFooter'
 import EntryNeighborsFooter from '../components/EntryNeighborsFooter'
+import GutterAnnotation from '../components/GutterAnnotation'
+import { useBodyTickerDeltas } from '../hooks/useBodyTickerDeltas'
+import { TICKER_IN_TEXT_REGEX } from '../utils/text'
 import AddReminderDialog from '../components/AddReminderDialog'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
@@ -145,6 +148,36 @@ export default function EntryDetailPage() {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openActionTickersKey])
+
+  // ── Gutter ticker deltas ──
+  // Extract every unique ticker mentioned in the body. Each one
+  // gets a right-margin annotation showing its % move since the
+  // entry date. Only fetches on desktop layouts where the gutter
+  // has room to render — we still COMPUTE them regardless (cheap,
+  // cached) so that a resize from xs to md doesn't require a
+  // re-fetch. PlainTextWithTickers hides the annotations via media
+  // query when the gutter isn't visible.
+  const bodyTickers = useMemo(() => {
+    const body = entry?.body_markdown ?? ''
+    if (!body.trim()) return [] as string[]
+    TICKER_IN_TEXT_REGEX.lastIndex = 0
+    const set = new Set<string>()
+    let m: RegExpExecArray | null
+    while ((m = TICKER_IN_TEXT_REGEX.exec(body)) !== null) {
+      const sym = m[1]?.toUpperCase()
+      if (sym) set.add(sym)
+    }
+    return Array.from(set)
+  }, [entry?.body_markdown])
+  const bodyDeltas = useBodyTickerDeltas(bodyTickers, entry?.date)
+  const gutterAnnotations = useMemo(() => {
+    if (bodyTickers.length === 0) return undefined
+    const m = new Map<string, React.ReactNode>()
+    for (const t of bodyTickers) {
+      m.set(t, <GutterAnnotation ticker={t} delta={bodyDeltas.get(t)} />)
+    }
+    return m
+  }, [bodyTickers, bodyDeltas])
 
   const handleAddNote = async () => {
     if (!quickNote.trim() || !id || !entry) return
@@ -416,7 +449,14 @@ export default function EntryDetailPage() {
             // or newspaper gutter. Maxes out at a comfortable 68ch
             // reading column and centers on wider screens so it
             // doesn't stretch edge-to-edge like a form field.
-            maxWidth: { xs: '100%', md: '68ch' },
+            // Widen on md+ to reserve room for the right-side ticker-
+            // delta gutter (140 px column + 24 px gap). Prose inside
+            // still caps at 1fr within a grid-per-paragraph — so the
+            // comfortable reading measure is preserved; only the
+            // outer Box gets wider to hold the margin column. When
+            // the body has no tickers at all, the annotations map is
+            // undefined and paragraphs collapse back to a normal flow.
+            maxWidth: { xs: '100%', md: 'calc(68ch + 164px)' },
             mx: { xs: 0, md: 'auto' },
             mb: 2,
             py: { xs: 2, sm: 3 },
@@ -470,8 +510,12 @@ export default function EntryDetailPage() {
             // as a deliberate editorial signature, not a CSS accident.
             // Only fires on the very first paragraph — subsequent ones
             // are plain. Skipped on xs-sm widths where the drop cap
-            // would crowd the narrow column.
-            '& p:first-of-type > span:first-of-type > span:first-of-type::first-letter': {
+            // would crowd the narrow column. Targets the
+            // `data-first-paragraph` attribute rather than
+            // `:first-of-type` so the selector works regardless of
+            // how many wrapper Boxes PlainTextWithTickers interposes
+            // for the gutter-annotation feature.
+            '& p[data-first-paragraph="true"] > span:first-of-type > span:first-of-type::first-letter': {
               display: { xs: 'inline', md: 'block' },
               float: { md: 'left' },
               fontFamily: "'Source Serif 4', 'Iowan Old Style', 'Charter', 'Georgia', serif",
@@ -504,7 +548,12 @@ export default function EntryDetailPage() {
             },
           }}
         >
-          <PlainTextWithTickers source={entry.body_markdown} dense endMark />
+          <PlainTextWithTickers
+            source={entry.body_markdown}
+            dense
+            endMark
+            gutterAnnotations={gutterAnnotations}
+          />
           <ContinuedFooter source={entry.body_markdown} />
         </Box>
       )}
