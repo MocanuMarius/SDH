@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useNavigate, Link as RouterLink, useLocation } from 'react-router-dom'
-import { Box, Button, Chip, Typography, Alert, Stack, Skeleton, Paper, Link, useMediaQuery, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Tabs, Tab, InputAdornment } from '@mui/material'
+import { Box, Button, Chip, Typography, Alert, Stack, Skeleton, Link, useMediaQuery, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Tabs, Tab, InputAdornment } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 import { useTheme } from '@mui/material/styles'
 import EditIcon from '@mui/icons-material/Edit'
@@ -45,7 +45,6 @@ import ScrollProgress from '../components/ScrollProgress'
 import PageFoldCorner from '../components/PageFoldCorner'
 import ContinuedFooter from '../components/ContinuedFooter'
 import AddReminderDialog from '../components/AddReminderDialog'
-import TagChip from '../components/TagChip'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
 import type { Outcome } from '../types/database'
@@ -315,35 +314,108 @@ export default function EntryDetailPage() {
         }
         dense
       />
-      {hasOutcomes && (
-        <Alert severity="info" sx={{ mb: 2 }} icon={false}>
-          <Typography variant="body2">
-            <strong>This entry has recorded outcomes.</strong> Edits will change the historical record — consider adding a follow-up entry instead.
-          </Typography>
-        </Alert>
-      )}
+      {/* Dateline — italic serif "Sunday, April 21, 2026 · Your desk"
+          slug right under the masthead title. Reinforces that this
+          is an ARTICLE page, not a generic card. */}
+      <Box aria-hidden sx={{ mb: 1, textAlign: { xs: 'center', sm: 'left' } }}>
+        <Typography
+          variant="caption"
+          sx={{
+            fontFamily: "'Source Serif 4', 'Iowan Old Style', 'Charter', 'Georgia', serif",
+            fontStyle: 'italic',
+            color: 'text.disabled',
+            fontSize: '0.82rem',
+            letterSpacing: '0.02em',
+          }}
+        >
+          {(() => {
+            try {
+              const d = new Date(entry.date + 'T00:00:00')
+              return d.toLocaleDateString(undefined, {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+              }) + (entry.author ? ` · ${entry.author}` : ' · Your desk')
+            } catch {
+              return ''
+            }
+          })()}
+        </Typography>
+      </Box>
+      {/* Tags as small-caps category line (newspaper section kicker)
+          rather than a row of chips. Chips read as interactive app UI;
+          small caps reads as print category. Click a tag to filter. */}
       {entry.tags.length > 0 && (
-        <Box display="flex" flexWrap="wrap" gap={0.5} sx={{ mb: 2 }}>
-          {entry.tags.map((t) => (
-            <TagChip key={t} tag={t} />
+        <Box sx={{ mb: 2, textAlign: { xs: 'center', sm: 'left' } }}>
+          {entry.tags.map((t, i) => (
+            <Box
+              component={RouterLink}
+              to={`/?tag=${encodeURIComponent(t)}`}
+              key={t}
+              sx={{
+                display: 'inline-block',
+                color: 'text.disabled',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                textDecoration: 'none',
+                '&:hover': { color: 'primary.main' },
+                transition: 'color 140ms ease',
+                mr: i === entry.tags.length - 1 ? 0 : 1.5,
+              }}
+            >
+              {t}
+            </Box>
           ))}
         </Box>
       )}
-      {entry.body_markdown.trim() && (
-        <Paper
-          variant="outlined"
+      {hasOutcomes && (
+        <Box
           sx={{
-            p: { xs: 1.5, sm: 2 },
             mb: 2,
-            borderLeft: 4,
-            borderLeftColor: 'primary.light',
-            bgcolor: 'background.paper',
+            py: 0.75,
+            borderTop: '1px dashed',
+            borderBottom: '1px dashed',
+            borderColor: 'divider',
+            textAlign: 'center',
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              fontFamily: "'Source Serif 4', 'Iowan Old Style', 'Charter', 'Georgia', serif",
+              fontStyle: 'italic',
+              color: 'text.secondary',
+              fontSize: '0.8rem',
+            }}
+          >
+            This entry has recorded outcomes — edits rewrite the historical record.
+          </Typography>
+        </Box>
+      )}
+      {entry.body_markdown.trim() && (
+        <Box
+          sx={{
+            // Article body — no Paper wrapper, no bgcolor, no blue
+            // accent bar. The page itself is the paper; the prose
+            // stands on its own column with hairline rules above
+            // and below. Maxes out at a comfortable 68ch reading
+            // column and centers on wider screens so it doesn't
+            // stretch edge-to-edge like a form field.
+            maxWidth: { xs: '100%', md: '68ch' },
+            mx: { xs: 0, md: 'auto' },
+            mb: 2,
+            py: { xs: 2, sm: 3 },
+            borderTop: '1px solid',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
             position: 'relative',
-            overflow: 'hidden',
             '& p:first-of-type': { mt: 0 },
+            '& p:last-of-type': { mb: 0 },
             overflowWrap: 'break-word',
             wordBreak: 'break-word',
-            maxWidth: '100%',
             // Editorial first-letter drop cap on the lead paragraph.
             // Picks the first paragraph's first span ("text") from the
             // PlainTextWithTickers render tree and promotes its initial
@@ -386,12 +458,11 @@ export default function EntryDetailPage() {
             },
           }}
         >
-          {/* Folded-corner ornament: quiet editorial signature that
-              the reader is on an "opened" article page. */}
-          <PageFoldCorner size="md" animate={animateFoldCorner} />
+          {/* Fold-corner ornament relative to the reading column. */}
+          <PageFoldCorner size="sm" animate={animateFoldCorner} />
           <PlainTextWithTickers source={entry.body_markdown} dense />
           <ContinuedFooter source={entry.body_markdown} />
-        </Paper>
+        </Box>
       )}
 
       {/* Quick note — append a timestamped note without editing the full entry.
