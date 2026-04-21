@@ -42,7 +42,6 @@ import ValuationWidget from '../components/ValuationWidget'
 import PredictionCard from '../components/PredictionCard'
 import PlainTextWithTickers from '../components/PlainTextWithTickers'
 import ScrollProgress from '../components/ScrollProgress'
-import PageFoldCorner from '../components/PageFoldCorner'
 import ContinuedFooter from '../components/ContinuedFooter'
 import AddReminderDialog from '../components/AddReminderDialog'
 import { useSnackbar } from '../contexts/SnackbarContext'
@@ -55,10 +54,10 @@ export default function EntryDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
   // Detail page reads the navigation state set by EntryFormPage on
-  // save. When `justCreated`/`justSaved` is true, the fold-corner
-  // animates in as a "saved a page" flourish.
+  // save (justCreated/justSaved were the fold-corner flourish
+  // triggers — kept on the type for future use) and by
+  // OutcomeFormPage (justClosedActionId drives the card flash).
   const locationState = location.state as { justCreated?: boolean; justSaved?: boolean; justClosedActionId?: string } | null
-  const animateFoldCorner = Boolean(locationState?.justCreated || locationState?.justSaved)
   // Phase-3 closure moment: when returning from OutcomeFormPage with
   // a just-closed action id, flash the matching DecisionCard for
   // ~1.2s and show an italic kicker below the actions tab. Cleared
@@ -401,16 +400,28 @@ export default function EntryDetailPage() {
             // Article body — no Paper wrapper, no bgcolor, no blue
             // accent bar. The page itself is the paper; the prose
             // stands on its own column with hairline rules above
-            // and below. Maxes out at a comfortable 68ch reading
-            // column and centers on wider screens so it doesn't
-            // stretch edge-to-edge like a form field.
+            // and below, plus a vertical "column rule" on the left
+            // that indents the body like an editorial blockquote
+            // or newspaper gutter. Maxes out at a comfortable 68ch
+            // reading column and centers on wider screens so it
+            // doesn't stretch edge-to-edge like a form field.
             maxWidth: { xs: '100%', md: '68ch' },
             mx: { xs: 0, md: 'auto' },
             mb: 2,
             py: { xs: 2, sm: 3 },
+            // Indent + left rule — treats the body as an extended
+            // passage (the "what I was thinking" column) rather
+            // than a generic card. The left rule is a touch
+            // stronger than the top/bottom hairlines so the
+            // indentation reads as deliberate, not accidental.
+            pl: { xs: 2, sm: 3 },
+            pr: { xs: 0.5, sm: 1 },
+            borderLeft: '2px solid',
+            borderLeftColor: 'rgba(15, 23, 42, 0.18)',
             borderTop: '1px solid',
             borderBottom: '1px solid',
-            borderColor: 'divider',
+            borderTopColor: 'divider',
+            borderBottomColor: 'divider',
             position: 'relative',
             '& p:first-of-type': { mt: 0 },
             '& p:last-of-type': { mb: 0 },
@@ -458,8 +469,6 @@ export default function EntryDetailPage() {
             },
           }}
         >
-          {/* Fold-corner ornament relative to the reading column. */}
-          <PageFoldCorner size="sm" animate={animateFoldCorner} />
           <PlainTextWithTickers source={entry.body_markdown} dense />
           <ContinuedFooter source={entry.body_markdown} />
         </Box>
