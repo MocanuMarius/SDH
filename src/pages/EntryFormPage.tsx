@@ -982,7 +982,45 @@ export default function EntryFormPage() {
             size="small"
             options={tagPresets}
             value={tagValues}
-            onChange={(_, newVal) => setTagsStr(newVal.join(', '))}
+            // Blur commits the typed text as a chip — before this,
+            // typing a tag and clicking away silently lost it.
+            autoSelect
+            clearOnBlur
+            // Normalize every incoming value: split on commas (so
+            // pasting "fintech, ai, geopolitics" or typing
+            // "a,b,c<Enter>" yields three chips, not one), strip
+            // the optional leading `#` that TagChip will add back
+            // for display, trim + lowercase, drop empties, dedupe.
+            onChange={(_, newVal) => {
+              const flat = newVal
+                .flatMap((v) => String(v).split(','))
+                .map((t) => t.trim().replace(/^#+/, '').toLowerCase())
+                .filter(Boolean)
+              const deduped = Array.from(new Set(flat))
+              setTagsStr(deduped.join(', '))
+            }}
+            // Typing a comma finalises the current fragment as a
+            // chip without needing Enter. Mirrors the tag-input UX
+            // in Notion / Linear / Journalytic — comma is the
+            // natural separator for a running list of tags.
+            onInputChange={(_event, rawInput, reason) => {
+              if (reason !== 'input') return
+              if (!rawInput.includes(',')) return
+              const pieces = rawInput.split(',').map((p) => p.trim()).filter(Boolean)
+              // Everything before the LAST comma becomes a chip;
+              // anything after the final comma is ignored (the
+              // user is still typing it). An input like
+              // "fintech, ai, g" commits "fintech" and "ai", leaves
+              // "g" as the still-being-typed fragment handled by
+              // Autocomplete's internal input.
+              const committed = rawInput.endsWith(',') ? pieces : pieces.slice(0, -1)
+              if (committed.length === 0) return
+              const merged = [...tagValues, ...committed]
+                .map((t) => t.trim().replace(/^#+/, '').toLowerCase())
+                .filter(Boolean)
+              const deduped = Array.from(new Set(merged))
+              setTagsStr(deduped.join(', '))
+            }}
             renderTags={(value, getTagProps) =>
               value.map((opt, idx) => {
                 const { key, ...rest } = getTagProps({ index: idx })
@@ -992,7 +1030,7 @@ export default function EntryFormPage() {
             renderInput={(params) => (
               <TextField
                 {...params}
-                placeholder={tagValues.length === 0 ? 'add a tag…' : ''}
+                placeholder={tagValues.length === 0 ? 'add a tag… (press comma or Enter)' : ''}
                 variant="standard"
                 sx={{
                   '& .MuiInput-underline:before': { borderBottom: '1px dashed', borderColor: 'divider' },
