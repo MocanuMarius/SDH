@@ -47,6 +47,9 @@ import EntryNeighborsFooter from '../components/EntryNeighborsFooter'
 import GutterAnnotation from '../components/GutterAnnotation'
 import { useBodyTickerDeltas } from '../hooks/useBodyTickerDeltas'
 import { TICKER_IN_TEXT_REGEX } from '../utils/text'
+import ScoreLadder from '../components/ScoreLadder'
+import { computeInvestmentScore } from '../utils/investmentScore'
+import { useValuation } from '../hooks/queries'
 import AddReminderDialog from '../components/AddReminderDialog'
 import { useSnackbar } from '../contexts/SnackbarContext'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
@@ -91,7 +94,8 @@ export default function EntryDetailPage() {
     return map
   }, [outcomesQ.data])
   const predictionsQ = usePredictions(id)
-  const predictions = predictionsQ.data ?? []
+  const predictions = useMemo(() => predictionsQ.data ?? [], [predictionsQ.data])
+  const valuationQ = useValuation(id)
   const remindersQ = useReminders(true)
   const entryReminders = useMemo(
     () => (remindersQ.data ?? []).filter((r) => r.entry_id === id),
@@ -148,6 +152,30 @@ export default function EntryDetailPage() {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openActionTickersKey])
+
+  // ── Live investment-score result for the passive ScoreLadder ──
+  // Reads the loaded entry + actions + predictions + valuation. The
+  // ladder shows the same number the journal-list badge uses, plus
+  // the unfired-signal headroom — turning the detail page into a
+  // gentle nudge to fill in what's missing.
+  const detailScoreResult = useMemo(() => {
+    if (!entry) return null
+    const firstAction = actions[0] ?? null
+    return computeInvestmentScore({
+      entry: { body_markdown: entry.body_markdown, tags: entry.tags },
+      actions: firstAction
+        ? [{
+            type: firstAction.type,
+            action_date: firstAction.action_date,
+            kill_criteria: firstAction.kill_criteria,
+            pre_mortem_text: firstAction.pre_mortem_text,
+            notes: firstAction.notes,
+          }]
+        : [],
+      predictions,
+      hasValuation: !!valuationQ.data,
+    })
+  }, [entry, actions, predictions, valuationQ.data])
 
   // ── Gutter ticker deltas ──
   // Extract every unique ticker mentioned in the body. Each one
@@ -391,6 +419,17 @@ export default function EntryDetailPage() {
           })()}
         </Typography>
       </Box>
+      {/* Score ladder — passive view of the entry's investment
+          score plus the unfired-signal headroom. Sits between the
+          dateline and the tags so it reads as part of the article
+          masthead rather than app chrome. Hidden on print (workflow
+          scaffolding, not article content). */}
+      {detailScoreResult && (
+        <Box sx={{ mb: 1.5 }} data-no-print="true">
+          <ScoreLadder result={detailScoreResult} dense variant="paper" />
+        </Box>
+      )}
+
       {/* Tags as small-caps category line (newspaper section kicker)
           rather than a row of chips. Chips read as interactive app UI;
           small caps reads as print category. Click a tag to filter. */}

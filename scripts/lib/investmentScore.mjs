@@ -108,13 +108,17 @@ export function computeInvestmentScore(input) {
   }
 
   // Writeup length
+  // Recalibrated 2026-04-22: text-only ceiling lowered to +15 so an
+  // entry with even a long body alone tops out near 60. The rest of
+  // the score comes from STRUCTURED signals. Keep in lockstep with
+  // src/utils/investmentScore.ts.
   const body = (entry.body_markdown ?? '').trim()
   const bodyChars = body.length
   if (bodyChars === 0) add('No journal writeup', -20)
   else if (bodyChars < 30) add('Token writeup (<30 chars)', -5)
   else if (bodyChars < 200) add('Minimal writeup (30–200 chars)', +5)
-  else if (bodyChars < 800) add('Standard writeup (200–800 chars)', +15)
-  else add('Detailed writeup (800+ chars)', +30)
+  else if (bodyChars < 800) add('Standard writeup (200–800 chars)', +12)
+  else add('Detailed writeup (800+ chars)', +15)
 
   // Forced-process artefacts
   const firstEntryAction = actions[0]
@@ -175,6 +179,11 @@ export function computeInvestmentScore(input) {
     if (days < 7) add('Closed within 7 days (quick flip)', -8)
   }
 
+  // 3-engines valuation (input.hasValuation)
+  if (input.hasValuation) {
+    add('3-engines valuation set', +10)
+  }
+
   // Clip + bucket
   score = Math.max(0, Math.min(100, Math.round(score)))
   let bucket
@@ -183,5 +192,28 @@ export function computeInvestmentScore(input) {
   else bucket = 'Invest'
 
   contributions.sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
-  return { score, bucket, contributions }
+
+  // Unfired-signal headroom — same logic as the .ts mirror.
+  const unfiredSignals = []
+  if (!firstEntryAction?.kill_criteria || String(firstEntryAction.kill_criteria).trim().length === 0) {
+    unfiredSignals.push({ label: 'Add kill criteria', weight: 15 })
+  }
+  if (!firstEntryAction?.pre_mortem_text || String(firstEntryAction.pre_mortem_text).trim().length === 0) {
+    unfiredSignals.push({ label: 'Add pre-mortem', weight: 8 })
+  }
+  if (!input.hasValuation) {
+    unfiredSignals.push({ label: 'Set 3-engines valuation', weight: 10 })
+  }
+  if (longHorizonPredictions.length === 0) {
+    unfiredSignals.push({ label: 'Add prediction with end date 180+ days out', weight: 8 })
+  }
+  if (!hasSubSkillPrediction) {
+    unfiredSignals.push({ label: 'Tag a prediction with a sub-skill', weight: 10 })
+  }
+  if (!hasInvestTag) {
+    unfiredSignals.push({ label: 'Add long-term / compounder tag', weight: 10 })
+  }
+  unfiredSignals.sort((a, b) => b.weight - a.weight)
+
+  return { score, bucket, contributions, unfiredSignals }
 }

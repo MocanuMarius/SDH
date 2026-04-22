@@ -29,6 +29,11 @@ export interface ScoringResult {
   bucket: 'Spec' | 'Mixed' | 'Invest'
   /** Ordered list of non-zero contributions (by absolute weight, desc) */
   contributions: SignalContribution[]
+  /** Achievable signals that haven't fired yet, sorted by weight desc.
+   *  Powers the ScoreLadder's "+ N to add this" chip list — the user
+   *  sees concrete actions that would lift their score, ranked by
+   *  the biggest gain first. */
+  unfiredSignals: SignalContribution[]
 }
 
 export interface EntryForScoring {
@@ -70,6 +75,11 @@ export interface ScoringInput {
   predictions?: PredictionForScoring[]
   /** First outcome on any linked action — used to detect quick-flip behaviour */
   earliestOutcome?: OutcomeForScoring | null
+  /** Whether the entry has a saved 3-engines valuation row in the
+   *  entry_valuations table. Pulled by the caller (the score util
+   *  doesn't read the DB). When true, contributes +10. When false,
+   *  surfaces in the unfiredSignals list as "Set 3-engines valuation +10". */
+  hasValuation?: boolean
 }
 
 const SPEC_TAGS = ['yolo', 'lotto', 'speculate', 'speculation', 'meme', 'weekly', 'gamble', 'degen', '0dte']
@@ -98,6 +108,15 @@ export function computeInvestmentScore(input: ScoringInput): ScoringResult {
   }
 
   // ── Structure: writeup length ─────────────────────────────────────────
+  // Recalibrated 2026-04-22: text alone now caps at +15 (was +30) so
+  // an entry with even the most prolix body can only reach ~60. The
+  // ceiling above that comes from STRUCTURED signals — kill criteria,
+  // pre-mortem, valuation, predictions, tags. The intent is a
+  // gamification loop: the score visibly stalls at 60 from text
+  // alone, prompting the writer to add the structured artefacts that
+  // make the thesis falsifiable. The ScoreLadder UI surfaces those
+  // unfired signals as clickable chips so the writer can see exactly
+  // what unlocks the next 5–15 points.
   const body = (entry.body_markdown ?? '').trim()
   const bodyChars = body.length
   if (bodyChars === 0) {
@@ -107,9 +126,9 @@ export function computeInvestmentScore(input: ScoringInput): ScoringResult {
   } else if (bodyChars < 200) {
     add('Minimal writeup (30–200 chars)', +5)
   } else if (bodyChars < 800) {
-    add('Standard writeup (200–800 chars)', +15)
+    add('Standard writeup (200–800 chars)', +12)
   } else {
-    add('Detailed writeup (800+ chars)', +30)
+    add('Detailed writeup (800+ chars)', +15)
   }
 
   // ── Structure: forced-process artefacts ───────────────────────────────
@@ -181,6 +200,15 @@ export function computeInvestmentScore(input: ScoringInput): ScoringResult {
     if (days < 7) add('Closed within 7 days (quick flip)', -8)
   }
 
+  // ── Structure: 3-engines valuation ────────────────────────────────────
+  // Rewards entries where the writer has quantified their thesis with
+  // an earnings-growth + multiple + yield projection. Pure structure
+  // signal — doesn't read what the values are, just whether the row
+  // exists in entry_valuations. Caller passes input.hasValuation.
+  if (input.hasValuation) {
+    add('3-engines valuation set', +10)
+  }
+
   // ── Clip and classify ─────────────────────────────────────────────────
   score = Math.max(0, Math.min(100, Math.round(score)))
   let bucket: 'Spec' | 'Mixed' | 'Invest'
@@ -189,7 +217,34 @@ export function computeInvestmentScore(input: ScoringInput): ScoringResult {
   else bucket = 'Invest'
 
   contributions.sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight))
-  return { score, bucket, contributions }
+
+  // ── Unfired-signal headroom (drives the ScoreLadder UI) ───────────────
+  // Re-evaluates each binary structure signal and reports the ones
+  // that haven't fired, ranked by weight desc — the user sees the
+  // biggest gain first. Writeup tier is intentionally excluded
+  // (it's a continuous signal — covered by the score itself).
+  const unfiredSignals: SignalContribution[] = []
+  if (!firstEntryAction?.kill_criteria || firstEntryAction.kill_criteria.trim().length === 0) {
+    unfiredSignals.push({ label: 'Add kill criteria', weight: 15 })
+  }
+  if (!firstEntryAction?.pre_mortem_text || firstEntryAction.pre_mortem_text.trim().length === 0) {
+    unfiredSignals.push({ label: 'Add pre-mortem', weight: 8 })
+  }
+  if (!input.hasValuation) {
+    unfiredSignals.push({ label: 'Set 3-engines valuation', weight: 10 })
+  }
+  if (longHorizonPredictions.length === 0) {
+    unfiredSignals.push({ label: 'Add prediction with end date 180+ days out', weight: 8 })
+  }
+  if (!hasSubSkillPrediction) {
+    unfiredSignals.push({ label: 'Tag a prediction with a sub-skill', weight: 10 })
+  }
+  if (!hasInvestTag) {
+    unfiredSignals.push({ label: 'Add long-term / compounder tag', weight: 10 })
+  }
+  unfiredSignals.sort((a, b) => b.weight - a.weight)
+
+  return { score, bucket, contributions, unfiredSignals }
 }
 
 /** Short label for the cards on the Journal page. No emoji icons. */

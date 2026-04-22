@@ -42,6 +42,9 @@ import TagChip from '../components/TagChip'
 import BodyWritingFooter from '../components/BodyWritingFooter'
 import AutoSavedKicker from '../components/AutoSavedKicker'
 import PendingDraftBanner from '../components/PendingDraftBanner'
+import ScoreLadder from '../components/ScoreLadder'
+import { computeInvestmentScore } from '../utils/investmentScore'
+import { useActionsByEntry, useValuation } from '../hooks/queries'
 import {
   saveDraft as saveEntryDraft,
   deleteDraft as deleteEntryDraft,
@@ -515,6 +518,13 @@ export default function EntryFormPage() {
     }
   }, [isNew, editEntryQ.data, editEntryQ.isLoading, editEntryQ.error])
 
+  // Load existing actions + valuation for the entry being edited.
+  // Powers the live ScoreLadder so the score reflects DB-side
+  // signals (kill criteria, valuation set elsewhere) the form
+  // doesn't directly track.
+  const existingActionsQ = useActionsByEntry(isNew ? undefined : id)
+  const existingValuationQ = useValuation(isNew ? undefined : id)
+
   // Load existing predictions for the entry being edited (only once per entry load).
   const existingPredictionsQ = usePredictions(isNew ? undefined : id)
   const loadedPredictionsIdRef = useRef<string | null>(null)
@@ -577,6 +587,45 @@ export default function EntryFormPage() {
   }, [title_markdown])
 
   const [pendingDecisions, setPendingDecisions] = useState<DecisionBlockFields[]>([])
+
+  // ── Live investment score (drives ScoreLadder) ────────────────────
+  // Combines local form state with any DB-side actions / valuation
+  // / predictions so the ladder reflects "what would this entry
+  // score if I saved right now?".
+  //
+  // Note: `pendingDecisions` (the inline decision-block dialog) does
+  // not capture kill_criteria / pre_mortem_text — those structured
+  // fields only live on the full DecisionFormPage. So the score uses
+  // EXISTING actions (from the DB, edit-mode only) as the source of
+  // truth for those signals. New entries with no actions yet will
+  // see those signals listed as unfired, which is correct: the
+  // writer needs to follow up by opening DecisionFormPage to add
+  // kill / pre-mortem details.
+  const liveScoreResult = useMemo(() => {
+    const tags = tagsStr.split(',').map((t) => t.trim()).filter(Boolean)
+    const firstExisting = (existingActionsQ.data ?? [])[0]
+    const firstAction = firstExisting
+      ? {
+          type: firstExisting.type,
+          action_date: firstExisting.action_date,
+          kill_criteria: firstExisting.kill_criteria,
+          pre_mortem_text: firstExisting.pre_mortem_text,
+          notes: firstExisting.notes,
+        }
+      : null
+    return computeInvestmentScore({
+      entry: { body_markdown, tags },
+      actions: firstAction ? [firstAction] : [],
+      predictions: existingPredictionsQ.data ?? [],
+      hasValuation: !!existingValuationQ.data,
+    })
+  }, [
+    body_markdown,
+    tagsStr,
+    existingActionsQ.data,
+    existingPredictionsQ.data,
+    existingValuationQ.data,
+  ])
 
   // Decisions are NOT spliced into the body anymore — they stay structured.
   // We collect them in `pendingDecisions` and persist as `actions` rows on save.
@@ -1097,6 +1146,13 @@ export default function EntryFormPage() {
           toggle on the right. Sits between the body and the optional
           cards as a one-line "you're writing" header for the structural
           fields below. */}
+      {/* Investment-score ladder — visible while writing so the
+          score climbs as you type and the unfired-signal chips
+          show exactly what to add next for the biggest gains. */}
+      <Box sx={{ mb: 1 }}>
+        <ScoreLadder result={liveScoreResult} dense variant="paper" />
+      </Box>
+
       <Box
         sx={{
           display: 'flex',
