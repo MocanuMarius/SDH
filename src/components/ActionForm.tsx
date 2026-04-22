@@ -30,8 +30,6 @@ import {
   InputAdornment,
   Divider,
   Stack,
-  FormControlLabel,
-  Checkbox,
   Link,
 } from '@mui/material'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
@@ -39,8 +37,15 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
 import CheckIcon from '@mui/icons-material/Check'
-import { ACTION_TYPES, ACTION_SIZES, isDirectionalAction } from '../types/database'
-import type { Action, ActionSize } from '../types/database'
+import {
+  ACTION_TYPES,
+  ACTION_SIZES,
+  INSTRUMENT_TYPES,
+  INSTRUMENT_TYPE_LABELS,
+  isDirectionalAction,
+  isOptionInstrument,
+} from '../types/database'
+import type { Action, ActionSize, InstrumentType } from '../types/database'
 import TickerAutocomplete from './TickerAutocomplete'
 import DecisionChip from './DecisionChip'
 import ReasonField from './ReasonField'
@@ -61,6 +66,11 @@ interface ActionFormProps {
     kill_criteria: string
     pre_mortem_text: string
     size: ActionSize | null
+    instrument_type: InstrumentType
+    option_expiry: string | null
+    option_strike: number | null
+    option_right: 'C' | 'P' | null
+    market_value: number | null
   }) => Promise<void>
   /** Called when the user clicks Cancel. Page-level host navigates back. */
   onCancel: () => void
@@ -71,15 +81,10 @@ interface ActionFormProps {
 
 const getToday = todayISO
 
-/** Convert YYYY-MM-DD to DDMMMYY format for option tickers (e.g., 2027-01-15 → 15JAN27) */
-function formatOptionDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00')
-  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-  const day = String(d.getDate()).padStart(2, '0')
-  const mon = months[d.getMonth()]
-  const year = String(d.getFullYear()).slice(2)
-  return `${day}${mon}${year}`
-}
+// `formatOptionDate` (the OCC-style "15JAN27" composer) was removed:
+// option strike / expiry / right now live in dedicated columns and
+// the ticker stays clean. See migration
+// 20260422120000_actions_instrument_type_options.sql.
 
 const daysAgo = daysAgoISO
 
@@ -105,10 +110,26 @@ export default function ActionForm({
   const [kill_criteria, setKillCriteria] = useState((initial as { kill_criteria?: string })?.kill_criteria ?? '')
   const [pre_mortem_text, setPreMortemText] = useState((initial as { pre_mortem_text?: string | null })?.pre_mortem_text ?? '')
   const [size, setSize] = useState<ActionSize>((initial?.size as ActionSize) ?? 'medium')
-  const [isOption, setIsOption] = useState(false)
-  const [optionExpiry, setOptionExpiry] = useState('')
-  const [optionStrike, setOptionStrike] = useState('')
-  const [optionType, setOptionType] = useState<'C' | 'P'>('C')
+  // Instrument category: stock (default) | option | futures_option |
+  // other. The OCC ticker hack (composing "AAPL 15JAN27 200 C" into
+  // the ticker field on save) is gone — strike / expiry / right now
+  // live in dedicated columns and the ticker stays clean.
+  const [instrumentType, setInstrumentType] = useState<InstrumentType>(
+    (initial?.instrument_type as InstrumentType) ?? 'stock'
+  )
+  const [optionExpiry, setOptionExpiry] = useState<string>(initial?.option_expiry ?? '')
+  const [optionStrike, setOptionStrike] = useState<string>(
+    initial?.option_strike != null ? String(initial.option_strike) : ''
+  )
+  const [optionRight, setOptionRight] = useState<'C' | 'P'>((initial?.option_right as 'C' | 'P') ?? 'C')
+  // Market value — optional dollar amount of the position at decision
+  // time. Useful when price × shares doesn't capture the whole picture
+  // (futures notionals, structured products). Lives under the same
+  // collapsible as price/currency/shares since it's the same kind of
+  // sizing context.
+  const [marketValue, setMarketValue] = useState<string>(
+    initial?.market_value != null ? String(initial.market_value) : ''
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [readyCheckOpen, setReadyCheckOpen] = useState(false)
@@ -155,6 +176,11 @@ export default function ActionForm({
     setKillCriteria((initial as { kill_criteria?: string })?.kill_criteria ?? '')
     setPreMortemText((initial as { pre_mortem_text?: string | null })?.pre_mortem_text ?? '')
     setSize((initial?.size as ActionSize) ?? 'medium')
+    setInstrumentType((initial?.instrument_type as InstrumentType) ?? 'stock')
+    setOptionExpiry(initial?.option_expiry ?? '')
+    setOptionStrike(initial?.option_strike != null ? String(initial.option_strike) : '')
+    setOptionRight((initial?.option_right as 'C' | 'P') ?? 'C')
+    setMarketValue(initial?.market_value != null ? String(initial.market_value) : '')
     const takenToday = (initial?.action_date ?? getToday()) === getToday()
     setDecisionTakenToday(takenToday)
     setPriceOpen(Boolean(initial?.price || initial?.currency || initial?.shares))
@@ -203,16 +229,40 @@ export default function ActionForm({
       setError('Reason is required for Pass decisions — the whole point is capturing why you skipped.')
       return
     }
+    // For options / futures-options, require strike + expiry so we
+    // don't end up with half-described contracts. The ticker stays
+    // clean (just the underlying); the form persists strike / expiry
+    // / right in dedicated columns.
+    const isOption = isOptionInstrument(instrumentType)
+    if (isOption) {
+      if (!optionExpiry) {
+        setError('Option expiry is required for option / futures-option decisions.')
+        return
+      }
+      if (!optionStrike.trim()) {
+        setError('Option strike is required for option / futures-option decisions.')
+        return
+      }
+    }
+    const parsedStrike = isOption ? Number(optionStrike) : null
+    if (isOption && (parsedStrike == null || !Number.isFinite(parsedStrike) || parsedStrike <= 0)) {
+      setError('Option strike must be a positive number.')
+      return
+    }
+    const parsedMarketValue = marketValue.trim() ? Number(marketValue) : null
+    if (parsedMarketValue != null && (!Number.isFinite(parsedMarketValue) || parsedMarketValue < 0)) {
+      setError('Market value must be a non-negative number.')
+      return
+    }
     setError(null)
     setSaving(true)
-    // Compose option ticker: "AAPL 15JAN27 200 C"
-    const effectiveTicker = isOption && optionExpiry && optionStrike
-      ? `${ticker.trim()} ${formatOptionDate(optionExpiry)} ${optionStrike.trim()} ${optionType}`
-      : ticker.trim()
     try {
       await onSubmit({
         type,
-        ticker: effectiveTicker,
+        // Ticker stays clean (just the underlying / free-text label).
+        // Old rows that still have OCC-encoded tickers are handled by
+        // the display layer's parseOptionSymbol fallback.
+        ticker: ticker.trim(),
         company_name: company_name || '',
         action_date,
         price,
@@ -223,6 +273,11 @@ export default function ActionForm({
         kill_criteria: kill_criteria || '',
         pre_mortem_text: pre_mortem_text || '',
         size: isDirectionalAction(type) ? size : null,
+        instrument_type: instrumentType,
+        option_expiry: isOption ? optionExpiry : null,
+        option_strike: isOption ? parsedStrike : null,
+        option_right: isOption ? optionRight : null,
+        market_value: parsedMarketValue,
       })
       // Host page navigates after a successful submit. Nothing to do
       // here — the form stays mounted briefly while the route changes.
@@ -283,14 +338,35 @@ export default function ActionForm({
               </Box>
             </Box>
 
+            {/* Instrument type — Stock by default. Option /
+                Futures option reveals a strike + expiry + right
+                block. Other is a free-text label kept on the ticker
+                field for things like futures, structured products,
+                or pairs that don't fit the stock or option model. */}
             <Box>
-              <FormControlLabel
-                control={<Checkbox size="small" checked={isOption} onChange={(_, v) => setIsOption(v)} />}
-                label={<Typography variant="caption">This is an option</Typography>}
-                sx={{ ml: -0.75 }}
-              />
-              {isOption && (
-                <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <FormControl size="small" sx={{ width: { xs: '100%', sm: 180 } }}>
+                  <InputLabel>Instrument</InputLabel>
+                  <Select
+                    value={instrumentType}
+                    label="Instrument"
+                    onChange={(e) => setInstrumentType(e.target.value as InstrumentType)}
+                  >
+                    {INSTRUMENT_TYPES.map((it) => (
+                      <MenuItem key={it} value={it}>
+                        {INSTRUMENT_TYPE_LABELS[it]}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                {instrumentType === 'futures_option' && (
+                  <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                    Use the underlying futures contract code in the Ticker field (e.g. ES, CL, GC).
+                  </Typography>
+                )}
+              </Box>
+              {isOptionInstrument(instrumentType) && (
+                <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
                   <TextField
                     size="small"
                     label="Expiry"
@@ -298,7 +374,7 @@ export default function ActionForm({
                     value={optionExpiry}
                     onChange={(e) => setOptionExpiry(e.target.value)}
                     InputLabelProps={{ shrink: true }}
-                    sx={{ flex: 1 }}
+                    sx={{ flex: '1 1 160px', minWidth: 140 }}
                   />
                   <TextField
                     size="small"
@@ -306,11 +382,13 @@ export default function ActionForm({
                     value={optionStrike}
                     onChange={(e) => setOptionStrike(e.target.value)}
                     placeholder="200"
-                    sx={{ width: 80 }}
+                    sx={{ width: 100 }}
+                    type="number"
+                    inputProps={{ step: 'any', min: 0 }}
                   />
-                  <FormControl size="small" sx={{ width: 70 }}>
+                  <FormControl size="small" sx={{ width: 90 }}>
                     <InputLabel>C/P</InputLabel>
-                    <Select value={optionType} label="C/P" onChange={(e) => setOptionType(e.target.value as 'C' | 'P')}>
+                    <Select value={optionRight} label="C/P" onChange={(e) => setOptionRight(e.target.value as 'C' | 'P')}>
                       <MenuItem value="C">Call</MenuItem>
                       <MenuItem value="P">Put</MenuItem>
                     </Select>
@@ -455,6 +533,31 @@ export default function ActionForm({
                     onChange={(e) => setShares(e.target.value === '' ? '' : Number(e.target.value))}
                     inputProps={{ min: 0, step: 1 }}
                     sx={{ width: 110 }}
+                  />
+                  {/* Market value — optional. For stocks it's
+                      derivable from price × shares; for futures /
+                      structured / multi-leg trades the writer types
+                      the position's notional or fair-value here. */}
+                  <TextField
+                    size="small"
+                    label="Market value"
+                    value={marketValue}
+                    onChange={(e) => setMarketValue(e.target.value)}
+                    placeholder={(() => {
+                      const p = Number(price)
+                      const s = typeof shares === 'number' ? shares : 0
+                      return Number.isFinite(p) && p > 0 && s > 0 ? `~ ${(p * s).toLocaleString()}` : 'Optional'
+                    })()}
+                    type="number"
+                    inputProps={{ min: 0, step: 'any' }}
+                    sx={{ flex: '1 1 140px', minWidth: 140 }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start" sx={{ '& .MuiSvgIcon-root': { fontSize: 18 } }}>
+                          <AttachMoneyIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
                   />
                 </Box>
               </Collapse>

@@ -80,6 +80,29 @@ export function isDirectionalAction(type: ActionType | string | null | undefined
   return DIRECTIONAL_ACTION_TYPES.includes(type as ActionType)
 }
 
+/**
+ * Instrument category. Drives the shape of the decision form
+ * (option / futures-option reveal a strike + expiry + right block)
+ * and the display chip on the decision card. 'other' is the
+ * escape-hatch for futures, structured products, etc. — anything
+ * that doesn't fit the stock or option model gets a free-text
+ * label in the ticker field plus the optional market_value column
+ * for sizing.
+ */
+export const INSTRUMENT_TYPES = ['stock', 'option', 'futures_option', 'other'] as const
+export type InstrumentType = (typeof INSTRUMENT_TYPES)[number]
+
+export const INSTRUMENT_TYPE_LABELS: Record<InstrumentType, string> = {
+  stock: 'Stock',
+  option: 'Option',
+  futures_option: 'Futures option',
+  other: 'Other',
+}
+
+export function isOptionInstrument(t: InstrumentType | string | null | undefined): boolean {
+  return t === 'option' || t === 'futures_option'
+}
+
 export interface Action {
   id: string
   /** Owning user — required for RLS even when entry_id is null (standalone decision). */
@@ -105,6 +128,20 @@ export interface Action {
    *  flow audit on 2026-04-20 noticed was inconsistent — DB column is
    *  NOT NULL with a default, but the TS optional `?` hid that fact). */
   size: ActionSize | null
+  /** Instrument category — see INSTRUMENT_TYPES. NOT NULL with default
+   *  'stock' on the DB side; Action payloads must include it explicitly. */
+  instrument_type: InstrumentType
+  /** Option contract: expiration (ISO date). Populated for option /
+   *  futures_option, null otherwise. */
+  option_expiry: string | null
+  /** Option contract: strike price in quote currency. */
+  option_strike: number | null
+  /** Option contract: 'C' (call) or 'P' (put). */
+  option_right: 'C' | 'P' | null
+  /** Optional notional / market value of the position at decision
+   *  time. Useful for futures or structured trades where price ×
+   *  shares doesn't capture the position size. */
+  market_value: number | null
   raw_snippet: string | null
   created_at: string
   updated_at: string

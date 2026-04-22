@@ -295,6 +295,15 @@ export default function IdeaDetailPage() {
             kill_criteria: null,
             pre_mortem_text: null,
             size,
+            // InlineDecisionBar is the quick "log a decision against
+            // this ticker" path — it doesn't collect option / market-
+            // value details. Defaults for now; users who want those
+            // fields open the full DecisionFormPage via "+ details".
+            instrument_type: 'stock',
+            option_expiry: null,
+            option_strike: null,
+            option_right: null,
+            market_value: null,
             raw_snippet: null,
           })
           if (type === 'pass') {

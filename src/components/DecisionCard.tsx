@@ -136,7 +136,7 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
                   <ShowChartIcon sx={{ fontSize: 16 }} />
                 </IconButton>
               </Tooltip>
-              <OptionTypeChip ticker={action.ticker} />
+              <OptionTypeChip action={action} />
               {action.company_name && (
                 <Typography component="span" variant="body2" color="text.secondary">
                   — {action.company_name}
@@ -149,6 +149,19 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
               <Typography component="div" variant="body2">
                 <Box component="span" sx={{ fontWeight: 600 }}>Price:</Box> {action.price} {action.currency || ''}
                 {action.shares != null && action.shares > 0 && ` · ${action.shares} shares`}
+                {action.market_value != null && action.market_value > 0 && (
+                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.75 }}>
+                    · MV {action.market_value.toLocaleString('en-US', { maximumFractionDigits: 0 })} {action.currency || ''}
+                  </Typography>
+                )}
+              </Typography>
+            )}
+            {/* Market value with no Price line — show on its own row
+                so futures / structured trades that only carry MV
+                still surface their position size. */}
+            {(!action.price || action.price === '') && action.market_value != null && action.market_value > 0 && (
+              <Typography component="div" variant="body2">
+                <Box component="span" sx={{ fontWeight: 600 }}>Market value:</Box> {action.market_value.toLocaleString('en-US', { maximumFractionDigits: 0 })} {action.currency || ''}
               </Typography>
             )}
             {action.reason && (

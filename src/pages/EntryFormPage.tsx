@@ -601,6 +601,15 @@ export default function EntryFormPage() {
       reason: block.reason.trim(),
       notes: block.notes.trim(),
       size: block.size ?? null,
+      // The InsertDecisionBlockDialog flow doesn't yet collect
+      // instrument_type / option fields / market_value — defaults
+      // for now so the schema constraint passes. Decisions that
+      // need those fields use the full DecisionFormPage instead.
+      instrument_type: 'stock',
+      option_expiry: null,
+      option_strike: null,
+      option_right: null,
+      market_value: null,
       raw_snippet: buildDecisionBlockMarkdown(block),
     }
   }

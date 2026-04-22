@@ -166,3 +166,40 @@ function formatStrike(strike: number): string {
   const s = strike.toFixed(2).replace(/\.?0+$/, '')
   return `$${s}`
 }
+
+/**
+ * "$18 Call · 21 Jan '28" assembled from explicit fields. Mirrors
+ * `describeOption(ticker)` but works off the structured columns
+ * added in migration 20260422120000_actions_instrument_type_options.
+ *
+ * Returns empty string if any required field is missing.
+ */
+export function describeOptionFields(
+  strike: number | null | undefined,
+  right: 'C' | 'P' | string | null | undefined,
+  expiry: string | null | undefined,
+): string {
+  if (strike == null || !Number.isFinite(strike) || strike <= 0) return ''
+  if (right !== 'C' && right !== 'P') return ''
+  if (!expiry) return ''
+  const rightLabel = right === 'C' ? 'Call' : 'Put'
+  return `${formatStrike(strike)} ${rightLabel} \u00b7 ${formatExpiryShort(expiry)}`
+}
+
+/**
+ * Best-available option description for an action: prefers the
+ * structured columns when populated, falls back to parsing the
+ * ticker string for old OCC-tickered rows where the migration
+ * backfill hasn't yet run (or rows the user manually typed in OCC
+ * format before the new form shipped).
+ */
+export function describeOptionFromAction(action: {
+  ticker?: string | null
+  option_strike?: number | null
+  option_right?: 'C' | 'P' | null
+  option_expiry?: string | null
+}): string {
+  const fromCols = describeOptionFields(action.option_strike, action.option_right, action.option_expiry)
+  if (fromCols) return fromCols
+  return describeOption(action.ticker)
+}

@@ -108,6 +108,11 @@ export default function DecisionFormPage() {
         kill_criteria: data.kill_criteria || null,
         pre_mortem_text: data.pre_mortem_text || null,
         size: data.size,
+        instrument_type: data.instrument_type,
+        option_expiry: data.option_expiry,
+        option_strike: data.option_strike,
+        option_right: data.option_right,
+        market_value: data.market_value,
       })
       invalidate.actions()
       showSuccess('Decision updated')
@@ -128,6 +133,11 @@ export default function DecisionFormPage() {
         kill_criteria: data.kill_criteria || null,
         pre_mortem_text: data.pre_mortem_text || null,
         size: data.size,
+        instrument_type: data.instrument_type,
+        option_expiry: data.option_expiry,
+        option_strike: data.option_strike,
+        option_right: data.option_right,
+        market_value: data.market_value,
         raw_snippet: null,
       })
       if (data.type === 'pass') {
