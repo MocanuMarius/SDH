@@ -128,3 +128,41 @@ export function computeMoneyness(
 export function isLeap(dteAtOpen: number | null): boolean {
   return dteAtOpen != null && dteAtOpen > 365
 }
+
+/**
+ * Friendly description of an option for headers / subtitles where
+ * there's room to spell things out. Returns e.g. "$18 Call · 21 Jan
+ * '28" (note the curly apostrophe — looks deliberate, not accidental,
+ * in the editorial UI). Returns empty string if the symbol isn't
+ * parseable as an option.
+ *
+ * The compact `$AAPL (C)` form returned by `getTickerDisplayLabel` is
+ * still right for chips and dense list rows; this helper is for the
+ * cases where the full strike + expiry actually fits.
+ */
+export function describeOption(symbol: string | null | undefined): string {
+  const parsed = parseOptionSymbol(symbol)
+  if (!parsed) return ''
+  const right = parsed.right === 'C' ? 'Call' : 'Put'
+  const strike = formatStrike(parsed.strike)
+  const expiry = formatExpiryShort(parsed.expiry)
+  return `${strike} ${right} \u00b7 ${expiry}`
+}
+
+/** "21 Jan \u201828" — short month + 2-digit year with curly apostrophe. */
+function formatExpiryShort(iso: string): string {
+  const d = new Date(iso + 'T00:00:00')
+  if (Number.isNaN(d.getTime())) return iso
+  const day = d.getDate()
+  const mon = d.toLocaleDateString('en-US', { month: 'short' })
+  const yy = String(d.getFullYear()).slice(-2)
+  return `${day} ${mon} \u2019${yy}`
+}
+
+/** "$18", "$200.50" — drop trailing .00 / .0 zeros. */
+function formatStrike(strike: number): string {
+  if (!Number.isFinite(strike)) return ''
+  // Format with up to 2 decimal places, then strip trailing zeros.
+  const s = strike.toFixed(2).replace(/\.?0+$/, '')
+  return `$${s}`
+}

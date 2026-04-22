@@ -36,6 +36,7 @@ import RelativeDate from '../components/RelativeDate'
 import DecisionChip from '../components/DecisionChip'
 import { getEntryDisplayTitle } from '../utils/entryTitle'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
+import { describeOption, parseOptionSymbol } from '../utils/optionSymbol'
 import OptionTypeChip from '../components/OptionTypeChip'
 import { PageHeader, StatusChip, statusFromLatestActionType, EmptyState } from '../components/system'
 import { relativeBucket, formatDayHeader } from '../utils/relativeBucket'
@@ -230,16 +231,41 @@ export default function IdeaDetailPage() {
             Tickers
           </Link>
         }
-        title={
-          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', sm: 'flex-start' } }}>
-            <Box component="span">${decodedTicker}</Box>
-            {company && (
-              <Box component="span" sx={{ fontWeight: 400, fontSize: '0.55em', color: 'text.secondary' }}>
-                {company}
-              </Box>
-            )}
-          </Box>
-        }
+        title={(() => {
+          // Render options with the clean underlying as the primary
+          // headline + a subtitle showing strike / right / expiry, so
+          // a URL like `/tickers/OUST  280121C00018000` no longer
+          // inflicts the raw OCC code on the reader. Stocks keep the
+          // original "$TICKER" + company label.
+          const parsed = parseOptionSymbol(decodedTicker)
+          const optionLabel = parsed ? describeOption(decodedTicker) : ''
+          const primary = parsed ? `$${parsed.underlying}` : `$${decodedTicker}`
+          const optionColor = parsed?.right === 'C' ? '#15803d' : '#b91c1c'
+          return (
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'center', sm: 'flex-start' } }}>
+              <Box component="span">{primary}</Box>
+              {company && (
+                <Box component="span" sx={{ fontWeight: 400, fontSize: '0.55em', color: 'text.secondary' }}>
+                  {company}
+                </Box>
+              )}
+              {optionLabel && (
+                <Box
+                  component="span"
+                  sx={{
+                    fontWeight: 600,
+                    fontSize: '0.55em',
+                    color: optionColor,
+                    fontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {optionLabel}
+                </Box>
+              )}
+            </Box>
+          )
+        })()}
         actions={latestAction ? <StatusChip kind={statusFromLatestActionType(latestAction.type)} /> : undefined}
         dense
       />
