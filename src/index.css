@@ -10,3 +10,136 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+ * Print stylesheet — primarily for the entry detail reading view.
+ *
+ * The intent: any entry should print (or "Save as PDF") to a clean
+ * single-column document with title, dateline, tags, and prose. All
+ * app chrome, in-page tabs, action bars, dialogs, drawers, the
+ * Quick Note input, the Decision Context cards, the Reminders
+ * section, and the page-turn navigation footer are stripped so the
+ * printed page reads like an article tear-out, not a dashboard
+ * screenshot.
+ *
+ * Pages opt their non-essential blocks out via data-no-print="true".
+ * The article body container marks itself with
+ * data-print-area="article-body" so print can flatten its grid back
+ * to a single column and stretch it to the page width.
+ *
+ * Honors the same micro-typography (smart quotes, end mark,
+ * reading-time dateline) that the on-screen reading view does —
+ * those are render-time transforms, so they print as written.
+ * ───────────────────────────────────────────────────────────────── */
+@media print {
+  /* High-contrast palette: black ink on white paper. The warm beige
+     `bg.default` makes for soft on-screen reading but wastes toner. */
+  html, body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Sane base font-size for print — slightly smaller than screen,
+     because print resolution makes 11pt feel comfortable. */
+  body {
+    font-size: 11pt;
+    line-height: 1.45;
+  }
+
+  /* Strip every piece of app chrome. MUI puts predictable class
+     names on its primitives, so we can hide them globally. Pages
+     can opt anything else out via [data-no-print="true"] and the
+     ScrollProgress bar is killed by the same rule via its data
+     attribute (see ScrollProgress component). */
+  .MuiAppBar-root,
+  .MuiBottomNavigation-root,
+  .MuiDrawer-root,
+  .MuiDialog-root,
+  .MuiBackdrop-root,
+  .MuiSnackbar-root,
+  .MuiTooltip-popper,
+  .MuiFab-root,
+  [data-no-print="true"] {
+    display: none !important;
+  }
+
+  /* Article-body container: flatten the grid to a single column,
+     stretch to page width, drop the dark warm border-left so we
+     don't get a thick black bar bleeding ink. The top/bottom
+     hairlines stay (framed article), softened to a quiet grey so
+     they don't dominate the printed page. */
+  [data-print-area="article-body"] {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0.75rem 0 0.75rem 1rem !important;
+    border-left: 1px solid #999 !important;
+    border-top-color: #bbb !important;
+    border-bottom-color: #bbb !important;
+    grid-template-columns: 1fr !important;
+    column-gap: 0 !important;
+  }
+
+  /* Inside the article container, force every paragraph wrapper
+     back to a normal block so our grid-per-paragraph layout (used
+     by the gutter ticker deltas) stops reserving an empty second
+     column on the printed page. */
+  [data-print-area="article-body"] > div > div {
+    display: block !important;
+    grid-template-columns: none !important;
+    column-gap: 0 !important;
+  }
+
+  /* The right-side gutter annotations (live ticker deltas) don't
+     translate to print — at the moment the page is committed to
+     paper, the "since entry" snapshot becomes stale immediately. */
+  [data-print-area="article-body"] > div > div > div:nth-of-type(2) {
+    display: none !important;
+  }
+
+  /* Page-break hygiene. Headlines glued to their first paragraph,
+     paragraphs prefer to stay together, three lines minimum at the
+     top or bottom of any page. */
+  h1, h2, h3, h4 {
+    page-break-after: avoid;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Unstick the sticky page header so it appears once, at the top
+     of the printed document, instead of being repeated or pinned. */
+  .MuiBox-root[style*="position: sticky"],
+  [data-print-keep] {
+    position: static !important;
+    box-shadow: none !important;
+  }
+
+  /* Kill all motion. CSS scroll-driven animations (paragraph rise),
+     transitions, and any keyframes — print is a static medium. */
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Links: keep them readable but non-coloured to save toner.
+     URL printing (`a::after { content: " (" attr(href) ")" }`)
+     is intentionally off — pasted research links can be 200+ chars
+     and would blow out the layout. The reader can hover to copy. */
+  a {
+    color: black !important;
+    text-decoration: underline;
+  }
+
+  /* Images / charts that do appear shouldn't bleed past the page. */
+  img, svg {
+    max-width: 100% !important;
+    page-break-inside: avoid;
+  }
+
+  /* Set page margins via @page — browsers respect this. ~0.75in is
+     a comfortable default that matches MS Word's "Normal" preset. */
+  @page {
+    margin: 0.75in;
+  }
+}

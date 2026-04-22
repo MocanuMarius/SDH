@@ -54,6 +54,7 @@ export default function ScrollProgress() {
     <Box
       ref={ref}
       aria-hidden
+      data-no-print="true"
       sx={{
         position: 'fixed',
         top: { xs: 56, sm: 60 },

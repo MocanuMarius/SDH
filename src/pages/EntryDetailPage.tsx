@@ -313,37 +313,42 @@ export default function EntryDetailPage() {
         }
         title={<PlainTextWithTickers source={getEntryDisplayTitle(entry, actions)} inline dense />}
         actions={
-          isMobile ? (
-            mobileActions
-          ) : (
-            <>
-              <Button
-                component={RouterLink}
-                to={`/entries/${entry.id}/edit`}
-                variant="contained"
-                size="small"
-                startIcon={<EditIcon />}
-              >
-                Edit
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<NotificationsActiveIcon />}
-                onClick={() => setReminderDialogOpen(true)}
-              >
-                Remind me
-              </Button>
-              <IconButton
-                aria-label="Delete entry"
-                onClick={() => setConfirmDelete({ type: 'entry' })}
-                sx={{ color: 'text.secondary', '&:hover': { color: 'error.main', bgcolor: 'rgba(185,28,28,0.06)' } }}
-                size="small"
-              >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </>
-          )
+          <Box
+            data-no-print="true"
+            sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+          >
+            {isMobile ? (
+              mobileActions
+            ) : (
+              <>
+                <Button
+                  component={RouterLink}
+                  to={`/entries/${entry.id}/edit`}
+                  variant="contained"
+                  size="small"
+                  startIcon={<EditIcon />}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<NotificationsActiveIcon />}
+                  onClick={() => setReminderDialogOpen(true)}
+                >
+                  Remind me
+                </Button>
+                <IconButton
+                  aria-label="Delete entry"
+                  onClick={() => setConfirmDelete({ type: 'entry' })}
+                  sx={{ color: 'text.secondary', '&:hover': { color: 'error.main', bgcolor: 'rgba(185,28,28,0.06)' } }}
+                  size="small"
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </>
+            )}
+          </Box>
         }
         dense
       />
@@ -440,6 +445,7 @@ export default function EntryDetailPage() {
       )}
       {entry.body_markdown.trim() && (
         <Box
+          data-print-area="article-body"
           sx={{
             // Article body — no Paper wrapper, no bgcolor, no blue
             // accent bar. The page itself is the paper; the prose
@@ -561,16 +567,20 @@ export default function EntryDetailPage() {
       {/* Page-turn footer — newer / older neighbor entries. Sits
           inside the same 68ch column as the body so it reads as
           part of the article tail, not app chrome. Closes the
-          reading flow before the tabbed app sections begin. */}
-      <EntryNeighborsFooter entry={{ id: entry.id, date: entry.date }} />
+          reading flow before the tabbed app sections begin.
+          Hidden on print: the printed page is meant to stand alone
+          as a tear-out, not advertise sibling entries. */}
+      <Box data-no-print="true">
+        <EntryNeighborsFooter entry={{ id: entry.id, date: entry.date }} />
+      </Box>
 
       {/* Quick note — append a timestamped note without editing the full entry.
           Multi-line auto-grow; Cmd/Ctrl+Enter or Enter (no shift) submits.
           Uses TickerDollarField so typing $ pops the same ticker autocomplete
           you get in the entry title and body. The dropdown's own Enter handler
           (when open) preventDefaults, so Enter-to-submit only fires when
-          autocomplete is closed — no conflict. */}
-      <TickerDollarField
+          autocomplete is closed — no conflict. Hidden on print (input field). */}
+      <Box data-no-print="true"><TickerDollarField
         size="small"
         placeholder="Add a note… ($ for tickers)"
         value={quickNote}
@@ -599,13 +609,14 @@ export default function EntryDetailPage() {
             </InputAdornment>
           ) : null,
         }}
-      />
+      /></Box>
 
       {/* Decision Context — each field renders as its own ListCard so the
           detail view uses the same visual vocabulary as the edit form and
           the Reminders section. Only shows cards for fields that have a
-          value; the whole block is skipped if every field is empty. */}
-      {(() => {
+          value; the whole block is skipped if every field is empty.
+          Hidden on print — already represented in the body / pre-mortem. */}
+      <Box data-no-print="true">{(() => {
         // Parse trading_plan once into entry/exit rule lists.
         const splitRules = (s: string) => s.split(/\s*\n\s*|\s*;\s*|\s*·\s*/).map((r) => r.trim()).filter(Boolean)
         const lines = (entry.trading_plan || '').split('\n')
@@ -682,11 +693,12 @@ export default function EntryDetailPage() {
             )}
           </Box>
         )
-      })()}
+      })()}</Box>
 
       {/* Reminders on this entry — list of active ones with an "+ Add" in the header.
-          Mirrors the entry form's ListCard pattern so the vocabulary stays consistent. */}
-      <Box sx={{ mt: 2 }}>
+          Mirrors the entry form's ListCard pattern so the vocabulary stays consistent.
+          Hidden on print — workflow scaffolding, not article content. */}
+      <Box sx={{ mt: 2 }} data-no-print="true">
         <ListCard
           title="Reminders"
           count={entryReminders.length}
@@ -728,9 +740,9 @@ export default function EntryDetailPage() {
         </ListCard>
       </Box>
 
-      {/* Quick actions row — visible on mobile */}
+      {/* Quick actions row — visible on mobile, hidden on print. */}
       {isMobile && (
-        <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+        <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }} data-no-print="true">
           <Button
             size="small"
             variant="outlined"
@@ -753,8 +765,11 @@ export default function EntryDetailPage() {
         </Box>
       )}
 
-      {/* ── Tabbed sections: Actions / Predictions / Feelings ── */}
-      <Box sx={{ mt: 2 }}>
+      {/* ── Tabbed sections: Actions / Predictions / Feelings ──
+           Hidden on print: structured data the body has already
+           described in prose; the printed page reads as an article,
+           not a dashboard. */}
+      <Box sx={{ mt: 2 }} data-no-print="true">
         <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider' }}>
           <Tabs
             value={detailTab}
