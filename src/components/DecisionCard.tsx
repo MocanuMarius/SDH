@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Alert, Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material'
+import { Alert, Box, Button, Chip, Collapse, IconButton, Link, Tooltip, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditIcon from '@mui/icons-material/Edit'
@@ -10,9 +10,11 @@ import RelativeDate from './RelativeDate'
 import DecisionChip from './DecisionChip'
 import { normalizeTickerToCompany, getTickerDisplayLabel } from '../utils/tickerCompany'
 import OptionTypeChip from './OptionTypeChip'
+import PayoffDiagram from './PayoffDiagram'
 import { getDecisionTypeColor } from '../theme/decisionTypes'
 import { useTickerChart } from '../contexts/TickerChartContext'
 import type { Action, Outcome } from '../types/database'
+import { isOptionInstrument } from '../types/database'
 import { ERROR_TYPE_LABELS } from '../utils/errorTypeLabels'
 
 function parsePrice(price: string | null | undefined): number | null {
@@ -49,6 +51,31 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
   // Local "saving" lock so the three quick-verdict chips disable
   // while the parent is round-tripping the createOutcome call.
   const [quickSaving, setQuickSaving] = useState<'right' | 'wrong' | 'inconclusive' | null>(null)
+  // Payoff diagram is opt-in per card. Hidden by default — most
+  // cards in the journal aren't options, and even option cards
+  // don't always need the chart visible. The toggle stays inside
+  // the card so the layout doesn't jump when a row expands.
+  const [payoffOpen, setPayoffOpen] = useState(false)
+  // Derived: is this an option-shaped row with enough data to draw
+  // a payoff curve? Need a strike + a numeric premium, plus a
+  // direction we can map to long/short. We accept a row whose
+  // instrument_type isn't yet 'option' but whose option_strike +
+  // option_right are populated (legacy backfill case), so the
+  // diagram lights up for the 191 backfilled rows too.
+  const optionLike = isOptionInstrument(action.instrument_type) || (
+    action.option_strike != null && action.option_right != null
+  )
+  const premiumNum = parsePrice(action.price)
+  const sideForPayoff: 'long' | 'short' | null =
+    action.type === 'buy' || action.type === 'add_more' ? 'long'
+    : action.type === 'sell' || action.type === 'short' || action.type === 'trim' ? 'short'
+    : null
+  const canShowPayoff =
+    optionLike
+    && action.option_strike != null && action.option_strike > 0
+    && (action.option_right === 'C' || action.option_right === 'P')
+    && premiumNum != null && premiumNum > 0
+    && sideForPayoff != null
   const handleQuick = async (verdict: 'right' | 'wrong' | 'inconclusive') => {
     if (!onQuickVerdict || quickSaving) return
     setQuickSaving(verdict)
@@ -191,6 +218,35 @@ export default function DecisionCard({ action, outcome, currentPrice, onAddOrEdi
                 <Box sx={{ '& p': { m: 0 }, '& p + p': { mt: 0.5 }, display: 'inline-block', width: '100%' }}>
                   <PlainTextWithTickers source={action.pre_mortem_text} dense />
                 </Box>
+              </Box>
+            )}
+            {/* Option payoff diagram — shown when the row has the
+                fields to draw it (strike, right, premium, direction)
+                and the user opens the toggle. Compact ~140 px tall
+                SVG; no external data needed. */}
+            {canShowPayoff && (
+              <Box sx={{ mt: 0.75 }}>
+                <Link
+                  component="button"
+                  type="button"
+                  underline="hover"
+                  onClick={(e) => { e.stopPropagation(); setPayoffOpen((v) => !v) }}
+                  sx={{ fontSize: '0.78rem', color: 'text.secondary', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                >
+                  {payoffOpen ? '−' : '+'} {payoffOpen ? 'Hide payoff' : 'Show payoff at expiry'}
+                </Link>
+                <Collapse in={payoffOpen} unmountOnExit>
+                  <Box sx={{ mt: 0.75 }}>
+                    <PayoffDiagram
+                      strike={action.option_strike!}
+                      premium={premiumNum!}
+                      contracts={action.shares != null && action.shares > 0 ? action.shares : 1}
+                      right={action.option_right as 'C' | 'P'}
+                      side={sideForPayoff!}
+                      currentPrice={currentPrice ?? null}
+                    />
+                  </Box>
+                </Collapse>
               </Box>
             )}
             {!outcome && (action.type === 'buy' || action.type === 'add_more') && action.ticker && currentPrice != null && (() => {
